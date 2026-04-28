@@ -38,11 +38,9 @@ One formatter per error type — `Errors.fs` has companion modules `ParseError`,
 
 Tests added to `VersionTests.fs`. Side-effect: `serializeAs` signature was wrong-shaped (returned `ParseError list`). Added new `SerializeError` DU with two cases (`UnsupportedInTargetVersion`, `UnsupportedColorSpace`) plus companion `format` and `Primitives.formatSerializeError`. Semantically distinct from parse and validation — the file is fine, it just doesn't fit the target version.
 
-### Q9. Upgrade idempotence property
+### Q9. Upgrade idempotence property — **RESOLVED (strengthened Property #1; not a sixth property)**
 
-`parseAs V2025_10 >> serialize >> parseAs V2025_10 = id` for already-2025.10 input. Catches accidental mutation in the upgrade pass.
-
-**Decision needed:** Add as a sixth Hedgehog property in `PropertyTests.fs` — confirm.
+A separate idempotence property would overlap heavily with round-trip. Better: strengthen Property #1 to also assert `Version = V2025_10` on the round-tripped file. Catches detection misclassification and double-upgrade bugs without adding a sixth property. Version-detection correctness for older versions handled by example-based tests in `VersionTests.fs` (4 carefully-chosen fixtures beat 100 generated cases for a chain-of-heuristics decision).
 
 ### Q10. `$schema` property handling
 
