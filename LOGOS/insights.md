@@ -113,6 +113,14 @@ This pattern applies broadly: any library with a multi-step pipeline should offe
 
 The spec recommends `.tokens.json` and `.resolver.json` but allows plain `.json`. The library takes string content, not file paths, so extension handling is entirely the caller's responsibility. When a caller has an ambiguous `.json` file, `parseAuto` detects from content whether it is a token file or resolver document — detection is a single root property check (`version` + `resolutionOrder` present → resolver; otherwise → token file).
 
+## Hedgehog YES, Verify NO — and why
+
+Hedgehog (property-based testing) adds genuine value here: five non-trivial properties cover things unit tests can't easily enumerate — round-trip parse/serialize identity, `flattenResolved` Alias-free guarantee, error collection completeness (all errors in one pass, not first-only), DAG invariant (no cycles survive), and merge order correctness. Shrinking on failure produces minimal reproducible cases for free.
+
+Verify (snapshot testing) was evaluated and rejected. The primary value proposition — locking in serialization output — is already covered by round-trip properties (serialize then parse must round-trip to the original). Verify would add a snapshot maintenance burden that is especially high here given 4 supported spec versions: every format change requires updating snapshots for all version upgrade paths. No net gain, clear maintenance cost.
+
+Framework: **Expecto** (test runner) + **Hedgehog 2.x** (generators + properties). No other test dependencies.
+
 ## Promotion Candidates → NEXUS-LOGOS
 
 - "Error collection is a first-class design constraint" — applies to any domain parser in NEXUS

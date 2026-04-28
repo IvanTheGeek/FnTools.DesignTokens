@@ -18,10 +18,15 @@
 - [ ] `DesignTokens.fs` — simple API (import, importWithResolver, export) + Primitives nested module (all raw functions)
 
 ### Tests
+Test frameworks: **Expecto** + **Hedgehog 2.x** (property-based). Verify rejected — see insights.
+
 - [ ] `Fixtures.fs` — JSON strings for all token types (valid + invalid) + older version format examples
+- [ ] `Generators.fs` — Hedgehog generators for all domain types (`tokenName`, `colorValue`, `dimensionValue`, `tokenValue`, `aliasToken`, `tokenFile`)
 - [ ] `ValidationTests.fs`
 - [ ] `ParseTests.fs` — includes `parseAuto` token-file vs resolver detection
 - [ ] `VersionTests.fs` — upgrade path tests for First ED, Second ED, Third ED
 - [ ] `FlattenTests.fs` — includes `flattenResolved` returning `ResolvedToken` with no `Alias`
+- [ ] `SimpleApiTests.fs` — end-to-end tests for `import`, `importWithResolver`, `export` (simple API tier)
+- [ ] `PropertyTests.fs` — Hedgehog properties: round-trip, flattenResolved Alias guarantee, error collection completeness, DAG invariant, merge order
 - [ ] `ResolverTests.fs`
 - [ ] `Program.fs`
