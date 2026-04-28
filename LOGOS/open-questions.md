@@ -24,11 +24,9 @@ Without an explicit accumulator pattern, parser code drifts to short-circuit on 
 
 Decision: add `Version : SpecVersion` field to `TokenFile` (and `ResolverDocument`). Information that exists at parse time and might be useful later belongs on the value, not lost behind the API. `serialize` always writes 2025.10 (modernize on save); `serializeAs file.Version file` for callers that want to preserve source format.
 
-### Q6. Round-trip property scope
+### Q6. Round-trip property scope — **RESOLVED**
 
-`serializeAs FirstED` of a file with composite types is intentionally lossy. The Hedgehog round-trip property must be explicit about which targets it tests.
-
-**Decision needed:** Property should be `parse >> serialize >> parse = id` for V2025_10 only. `serializeAs` lossiness gets a separate negative test.
+Property #1 in `PropertyTests.fs` is scoped to V2025_10 only: `parse (serialize file) = Ok file` for generated 2025.10 files. Older-version round-trips (parse-and-upgrade, `serializeAs` to a version the file fits) are covered by concrete example-based fixtures in `VersionTests.fs` — a fixed shape per version, not randomly generated. Avoids needing per-version constrained generators.
 
 ## Improvements
 
