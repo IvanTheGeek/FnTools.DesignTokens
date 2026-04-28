@@ -328,6 +328,12 @@ let validateResolver (doc: ResolverDocument) : Result<unit, ValidationError list
             match doc.Modifiers |> List.tryFind (fun (k, _) -> k = name) with
             | None ->
                 errors.Add (ConstraintViolation (path, sprintf "unknown modifier '%s'" name))
+            | Some (_, m) when System.String.IsNullOrEmpty ctx ->
+                // Empty context = use default at resolve time; require modifier to have a default.
+                if m.Default.IsNone then
+                    errors.Add (ConstraintViolation (
+                        path,
+                        sprintf "modifier '%s' has no default — context must be specified" name))
             | Some (_, m) when not (m.Contexts |> List.exists (fun (k, _) -> k = ctx)) ->
                 errors.Add (ConstraintViolation (path, sprintf "modifier '%s' has no context '%s'" name ctx))
             | _ -> ())

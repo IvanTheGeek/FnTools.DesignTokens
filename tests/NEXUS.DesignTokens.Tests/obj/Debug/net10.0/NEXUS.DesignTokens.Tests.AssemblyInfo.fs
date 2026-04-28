@@ -7,11 +7,11 @@ open System
 open System.Reflection
 
 
-[<assembly: System.Reflection.AssemblyCompanyAttribute("NEXUS.DesignTokens")>]
+[<assembly: System.Reflection.AssemblyCompanyAttribute("NEXUS.DesignTokens.Tests")>]
 [<assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")>]
 [<assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")>]
 [<assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+0f3980e1e99aae87b7cfb470a4d0e19001e5c000")>]
-[<assembly: System.Reflection.AssemblyProductAttribute("NEXUS.DesignTokens")>]
-[<assembly: System.Reflection.AssemblyTitleAttribute("NEXUS.DesignTokens")>]
+[<assembly: System.Reflection.AssemblyProductAttribute("NEXUS.DesignTokens.Tests")>]
+[<assembly: System.Reflection.AssemblyTitleAttribute("NEXUS.DesignTokens.Tests")>]
 [<assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")>]
 do()

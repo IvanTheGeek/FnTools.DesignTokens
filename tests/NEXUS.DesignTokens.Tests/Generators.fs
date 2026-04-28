@@ -29,10 +29,10 @@ let colorSpace : Gen<ColorSpace> =
     ]
 
 let finiteFloat : Gen<float> =
-    Gen.double (Range.linearFrac -1000.0 1000.0)
+    Gen.double (Range.linear -1000.0 1000.0)
 
 let unitFloat : Gen<float> =
-    Gen.double (Range.linearFrac 0.0 1.0)
+    Gen.double (Range.linear 0.0 1.0)
 
 let colorComponent : Gen<ColorComponent> =
     Gen.frequency [
@@ -62,7 +62,7 @@ let dimensionUnit : Gen<DimensionUnit> = Gen.item [ Px; Rem ]
 
 let dimensionValue : Gen<DimensionValue> =
     gen {
-        let! v = Gen.double (Range.linearFrac -1000.0 1000.0)
+        let! v = Gen.double (Range.linear -1000.0 1000.0)
         let! u = dimensionUnit
         return { Value = v; Unit = u }
     }
@@ -71,7 +71,7 @@ let durationUnit : Gen<DurationUnit> = Gen.item [ Milliseconds; Seconds ]
 
 let durationValue : Gen<DurationValue> =
     gen {
-        let! v = Gen.double (Range.linearFrac 0.0 10000.0)
+        let! v = Gen.double (Range.linear 0.0 10000.0)
         let! u = durationUnit
         return { Value = v; Unit = u }
     }

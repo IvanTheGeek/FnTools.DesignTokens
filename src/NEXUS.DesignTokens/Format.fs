@@ -681,10 +681,16 @@ let private detectVersionFromSchema (url: string) : SpecVersion option =
 /// First/Second ED store color as a hex string; Third ED+ uses an object.
 /// Resolver-related shapes only exist in 2025.10.
 let private detectVersionStructurally (root: JsonObject) : SpecVersion =
+    // Walk only token-tree nodes (groups + leaves). Stop recursing into the
+    // *contents* of $value, since the inner value shape may legitimately have
+    // keys named "value" or "type" that are unrelated to First-ED markers.
     let rec scan (o: JsonObject) (foundUnprefixed: bool ref) (foundColorObj: bool ref) (foundColorHex: bool ref) =
+        let hasDollarValue = tryGetProperty "$value" o |> Option.isSome
+        let hasDollarType  = tryGetProperty "$type"  o |> Option.isSome
         for kv in o do
             match kv.Key with
-            | "type" | "value" -> foundUnprefixed.Value <- true
+            | "type" | "value" when not hasDollarValue && not hasDollarType ->
+                foundUnprefixed.Value <- true
             | "$value" ->
                 match kv.Value with
                 | :? JsonObject as inner when (tryGetProperty "colorSpace" inner |> Option.isSome) ->
@@ -695,8 +701,11 @@ let private detectVersionStructurally (root: JsonObject) : SpecVersion =
                     | _ -> ()
                 | _ -> ()
             | _ -> ()
-            match kv.Value with
-            | :? JsonObject as child -> scan child foundUnprefixed foundColorObj foundColorHex
+        // Recurse only into siblings that are not $value/$extensions/$deprecated content.
+        for kv in o do
+            match kv.Key, kv.Value with
+            | ("$value" | "$extensions" | "$deprecated"), _ -> ()
+            | _, (:? JsonObject as child) -> scan child foundUnprefixed foundColorObj foundColorHex
             | _ -> ()
 
     let unprefixed = ref false
