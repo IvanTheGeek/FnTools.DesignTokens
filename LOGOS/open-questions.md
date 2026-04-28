@@ -12,14 +12,9 @@ A pre-implementation review surfaced these concerns and proposed improvements. W
 
 `JsonElement` is tied to its parent `JsonDocument` lifetime — silently invalidates if document is disposed. Decision: use `JsonNode` (`System.Text.Json.Nodes`) — independent of any document, written back via `node.WriteTo(writer)`. Removes a footgun rather than documenting around it (matches the library's "make wrong states unrepresentable" ethos).
 
-### Q3. Hex vs components conflict in color values
+### Q3. Hex vs components conflict in color values — **RESOLVED (a)**
 
-A color can have both `components: [1, 0, 0]` and `hex: "#0000ff"`. Spec doesn't define precedence on conflict.
-
-**Options:**
-- (a) Validate they match — error if hex doesn't match components (within tolerance)
-- (b) Components win; hex is informational only — document this
-- (c) Preserve both as parsed; let consumer decide
+A color can carry both `components` and `hex`; spec doesn't define conflict behavior. Decision: in `Validation.fs`, for sRGB only, require hex match components within `1/255` tolerance — `ConstraintViolation` if not. Skip the check for non-sRGB (hex is approximate by design) and when any component is `Missing`. Strict-at-boundary posture catches real-world corruption without false-flagging legitimate non-sRGB approximations.
 
 ### Q4. Error collection pattern
 
