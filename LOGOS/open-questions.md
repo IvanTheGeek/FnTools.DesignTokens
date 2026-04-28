@@ -42,14 +42,9 @@ Tests added to `VersionTests.fs`. Side-effect: `serializeAs` signature was wrong
 
 A separate idempotence property would overlap heavily with round-trip. Better: strengthen Property #1 to also assert `Version = V2025_10` on the round-tripped file. Catches detection misclassification and double-upgrade bugs without adding a sixth property. Version-detection correctness for older versions handled by example-based tests in `VersionTests.fs` (4 carefully-chosen fixtures beat 100 generated cases for a chain-of-heuristics decision).
 
-### Q10. `$schema` property handling
+### Q10. `$schema` property handling — **RESOLVED (b)**
 
-Files often have `$schema` pointing to a URL (e.g. `https://designtokens.org/schemas/2025.10/...`). Currently unaddressed.
-
-**Options:**
-- (a) Ignore on parse, never write on serialize
-- (b) Preserve on parse (already in `TokenFile.Schema`), use as version detection hint, write back if present
-- (c) Always write `$schema` on serialize, pointing to current spec
+Decision: preserve `$schema` verbatim on parse; use recognized URLs as the strongest version-detection signal (precedence above structural heuristics); contradiction between `$schema` URL and structure is a parse error (`SchemaVersionContradicts`); on serialize, write `$schema` only if it was present on input — never auto-inject. Library faithfully round-trips caller intent; callers who want `$schema` everywhere set the field themselves.
 
 ### Q11. Validate cubic-bezier ranges in `Validation.fs`
 
