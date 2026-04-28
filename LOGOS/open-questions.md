@@ -34,11 +34,9 @@ Property #1 in `PropertyTests.fs` is scoped to V2025_10 only: `parse (serialize 
 
 One formatter per error type — `Errors.fs` has companion modules `ParseError`, `ValidationError`, `ResolveError`, `LoadError`, `ImportError`, each with a `format : T -> string` function. `formatImportError` re-exposed at top level (simple API). `formatParseError`, `formatValidationError`, `formatResolveError`, `formatLoadError` re-exposed in `Primitives`. Each returns one line `path: message`; `ImportError.format` adds a `[category]` prefix.
 
-### Q8. Negative test for `serializeAs` lossiness
+### Q8. Negative test for `serializeAs` lossiness — **RESOLVED**
 
-Plan says it errors on lossy downgrade — needs an explicit test feeding a 2025.10 file with `gradient`/`shadow` to `serializeAs FirstED`, asserting the error.
-
-**Decision needed:** Add to `VersionTests.fs` — confirm.
+Tests added to `VersionTests.fs`. Side-effect: `serializeAs` signature was wrong-shaped (returned `ParseError list`). Added new `SerializeError` DU with two cases (`UnsupportedInTargetVersion`, `UnsupportedColorSpace`) plus companion `format` and `Primitives.formatSerializeError`. Semantically distinct from parse and validation — the file is fine, it just doesn't fit the target version.
 
 ### Q9. Upgrade idempotence property
 
