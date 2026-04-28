@@ -44,6 +44,23 @@ This library's job ends at the file format boundary. It reads and writes DTCG-co
 
 Corollary: this library should be strict about DTCG compliance. Lax parsing at the interchange boundary silently corrupts data crossing tool boundaries.
 
+## All four DTCG spec versions are supported via upgrade-on-parse
+
+Four published versions exist. Only 2025.10 is stable; the rest are superseded drafts. The library auto-detects the version on parse and upgrades all older formats losslessly to the 2025.10 domain model. Callers always work against one type system regardless of what version the file came from.
+
+| Version | Date | Key changes |
+|---|---|---|
+| First Editors' Draft | 2021-09-23 | `type`/`value` (no `$`); color = hex string; dimension = "12px" string |
+| Second Editors' Draft | 2022-06-14 | `$type`/`$value`; `fontWeight` added; still string formats |
+| Third Editors' Draft | 2025-08-04 | Color object, dimension/duration objects, 7 new composite types; no resolver |
+| **2025.10** | 2025-10-28 | Resolver module; shadow `inset` field |
+
+All upgrade paths are lossless. Hex color strings parse to `{ColorSpace=SRGB; Components=...; Hex=Some "..."}` — the original hex is preserved in the `Hex` field. Dimension strings like `"12px"` parse to `{Value=12.0; Unit=Px}` with no information dropped.
+
+`serializeAs` allows writing older formats when a consuming tool requires them. It may be lossy (a 2025.10 file with composite types cannot round-trip to First ED) and returns an error in that case rather than silently dropping data.
+
+Technical reports for all versions: `/home/ivan/nexus/VARIOUS/community-group/www/public/TR/`
+
 ## The full layer model — where this library sits
 
 ```

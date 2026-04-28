@@ -1,11 +1,77 @@
-# DTCG 2025.10 Spec — Research Context
+# DTCG Spec — Research Context
 
 This file captures everything learned about the spec in the session that designed this library (2026-04-28). A fresh session should read this before touching any code.
 
 Spec site: https://www.designtokens.org/tr/2025.10/
 Community group repo (cloned): `/home/ivan/nexus/VARIOUS/community-group/`
-JSON schemas (authoritative): `/home/ivan/nexus/VARIOUS/community-group/www/public/schemas/2025.10/`
+JSON schemas (authoritative, 2025.10 only): `/home/ivan/nexus/VARIOUS/community-group/www/public/schemas/2025.10/`
+Technical reports (all versions): `/home/ivan/nexus/VARIOUS/community-group/www/public/TR/`
 Implementation plan: `/home/ivan/.claude/plans/how-might-we-turn-toasty-deer.md`
+
+---
+
+## Version history
+
+The library supports all four published versions. Files are auto-detected on parse and upgraded to the 2025.10 domain model.
+
+| Version | Date | Status | TR path |
+|---|---|---|---|
+| First Editors' Draft | 2021-09-23 | Superseded | `TR/drafts/format/` |
+| Second Editors' Draft | 2022-06-14 | Superseded | `TR/second-editors-draft/format/` |
+| Third Editors' Draft | 2025-08-04 | Superseded | `TR/third-editors-draft/format/` |
+| **2025.10** | 2025-10-28 | **Stable** | `TR/2025.10/format/` |
+
+JSON schemas exist only for 2025.10. Older versions are identified by structural heuristics (see `Format.fs` version detection logic).
+
+### What each version introduced
+
+**First Editors' Draft (2021-09-23)**
+- 5 types: `color` (hex string), `dimension` ("12px" string), `font`, `duration` ("100ms" string), `cubic-bezier`
+- Properties named `type` and `value` — no `$` prefix
+- No composite types, no Color module, no Resolver module
+
+**Second Editors' Draft (2022-06-14)**
+- Properties renamed to `$type` and `$value`
+- `font` renamed to `fontFamily`; `cubic-bezier` renamed to `cubicBezier`
+- `fontWeight` type added (numeric or keyword)
+- Color and dimension still use string format
+- No composite types, no Color module, no Resolver module
+
+**Third Editors' Draft (2025-08-04)**
+- **Color format overhauled**: hex string → color object with `colorSpace`, `components`, `alpha`, `hex`
+- **Dimension format changed**: `"12px"` → `{value: 12, unit: "px"}`
+- **Duration format changed**: `"100ms"` → `{value: 100, unit: "ms"}`
+- 7 new types added: `number`, `shadow`, `border`, `transition`, `gradient`, `typography`, `strokeStyle`
+- Color module introduced (14 color spaces, `none` keyword)
+- No Resolver module
+
+**2025.10 (stable)**
+- Resolver module added
+- `inset` boolean field added to shadow
+- Minor refinements throughout
+
+### Upgrade paths (all lossless)
+
+**First ED → 2025.10**
+- Rename `type`→`$type`, `value`→`$value`
+- Rename `font`→`fontFamily`, `cubic-bezier`→`cubicBezier`
+- Parse dimension string: `"12px"` → `{Value=12.0; Unit=Px}`
+- Parse duration string: `"100ms"` → `{Value=100.0; Unit=Milliseconds}`
+- Parse color hex: `"#ff00ff"` → `{ColorSpace=SRGB; Components=(Channel 1.0, Channel 0.0, Channel 1.0); Alpha=None; Hex=Some "#ff00ff"}`
+
+**Second ED → 2025.10**
+- Same as First ED except no property renaming (already `$type`/`$value`)
+
+**Third ED → 2025.10**
+- Shadow objects without `inset` field: default to `Inset=None` (spec default false)
+- Otherwise identical domain model — Third ED and 2025.10 share the same type shapes
+
+### Version detection heuristics (for files without `$schema`)
+
+1. Properties use `type`/`value` (no `$`) → First Editors' Draft
+2. `$type`/`$value` present + color value is a bare string → Second Editors' Draft
+3. `$type`/`$value` + color value is an object → Third Editors' Draft or 2025.10
+4. Resolver file present with `"version": "2025.10"` → 2025.10
 
 ---
 

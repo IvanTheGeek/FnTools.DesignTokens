@@ -6,15 +6,16 @@
 - [ ] Create solution file `NEXUS.DesignTokens.sln`
 
 ### Implementation — Phase 1 (core domain)
-- [ ] `Errors.fs` — ParseError, ValidationError, ResolveError, LoadError DUs
+- [ ] `Errors.fs` — ParseError (+ UnknownSpecVersion), ValidationError, ResolveError, LoadError DUs
+- [ ] `Domain.fs` — SpecVersion DU (FirstEditorsDraft | SecondEditorsDraft | ThirdEditorsDraft | V2025_10)
 - [ ] `Domain.fs` — all type definitions per plan
 - [ ] `Validation.fs` — constraint checks, returns `ValidationError list`
 - [ ] `Json.fs` — low-level System.Text.Json read helpers
 
 ### Implementation — Phase 2 (format + resolver)
-- [ ] `Format.fs` — parse + serialize `.tokens.json`
+- [ ] `Format.fs` — version detection + upgrade pass + parse + serialize `.tokens.json`
 - [ ] `Resolver.fs` — parse + four-stage resolution algorithm
-- [ ] `DesignTokens.fs` — public façade: primitives + convenience tier (load, flattenResolved, resolveAll)
+- [ ] `DesignTokens.fs` — public façade: primitives (parse, parseAs, serialize, serializeAs) + convenience tier (load, flattenResolved, resolveAll)
 
 ### Tests
 - [ ] `Fixtures.fs` — JSON strings for all token types (valid + invalid)
