@@ -1,3 +1,48 @@
+## Resolved type tier
+
+**Should `Domain.fs` define a parallel `Resolved*` type tier?**
+
+The convenience path (`flattenResolved`, `resolveAll`) should return types where `Alias` is structurally impossible and `Type` is non-optional. This requires a second set of types:
+
+```fsharp
+// Raw (mid-parse, may contain aliases, type may be inherited)
+type Token = { Value: TokenValue; Type: TokenType option; Metadata: Metadata }
+type TokenValue = ... | Alias of TokenRef   // 14 cases
+
+// Resolved (post-resolution, compiler-enforced guarantees)
+type ResolvedToken = { Value: ResolvedTokenValue; Type: TokenType; Metadata: Metadata }
+type ResolvedTokenValue = ...               // 13 cases — no Alias
+```
+
+Decision needed before: `Domain.fs` is written.
+
+---
+
+**If resolved types exist, should composite fields also be resolved?**
+
+Composite types (`BorderValue`, `ShadowObject`, `TransitionValue`, `GradientStop`, `TypographyValue`) use `ValueOrRef<'T>` for their fields — each field can be a literal or a token reference. Two options:
+
+Option A — leave composites as-is, only resolve the top-level `Alias` case:
+```fsharp
+// ResolvedBorderValue still has ValueOrRef fields
+type ResolvedBorderValue = BorderValue   // same type
+```
+Caller may still encounter `| Reference ref ->` inside composite fields.
+
+Option B — full resolved composite tier:
+```fsharp
+type ResolvedBorderValue = {
+    Color : ColorValue        // always literal
+    Width : DimensionValue
+    Style : StrokeStyleValue
+}
+```
+More types to define but the convenience path is completely clean — no `Reference` or `Alias` anywhere in the resolved domain.
+
+Option B is recommended for AI-usability. Decision needed before: `Domain.fs` is written.
+
+---
+
 ## Naming
 
 **`ColorComponent.None` shadows F# `Option.None`**
