@@ -16,14 +16,9 @@ A pre-implementation review surfaced these concerns and proposed improvements. W
 
 A color can carry both `components` and `hex`; spec doesn't define conflict behavior. Decision: in `Validation.fs`, for sRGB only, require hex match components within `1/255` tolerance — `ConstraintViolation` if not. Skip the check for non-sRGB (hex is approximate by design) and when any component is `Missing`. Strict-at-boundary posture catches real-world corruption without false-flagging legitimate non-sRGB approximations.
 
-### Q4. Error collection pattern
+### Q4. Error collection pattern — **RESOLVED (a, via FsToolkit.ErrorHandling)**
 
-The plan commits to `Error list` everywhere, but most parser idioms in F# short-circuit naturally with `let!` / `Result.bind`. Without an explicit accumulator pattern, parser code will quietly degrade to first-error behavior.
-
-**Options:**
-- (a) Build a small `Validation<'T, 'E>` applicative-style type with a `validation { ... }` CE
-- (b) Use explicit `ResizeArray<Error>` accumulators in parser functions (mutable but local)
-- (c) Functional accumulation with `List.fold` and explicit error-list return values everywhere
+Without an explicit accumulator pattern, parser code drifts to short-circuit on first error. Decision: applicative `Validation<'T, 'E>` via `FsToolkit.ErrorHandling`'s `validation { ... }` CE. Public API still returns `Result<'T, ParseError list>` — that's exactly what FsToolkit's `Validation` is (a type alias), so the dependency does not leak into consumers. Per user: "no external deps" is a preference, not a hard rule; FsToolkit is expected to spread across NEXUS.
 
 ### Q5. `parsedVersion` introspection
 

@@ -113,6 +113,12 @@ This pattern applies broadly: any library with a multi-step pipeline should offe
 
 The spec recommends `.tokens.json` and `.resolver.json` but allows plain `.json`. The library takes string content, not file paths, so extension handling is entirely the caller's responsibility. When a caller has an ambiguous `.json` file, `parseAuto` detects from content whether it is a token file or resolver document — detection is a single root property check (`version` + `resolutionOrder` present → resolver; otherwise → token file).
 
+## FsToolkit.ErrorHandling for `validation { ... }` CE
+
+Error collection (not short-circuit) is a spec-level expectation. F#'s natural styles (`let!`, `Result.bind`) short-circuit; without an explicit accumulator pattern, parser code drifts to first-error behaviour. FsToolkit.ErrorHandling provides the applicative `validation { ... }` CE and `Validation<'T, 'E> = Result<'T, 'E list>` type alias — public API shape is unchanged (`Result<_, ParseError list>` is exactly what their type is), so no leakage to consumers.
+
+"No external dependencies" was an early framing — actually a *preference* about being selective, not a rule. FsToolkit will spread across NEXUS over time; it earns its place here by removing a structural footgun (drift to short-circuit) for ~zero cost beyond the package reference.
+
 ## Hedgehog YES, Verify NO — and why
 
 Hedgehog (property-based testing) adds genuine value here: five non-trivial properties cover things unit tests can't easily enumerate — round-trip parse/serialize identity, `flattenResolved` Alias-free guarantee, error collection completeness (all errors in one pass, not first-only), DAG invariant (no cycles survive), and merge order correctness. Shrinking on failure produces minimal reproducible cases for free.
