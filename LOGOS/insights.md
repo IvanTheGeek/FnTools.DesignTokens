@@ -44,6 +44,39 @@ This library's job ends at the file format boundary. It reads and writes DTCG-co
 
 Corollary: this library should be strict about DTCG compliance. Lax parsing at the interchange boundary silently corrupts data crossing tool boundaries.
 
+## The full layer model — where this library sits
+
+```
+[ 7 ] Prototype / Walker       clickable path simulation
+[ 6 ] Screen / Layout          composing components into screens
+[ 5 ] Variants & States        component variant axes + interaction states
+[ 4 ] Component Builder        define structure, bind tokens, preview, catalog
+[ 3 ] Design System            three-tier token model, named sets, inheritance chain
+[ 2 ] ATLAS token runtime      internal live graph (reactive, richer than DTCG)
+[ 1 ] NEXUS-Tokens             DTCG codec — import/export boundary  ← this library
+[ 0 ] .tokens.json files       Figma, Penpot, Style Dictionary output
+```
+
+NEXUS-Tokens is Layer 1. It is touched only when crossing the interchange boundary — importing from an external tool or exporting back out. Layers 2 and above use their own richer runtime representations. The codec produces a `TokenFile` (or `ResolvedToken seq` via the convenience tier) that the Layer 2 runtime initialises from.
+
+## Design system inheritance maps directly to the DTCG resolver
+
+The design system inheritance chain (Cheddar → CheddarBooks → LaundryLog) is modelled as a `.resolver.json` with sources in resolution order:
+
+```json
+"resolutionOrder": [
+  { "set": "cheddar-primitives" },
+  { "set": "cheddar-semantic" },
+  { "set": "cheddar-books-overrides" },
+  { "set": "laundrylog-overrides" },
+  { "modifier": "theme" }
+]
+```
+
+Later entries win. LaundryLog defines only its differences from CheddarBooks; CheddarBooks defines only its differences from Cheddar. The resolver produces the complete merged token set. This library handles that merge — the inheritance chain for tokens is already solved at Layer 1.
+
+Component-level inheritance (a LaundryLog button extending a CheddarBooks button) is above this library's scope — that belongs to the Layer 3/4 component model.
+
 ## Promotion Candidates → NEXUS-LOGOS
 
 - "Error collection is a first-class design constraint" — applies to any domain parser in NEXUS
