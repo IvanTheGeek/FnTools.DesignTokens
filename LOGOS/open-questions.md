@@ -4,14 +4,9 @@ A pre-implementation review surfaced these concerns and proposed improvements. W
 
 ## Concerns
 
-### Q1. Order preservation of group children
+### Q1. Order preservation of group children — **RESOLVED (a)**
 
-Plan uses `Map<TokenName, TokenNode>` for group children, which sorts by key. Real DTCG files have meaningful authoring order (palettes ordered light→dark, scales 0→100). On round-trip the output will be silently re-sorted — diffs will be noisy and tooling-hostile.
-
-**Options:**
-- (a) Use `(TokenName * TokenNode) list` with helper functions for lookup (O(n) but simple)
-- (b) Use a custom ordered-map type that preserves insertion order with O(1) lookup
-- (c) Keep `Map` and accept reordering as a known limitation
+`Map<TokenName, TokenNode>` sorts by key, breaking authoring order on round-trip. Decision: use `(TokenName * TokenNode) list` throughout — group children, `Sets`, `Modifiers`, `Contexts`, `Extensions`. O(n) lookup is acceptable: primary access pattern is full traversal (`flatten`); path lookup is ≤5 segments × ~tens of children per group. No new type to maintain.
 
 ### Q2. `JsonElement` lifetime for `$extensions`
 
