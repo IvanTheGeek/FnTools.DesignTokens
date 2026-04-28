@@ -30,11 +30,9 @@ Property #1 in `PropertyTests.fs` is scoped to V2025_10 only: `parse (serialize 
 
 ## Improvements
 
-### Q7. `formatError` function
+### Q7. `formatError` function — **RESOLVED**
 
-The error DUs are great for programmatic handling but humans (and AI consumers) need readable messages. One pretty-printer per error type, called by IDE plugins and CLI tools.
-
-**Decision needed:** Add to Primitives or top-level? Single function with pattern match on a union, or one per error type?
+One formatter per error type — `Errors.fs` has companion modules `ParseError`, `ValidationError`, `ResolveError`, `LoadError`, `ImportError`, each with a `format : T -> string` function. `formatImportError` re-exposed at top level (simple API). `formatParseError`, `formatValidationError`, `formatResolveError`, `formatLoadError` re-exposed in `Primitives`. Each returns one line `path: message`; `ImportError.format` adds a `[category]` prefix.
 
 ### Q8. Negative test for `serializeAs` lossiness
 

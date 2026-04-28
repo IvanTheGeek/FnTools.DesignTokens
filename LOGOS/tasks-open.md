@@ -6,7 +6,7 @@
 - [ ] Create solution file `NEXUS.DesignTokens.sln`
 
 ### Implementation — Phase 1 (core domain)
-- [ ] `Errors.fs` — ParseError (+ UnknownSpecVersion), ValidationError, ResolveError, LoadError, ImportError DUs
+- [ ] `Errors.fs` — ParseError (+ UnknownSpecVersion), ValidationError, ResolveError, LoadError, ImportError DUs + companion modules with `format` functions
 - [ ] `Domain.fs` — SpecVersion DU (FirstEditorsDraft | SecondEditorsDraft | ThirdEditorsDraft | V2025_10)
 - [ ] `Domain.fs` — all type definitions per plan
 - [ ] `Validation.fs` — constraint checks, returns `ValidationError list`
