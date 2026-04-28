@@ -38,6 +38,12 @@ The specific pattern: expose a **primitives tier** (parse, validate, flatten, re
 
 The fix: `flattenResolved` follows every alias before returning, making it structurally impossible to receive an `Alias` token through that path. The XML doc comment guarantees this explicitly. For AI consumers especially, removing the footgun from the type system (or the API contract) is always better than documenting around it.
 
+## Scope: this library is the DTCG interchange boundary
+
+This library's job ends at the file format boundary. It reads and writes DTCG-compliant files; it has no opinion about design systems, components, states, or ATLAS internals. ATLAS maintains its own internal token representation and calls this library only when crossing the DTCG boundary (Figma import, tool export). The translation between ATLAS internals and DTCG domain types is ATLAS's responsibility.
+
+Corollary: this library should be strict about DTCG compliance. Lax parsing at the interchange boundary silently corrupts data crossing tool boundaries.
+
 ## Promotion Candidates → NEXUS-LOGOS
 
 - "Error collection is a first-class design constraint" — applies to any domain parser in NEXUS
