@@ -1,9 +1,9 @@
 ## Active / Next
 
 ### Project scaffold
-- [ ] Create `src/NEXUS.DesignTokens/NEXUS.DesignTokens.fsproj`
-- [ ] Create `tests/NEXUS.DesignTokens.Tests/NEXUS.DesignTokens.Tests.fsproj`
-- [ ] Create solution file `NEXUS.DesignTokens.sln`
+- [x] Create `src/NEXUS.DesignTokens/NEXUS.DesignTokens.fsproj`
+- [x] Create `tests/NEXUS.DesignTokens.Tests/NEXUS.DesignTokens.Tests.fsproj`
+- [x] No `.sln` — matches NEXUS workspace convention (no other NEXUS project has one)
 
 ### Implementation — Phase 1 (core domain)
 - [ ] `Errors.fs` — ParseError (+ UnknownSpecVersion), ValidationError, ResolveError, LoadError, ImportError DUs + companion modules with `format` functions

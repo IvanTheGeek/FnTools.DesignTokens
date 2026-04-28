@@ -1,0 +1,11 @@
+{
+  "version": 2,
+  "dgSpecHash": "k79YciuyFTc=",
+  "success": true,
+  "projectFilePath": "/home/ivan/nexus/NEXUS-Tokens/src/NEXUS.DesignTokens/NEXUS.DesignTokens.fsproj",
+  "expectedPackageFiles": [
+    "/home/ivan/.nuget/packages/fsharp.core/10.1.203/fsharp.core.10.1.203.nupkg.sha512",
+    "/home/ivan/.nuget/packages/fstoolkit.errorhandling/5.2.0/fstoolkit.errorhandling.5.2.0.nupkg.sha512"
+  ],
+  "logs": []
+}

@@ -1,0 +1,13 @@
+/home/ivan/nexus/NEXUS-Tokens/src/NEXUS.DesignTokens/obj/Debug/net10.0/NEXUS.DesignTokens.fsproj.AssemblyReference.cache
+/home/ivan/nexus/NEXUS-Tokens/src/NEXUS.DesignTokens/obj/Debug/net10.0/NEXUS.DesignTokens.AssemblyInfoInputs.cache
+/home/ivan/nexus/NEXUS-Tokens/src/NEXUS.DesignTokens/obj/Debug/net10.0/NEXUS.DesignTokens.AssemblyInfo.fs
+/home/ivan/nexus/NEXUS-Tokens/src/NEXUS.DesignTokens/obj/Debug/net10.0/NEXUS.DesignTokens.fsproj.CoreCompileInputs.cache
+/home/ivan/nexus/NEXUS-Tokens/src/NEXUS.DesignTokens/bin/Debug/net10.0/NEXUS.DesignTokens.deps.json
+/home/ivan/nexus/NEXUS-Tokens/src/NEXUS.DesignTokens/bin/Debug/net10.0/NEXUS.DesignTokens.dll
+/home/ivan/nexus/NEXUS-Tokens/src/NEXUS.DesignTokens/bin/Debug/net10.0/NEXUS.DesignTokens.pdb
+/home/ivan/nexus/NEXUS-Tokens/src/NEXUS.DesignTokens/bin/Debug/net10.0/NEXUS.DesignTokens.xml
+/home/ivan/nexus/NEXUS-Tokens/src/NEXUS.DesignTokens/obj/Debug/net10.0/NEXUS.DesignTokens.dll
+/home/ivan/nexus/NEXUS-Tokens/src/NEXUS.DesignTokens/obj/Debug/net10.0/refint/NEXUS.DesignTokens.dll
+/home/ivan/nexus/NEXUS-Tokens/src/NEXUS.DesignTokens/obj/Debug/net10.0/NEXUS.DesignTokens.xml
+/home/ivan/nexus/NEXUS-Tokens/src/NEXUS.DesignTokens/obj/Debug/net10.0/NEXUS.DesignTokens.pdb
+/home/ivan/nexus/NEXUS-Tokens/src/NEXUS.DesignTokens/obj/Debug/net10.0/ref/NEXUS.DesignTokens.dll

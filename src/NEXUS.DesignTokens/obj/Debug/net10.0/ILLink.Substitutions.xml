@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<linker>
+  <assembly fullname="NEXUS.DesignTokens">
+    <resource name="FSharpSignatureData.NEXUS.DesignTokens" action="remove"></resource>
+    <resource name="FSharpSignatureCompressedData.NEXUS.DesignTokens" action="remove"></resource>
+    <resource name="FSharpSignatureDataB.NEXUS.DesignTokens" action="remove"></resource>
+    <resource name="FSharpSignatureCompressedDataB.NEXUS.DesignTokens" action="remove"></resource>
+    <resource name="FSharpOptimizationData.NEXUS.DesignTokens" action="remove"></resource>
+    <resource name="FSharpOptimizationCompressedData.NEXUS.DesignTokens" action="remove"></resource>
+    <resource name="FSharpOptimizationDataB.NEXUS.DesignTokens" action="remove"></resource>
+    <resource name="FSharpOptimizationCompressedDataB.NEXUS.DesignTokens" action="remove"></resource>
+    <resource name="FSharpOptimizationInfo.NEXUS.DesignTokens" action="remove"></resource>
+    <resource name="FSharpSignatureInfo.NEXUS.DesignTokens" action="remove"></resource>
+  </assembly>
+</linker>
