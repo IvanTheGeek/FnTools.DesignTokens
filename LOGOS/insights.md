@@ -94,6 +94,21 @@ Later entries win. LaundryLog defines only its differences from CheddarBooks; Ch
 
 Component-level inheritance (a LaundryLog button extending a CheddarBooks button) is above this library's scope — that belongs to the Layer 3/4 component model.
 
+## Module stratification makes the simple path obvious and the advanced path explicit
+
+The public API has two tiers in one file using F# nested modules:
+
+- **Top-level `NEXUS.DesignTokens`**: three functions (`import`, `importWithResolver`, `export`), one error type (`ImportError`). Covers every real use case. `export` is infallible — no `Result` wrapper. An AI or developer sees three functions and picks the right one by name.
+- **`NEXUS.DesignTokens.Primitives`**: all raw functions. The module name signals "advanced — you don't need this unless you have a specific reason."
+
+Key properties that make the simple tier idiot-proof:
+1. Always returns `ResolvedToken` — `Alias` is structurally absent, type is non-optional. The consumer cannot encounter an unresolved state.
+2. `export` has no `Result` — `ResolvedToken` values are structurally valid; serialization cannot fail. No chance of writing broken error-handling code around it.
+3. Single `ImportError` type — one match expression handles all failure modes.
+4. XML doc comments on every function answer: what do I pass, what do I get, what can go wrong.
+
+This pattern applies broadly: any library with a multi-step pipeline should offer a composed simple API alongside the primitives. The complexity lives in the library once; every caller gets it right automatically.
+
 ## File extension is a caller concern — the library only sees string content
 
 The spec recommends `.tokens.json` and `.resolver.json` but allows plain `.json`. The library takes string content, not file paths, so extension handling is entirely the caller's responsibility. When a caller has an ambiguous `.json` file, `parseAuto` detects from content whether it is a token file or resolver document — detection is a single root property check (`version` + `resolutionOrder` present → resolver; otherwise → token file).
