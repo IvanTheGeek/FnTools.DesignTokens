@@ -20,14 +20,9 @@ A color can carry both `components` and `hex`; spec doesn't define conflict beha
 
 Without an explicit accumulator pattern, parser code drifts to short-circuit on first error. Decision: applicative `Validation<'T, 'E>` via `FsToolkit.ErrorHandling`'s `validation { ... }` CE. Public API still returns `Result<'T, ParseError list>` — that's exactly what FsToolkit's `Validation` is (a type alias), so the dependency does not leak into consumers. Per user: "no external deps" is a preference, not a hard rule; FsToolkit is expected to spread across NEXUS.
 
-### Q5. `parsedVersion` introspection
+### Q5. `parsedVersion` introspection — **RESOLVED (a)**
 
-After upgrade-on-parse, callers can't tell what version the file was. For UX like "this file uses outdated First ED format, suggest upgrade" — common in design tools — the version needs to be exposed.
-
-**Options:**
-- (a) Add `Version : SpecVersion` field to `TokenFile`
-- (b) Return `(TokenFile * SpecVersion)` from `parse`
-- (c) Add `Primitives.detectVersion : string -> Result<SpecVersion, ParseError list>` separately
+Decision: add `Version : SpecVersion` field to `TokenFile` (and `ResolverDocument`). Information that exists at parse time and might be useful later belongs on the value, not lost behind the API. `serialize` always writes 2025.10 (modernize on save); `serializeAs file.Version file` for callers that want to preserve source format.
 
 ### Q6. Round-trip property scope
 
