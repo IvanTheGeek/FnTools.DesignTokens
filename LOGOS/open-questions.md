@@ -46,8 +46,6 @@ A separate idempotence property would overlap heavily with round-trip. Better: s
 
 Decision: preserve `$schema` verbatim on parse; use recognized URLs as the strongest version-detection signal (precedence above structural heuristics); contradiction between `$schema` URL and structure is a parse error (`SchemaVersionContradicts`); on serialize, write `$schema` only if it was present on input — never auto-inject. Library faithfully round-trips caller intent; callers who want `$schema` everywhere set the field themselves.
 
-### Q11. Validate cubic-bezier ranges in `Validation.fs`
+### Q11. Validate cubic-bezier ranges + cross-cutting finiteness — **RESOLVED**
 
-Plan mentions P1x/P2x ∈ [0,1] in the constraint list (line 524) — confirming this is on the implementation checklist for `Validation.fs`. P1y/P2y are unbounded per spec.
-
-**Decision needed:** Confirm on checklist — no real choice, just don't forget.
+Cubic-bezier P1x/P2x ∈ [0,1] confirmed on checklist (P1y/P2y unbounded per spec). Caught a related gap while reviewing: no constraint on float values being finite. Added cross-cutting "all `float` values must satisfy `Double.IsFinite`" check via shared `requireFinite` helper, applied to all numeric domain fields. Defensive against programmatic construction with `nan`/`infinity` — JSON parsing won't produce these by default, but F# code building values directly might.
