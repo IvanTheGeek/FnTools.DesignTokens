@@ -11,4 +11,4 @@ F# library implementing the **DTCG 2025.10** spec (Design Tokens W3C Community G
 
 ## Claude Code Notes
 
-- Stop hook auto-commits + pushes at end of each session (`.claude/settings.json`)
+- Stop hook auto-commits + pushes after each turn (`.claude/settings.json`)
