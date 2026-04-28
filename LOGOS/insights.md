@@ -94,6 +94,10 @@ Later entries win. LaundryLog defines only its differences from CheddarBooks; Ch
 
 Component-level inheritance (a LaundryLog button extending a CheddarBooks button) is above this library's scope — that belongs to the Layer 3/4 component model.
 
+## File extension is a caller concern — the library only sees string content
+
+The spec recommends `.tokens.json` and `.resolver.json` but allows plain `.json`. The library takes string content, not file paths, so extension handling is entirely the caller's responsibility. When a caller has an ambiguous `.json` file, `parseAuto` detects from content whether it is a token file or resolver document — detection is a single root property check (`version` + `resolutionOrder` present → resolver; otherwise → token file).
+
 ## Promotion Candidates → NEXUS-LOGOS
 
 - "Error collection is a first-class design constraint" — applies to any domain parser in NEXUS

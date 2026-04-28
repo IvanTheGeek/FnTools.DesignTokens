@@ -15,12 +15,13 @@
 ### Implementation — Phase 2 (format + resolver)
 - [ ] `Format.fs` — version detection + upgrade pass + parse + serialize `.tokens.json`
 - [ ] `Resolver.fs` — parse + four-stage resolution algorithm
-- [ ] `DesignTokens.fs` — public façade: primitives (parse, parseAs, serialize, serializeAs) + convenience tier (load, flattenResolved, resolveAll)
+- [ ] `DesignTokens.fs` — public façade: primitives (parse, parseAs, parseAuto, serialize, serializeAs) + convenience tier (load, flattenResolved, resolveAll)
 
 ### Tests
-- [ ] `Fixtures.fs` — JSON strings for all token types (valid + invalid)
+- [ ] `Fixtures.fs` — JSON strings for all token types (valid + invalid) + older version format examples
 - [ ] `ValidationTests.fs`
-- [ ] `ParseTests.fs`
-- [ ] `FlattenTests.fs`
+- [ ] `ParseTests.fs` — includes `parseAuto` token-file vs resolver detection
+- [ ] `VersionTests.fs` — upgrade path tests for First ED, Second ED, Third ED
+- [ ] `FlattenTests.fs` — includes `flattenResolved` returning `ResolvedToken` with no `Alias`
 - [ ] `ResolverTests.fs`
 - [ ] `Program.fs`
