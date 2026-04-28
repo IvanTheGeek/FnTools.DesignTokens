@@ -16,6 +16,33 @@ Decision needed before: `Domain.fs` is written.
 
 ---
 
+## API design
+
+**`LoadError` shape — wrapper DU or flat union?**
+
+The convenience `load` function needs a single error type covering both `ParseError` and `ValidationError`. Two options:
+
+```fsharp
+// Option A — wrapper DU (what the plan currently has)
+type LoadError =
+    | ParseError      of ParseError
+    | ValidationError of ValidationError
+
+// Option B — flat union merging all cases
+type LoadError =
+    | InvalidJson            of message: string
+    | MissingRequiredField   of path: string * field: string
+    // ... all ParseError cases ...
+    | CircularReference      of cycle: string list
+    // ... all ValidationError cases ...
+```
+
+Option A preserves the distinction between structural (parse) and semantic (validation) errors, which is useful for tooling that wants to report them differently. Option B is simpler to match against but loses the categorisation. Current plan uses Option A.
+
+Decision needed before: `Errors.fs` and `DesignTokens.fs` are written.
+
+---
+
 ## Parsing
 
 **`FontWeightValue (Numeric n)` — int or float?**

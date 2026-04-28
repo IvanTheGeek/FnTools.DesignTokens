@@ -26,6 +26,18 @@ Tools that consume DTCG files must round-trip `$extensions` data they do not und
 
 The resolver's `loadFile: string -> Result<string, string>` parameter keeps all file system access outside the library. This is not just a testability convenience — it is the only correct design for a library that will run in Figma plugins, .NET CLI tools, WASM targets, and CI pipelines. Each host has different file access constraints. The library is pure; the host provides the I/O.
 
+## Convenience tier is a library responsibility, not a caller responsibility
+
+"Parse then validate" is the canonical composition — every caller wants it, in that order. "Resolve then follow aliases" is the same. Leaving callers to independently compose primitives means every caller can independently get the composition wrong. When the correct composition is unambiguous, the library should offer it directly. This applies to any library with multi-step pipelines.
+
+The specific pattern: expose a **primitives tier** (parse, validate, flatten, resolve) for advanced use, and a **convenience tier** (load, flattenResolved, resolveAll) for common paths. The convenience functions are thin compositions of primitives — no logic that couldn't be written by the caller, but named and documented so callers default to them.
+
+## Eliminate footguns structurally, not documentarily
+
+`TokenValue` has an `Alias` case. After calling `resolve`, the returned `TokenFile` still contains `Alias` values — aliases are not automatically followed. An AI agent or junior consumer encountering `| Alias ref -> ???` will either skip it or mishandle it. Documentation warning them is not sufficient.
+
+The fix: `flattenResolved` follows every alias before returning, making it structurally impossible to receive an `Alias` token through that path. The XML doc comment guarantees this explicitly. For AI consumers especially, removing the footgun from the type system (or the API contract) is always better than documenting around it.
+
 ## Promotion Candidates → NEXUS-LOGOS
 
 - "Error collection is a first-class design constraint" — applies to any domain parser in NEXUS
