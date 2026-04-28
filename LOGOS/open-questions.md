@@ -8,14 +8,9 @@ A pre-implementation review surfaced these concerns and proposed improvements. W
 
 `Map<TokenName, TokenNode>` sorts by key, breaking authoring order on round-trip. Decision: use `(TokenName * TokenNode) list` throughout — group children, `Sets`, `Modifiers`, `Contexts`, `Extensions`. O(n) lookup is acceptable: primary access pattern is full traversal (`flatten`); path lookup is ≤5 segments × ~tens of children per group. No new type to maintain.
 
-### Q2. `JsonElement` lifetime for `$extensions`
+### Q2. `JsonElement` lifetime for `$extensions` — **RESOLVED (a)**
 
-`JsonElement` is tied to its parent `JsonDocument`. If the document is disposed, the element becomes invalid. `Map<string, JsonElement>` will break if elements aren't cloned, or if the source `JsonDocument` is disposed before the `TokenFile` is consumed.
-
-**Options:**
-- (a) Switch to `JsonNode`/`JsonObject` (independent of any document)
-- (b) Keep `JsonElement` but `Clone()` on read; document the contract
-- (c) Store as raw JSON `string` and re-parse if anyone needs to inspect
+`JsonElement` is tied to its parent `JsonDocument` lifetime — silently invalidates if document is disposed. Decision: use `JsonNode` (`System.Text.Json.Nodes`) — independent of any document, written back via `node.WriteTo(writer)`. Removes a footgun rather than documenting around it (matches the library's "make wrong states unrepresentable" ethos).
 
 ### Q3. Hex vs components conflict in color values
 
