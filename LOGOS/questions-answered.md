@@ -1,6 +1,6 @@
-# Open Questions — Pre-Implementation Review (2026-04-28)
+# Questions — Answered
 
-A pre-implementation review surfaced these concerns and proposed improvements. Working through one at a time before any code is written.
+Pre-implementation review surfaced these concerns and improvements (2026-04-28). All resolved before any code was written.
 
 ## Concerns
 
@@ -18,7 +18,7 @@ A color can carry both `components` and `hex`; spec doesn't define conflict beha
 
 ### Q4. Error collection pattern — **RESOLVED (a, via FsToolkit.ErrorHandling)**
 
-Without an explicit accumulator pattern, parser code drifts to short-circuit on first error. Decision: applicative `Validation<'T, 'E>` via `FsToolkit.ErrorHandling`'s `validation { ... }` CE. Public API still returns `Result<'T, ParseError list>` — that's exactly what FsToolkit's `Validation` is (a type alias), so the dependency does not leak into consumers. Per user: "no external deps" is a preference, not a hard rule; FsToolkit is expected to spread across NEXUS.
+Without an explicit accumulator pattern, parser code drifts to short-circuit on first error. Decision: applicative `Validation<'T, 'E>` via `FsToolkit.ErrorHandling`'s `validation { ... }` CE. Public API still returns `Result<'T, ParseError list>` — that's exactly what FsToolkit's `Validation` is (a type alias), so the dependency does not leak into consumers. Per user: "no external deps" is a preference, not a hard rule; FsToolkit is expected to spread across FnTools.
 
 ### Q5. `parsedVersion` introspection — **RESOLVED (a)**
 
