@@ -131,3 +131,67 @@ Framework: **Expecto** (test runner) + **Hedgehog 2.x** (generators + properties
 
 - "Error collection is a first-class design constraint" — applies to any domain parser in NEXUS
 - "I/O belongs to the caller" — general principle for all NEXUS libraries with external sources
+
+---
+
+## Three-tier token model — files vs. code
+
+The standard DTCG guidance separates tokens into three tiers:
+1. **Primitive** — raw named values: `color.blue.N500 = oklch(56% 0.14 230)`
+2. **Semantic** — purpose aliases: `color.action.default = {color.blue.N500}`
+3. **Component** — per-component slots: `button.background = {color.action.default}`
+
+The component tier explodes token count if pushed into files. A component with 5 states × 10 variants × 8 properties = 400 tokens per component. This becomes unmaintainable.
+
+**Our decision**: keep only primitive + semantic in `.tokens.json` files. The component layer lives in Fun.Blazor code, where semantic tokens are referenced directly by `CssVar` name. Code is the component token layer. No separate component token files, no third tier in DTCG files.
+
+This is a deliberate clean break and not a temporary constraint — the F# type system enforces correct token references at compile time, which token files cannot do.
+
+## Numeric scales as F# identifiers
+
+Token files follow industry convention for numeric scales: `color.brand.500`, `fontWeight.bold.700`.
+These are valid DTCG names. They are not valid F# identifiers.
+
+**Resolution**: DTCG files use numeric scale names as-is. The typed-bindings emitter adds an `N` prefix in generated F# code: `color.brand.500` → `Tokens.Color.Brand.N500`. The emitter is the only place this transformation happens — one callsite, not scattered.
+
+## Fun.Css is the right CSS binding for Fun.Blazor
+
+For CSS-in-F# with Fun.Blazor:
+- **Fun.Css** (`slaveOftime/Fun.Css`) — same author as Fun.Blazor, same design philosophy, composable CSS atoms via F# computation expressions. This is the right choice.
+- **FSS** (`Bjorn-Strom/fss`) — type-safe CSS in F#, good project but separate ecosystem. Extra dependency, no clear advantage over Fun.Css in this stack.
+
+Fun.Css `CssVar` is the direct binding type for emitted token bindings: `Tokens.Color.Action.default` is a `CssVar` value, not a string.
+
+## DTCG JSONC authoring — no custom format needed
+
+DTCG parser already has `JsonCommentHandling.Skip` enabled. Comments work today in `.tokens.json` files. There is no need for a custom TOML or other authoring format for DTCG tokens.
+
+TOML is the right choice for **non-DTCG tokens** (FnHCI: console, TUI, thermal, braille) which have shallow/config-like structure with no nested group semantics.
+
+## Penpot as design surface — round-trip workflow
+
+Penpot supports DTCG token import/export. It also supports SVG export (reliable) and HTML import (new, untested as of 2026-05-02).
+
+**Proposed workflow**:
+1. Author Fun.Blazor components in F# using typed token bindings
+2. Render to HTML, import into Penpot for visual design iteration
+3. Refine in Penpot (variants, states, layout), export SVG
+4. Use SVG as reference to update Fun.Blazor component structure
+
+**Reverse direction**: Penpot variants/states → document component structure decisions → inform Fun.Blazor component parameters. Penpot is the visual exploration tool; Fun.Blazor is ground truth.
+
+The HTML import direction is unexplored. Penpot SVG export is the reliable path. Test both and document the gap in `experiments-planned.md`.
+
+## Token naming — post-2025.10 community guidance
+
+DTCG 2025.10 itself does not mandate naming conventions beyond path syntax. Community guidance emerging since the spec:
+
+- **Tier prefix as top-level group**: `primitive.color.blue.N500` / `semantic.color.action.default` keeps the tier visible in the tree but creates deep paths. Alternative: separate files per tier (cb.tokens.json for primitives, ll.tokens.json for semantic) — no tier prefix needed because the file name is the tier signal.
+- **Brand / global namespacing**: `color.brand.N500` for brand-specific primitives. Avoids collision when merging multiple brands via the resolver.
+- **No `color-` CSS prefix duplication**: token path is `color.action.default`; CSS var name is `--color-action-default`. The `color` segment in the path becomes the CSS var prefix naturally.
+
+**Our naming convention**: separate files per tier, no tier prefix in token names. CSS var names derived from token paths. Numeric scales with N prefix in generated F#. Full detail in `design-system-context.md`.
+
+## LaundryLog existing components use hard-coded CSS class names
+
+The Fun.Blazor components in `/home/ivan/nexus/LaundryLog/src/LaundryLog.UI/Components/` reference CSS class names from the old `--ll-*`/`--cb-*` design system (e.g., `ll-machine-chip`, `ll-machine-group`). These class names will need to be updated when the CSS emitter + typed bindings are available. The components are a concrete test case for the migration path — they represent real UI using the old system.

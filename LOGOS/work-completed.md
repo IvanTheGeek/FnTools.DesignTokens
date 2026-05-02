@@ -31,9 +31,24 @@ Phases 1–4 (single-assembly NEXUS.DesignTokens) are complete and tracked in `t
   - depends on all four
 - [x] Test project `FnTools.DesignTokens.Tests` references the meta-package and stays as one assembly
 
-## Reference smoke test (completed 2026-05-02)
+## Reference smoke tests (completed 2026-05-02)
 
 - [x] Parse spec's own example token files from `community-group` repo with zero errors and serialize back round-trip
   - 26 tests in `SmokeTests.fs`, drawn from `design-token.md`, `groups.md`, `composite-types.md`, `aliases.md`, and `types.md`
   - Covers all 13 token types, `$root`, `$extends`, curly-brace and JSON Pointer aliases, composite sub-value aliases
   - All 76 tests pass
+
+## NuGet packaging metadata + publish script (completed 2026-05-02)
+
+- [x] `PackageId`, `Version`, `Authors`, `Description`, `PackageLicenseExpression`, `RepositoryUrl` added to all 5 `.fsproj` files
+- [x] `<IsPackable>false</IsPackable>` added to test project to prevent accidental packing
+- [x] `publish.sh` — builds, packs, and pushes all 5 packages to Forgejo NuGet feed
+  - Feed: `https://forgejo.ivanthegeek.com/api/packages/FnTools/nuget/index.json`
+  - Token from `FORGEJO_TOKEN` env or `~/.config/forgejo-claude.token`
+  - `--skip-duplicate` prevents re-push failures
+
+## Remote migration to Forgejo (completed 2026-05-02)
+
+- [x] Primary remote moved from GitHub to `https://forgejo.ivanthegeek.com/FnTools/FnTools.DesignTokens`
+- [x] Forgejo push mirror configured: auto-syncs to `https://github.com/IvanTheGeek/FnTools.DesignTokens` on every commit (`sync_on_commit: true`)
+- [x] `CLAUDE.md` updated: Forgejo is primary; GitHub is mirror
