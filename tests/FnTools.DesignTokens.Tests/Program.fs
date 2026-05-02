@@ -15,5 +15,6 @@ let main args =
             SimpleApiTests.allTests
             PropertyTests.allTests
             SmokeTests.allTests
+            CssEmitterTests.allTests
         ]
     runTestsWithCLIArgs [] args all
