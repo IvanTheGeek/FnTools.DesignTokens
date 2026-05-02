@@ -1,32 +1,14 @@
 ## Active / Next
 
-### Project scaffold
-- [x] Create `src/NEXUS.DesignTokens/NEXUS.DesignTokens.fsproj`
-- [x] Create `tests/NEXUS.DesignTokens.Tests/NEXUS.DesignTokens.Tests.fsproj`
-- [x] No `.sln` — matches NEXUS workspace convention (no other NEXUS project has one)
+> Phases 1–4 (parse / validate / serialize / resolve as a single assembly) are complete — see `tasks-completed.md`. Detailed plan for the items below: `planned-work.md`.
 
-### Implementation — Phase 1 (core domain)
-- [ ] `Errors.fs` — ParseError (+ UnknownSpecVersion), ValidationError, ResolveError, LoadError, ImportError DUs + companion modules with `format` functions
-- [ ] `Domain.fs` — SpecVersion DU (FirstEditorsDraft | SecondEditorsDraft | ThirdEditorsDraft | V2025_10)
-- [ ] `Domain.fs` — all type definitions per plan
-- [ ] `Validation.fs` — constraint checks, returns `ValidationError list`
-- [ ] `Json.fs` — low-level System.Text.Json read helpers
+### Phase 5 — Namespace rename + layer split
 
-### Implementation — Phase 2 (format + resolver)
-- [ ] `Format.fs` — version detection + upgrade pass + parse + serialize `.tokens.json`
-- [ ] `Resolver.fs` — parse + four-stage resolution algorithm
-- [ ] `DesignTokens.fs` — simple API (import, importWithResolver, export) + Primitives nested module (all raw functions)
+- [ ] Rename `NEXUS.DesignTokens` → `FnTools.DesignTokens` across all `.fs` files, `.fsproj` files, and project directories; update test `open`s; verify build + 50/50 tests
+- [ ] Decide on `.sln` (lean: yes, after the layer split)
+- [ ] Layer split into Foundation / Format / Validation / Resolver / facade meta-package
 
-### Tests
-Test frameworks: **Expecto** + **Hedgehog 2.x** (property-based). Verify rejected — see insights.
+### Future
 
-- [ ] `Fixtures.fs` — JSON strings for all token types (valid + invalid) + older version format examples
-- [ ] `Generators.fs` — Hedgehog generators for all domain types (`tokenName`, `colorValue`, `dimensionValue`, `tokenValue`, `aliasToken`, `tokenFile`)
-- [ ] `ValidationTests.fs`
-- [ ] `ParseTests.fs` — includes `parseAuto` token-file vs resolver detection
-- [ ] `VersionTests.fs` — upgrade path tests for First ED, Second ED, Third ED
-- [ ] `FlattenTests.fs` — includes `flattenResolved` returning `ResolvedToken` with no `Alias`
-- [ ] `SimpleApiTests.fs` — end-to-end tests for `import`, `importWithResolver`, `export` (simple API tier)
-- [ ] `PropertyTests.fs` — Hedgehog properties: round-trip, flattenResolved Alias guarantee, error collection completeness, DAG invariant, merge order
-- [ ] `ResolverTests.fs`
-- [ ] `Program.fs`
+- [ ] NuGet packaging — metadata + publication target decision
+- [ ] Reference smoke test against community-group example tokens (round-trip with zero errors)

@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cd /home/ivan/nexus/NEXUS-Tokens && git add -A && git diff --cached --quiet || (git commit -m \"chore: turn checkpoint $(date -u +%Y-%m-%dT%H:%M:%SZ)\" && git push -u origin HEAD)"
+            "command": "cd /home/ivan/DEVELOPMENT/FnTools/FnTools.DesignTokens && if [ -n \"$(git status --porcelain)\" ]; then git add -A && git commit -m \"chore: turn-end safety net $(date -u +%Y-%m-%dT%H:%M:%SZ)\"; fi && git push -u origin \"$(git rev-parse --abbrev-ref HEAD)\""
           }
         ]
       }
