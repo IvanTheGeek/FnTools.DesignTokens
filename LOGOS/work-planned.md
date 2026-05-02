@@ -1,3 +1,14 @@
+## Design system app (future)
+
+Unified GUI for token management, component gallery, ADR review/creation, and ATLAS PATH prototyping.
+See `design-system-app-vision.md` for full scope.
+
+- [ ] Define the PATH model format (ATLAS coordination needed)
+- [ ] Spike: read + display token tree in a Fun.Blazor Blazor app
+- [ ] Spike: render a single component with live token switching
+- [ ] ADR list + create form backed by git write-back
+- [ ] PATH walkthrough prototype mode
+
 ## NuGet packaging
 
 - [ ] CI publish on tag (deferred until first stable release)
