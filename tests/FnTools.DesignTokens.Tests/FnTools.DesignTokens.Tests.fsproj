@@ -19,6 +19,7 @@
     <Compile Include="PropertyTests.fs" />
     <Compile Include="SmokeTests.fs" />
     <Compile Include="CssEmitterTests.fs" />
+    <Compile Include="BindingsEmitterTests.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
   <ItemGroup>

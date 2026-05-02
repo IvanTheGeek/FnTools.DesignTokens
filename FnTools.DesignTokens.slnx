@@ -5,6 +5,7 @@
     <Project Path="src/FnTools.DesignTokens.Resolver/FnTools.DesignTokens.Resolver.fsproj" />
     <Project Path="src/FnTools.DesignTokens.Validation/FnTools.DesignTokens.Validation.fsproj" />
     <Project Path="src/FnTools.DesignTokens.Css/FnTools.DesignTokens.Css.fsproj" />
+    <Project Path="src/FnTools.DesignTokens.Bindings/FnTools.DesignTokens.Bindings.fsproj" />
     <Project Path="src/FnTools.DesignTokens/FnTools.DesignTokens.fsproj" />
   </Folder>
   <Folder Name="/tests/">
