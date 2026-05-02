@@ -3,18 +3,16 @@
     <OutputType>Library</OutputType>
     <TargetFramework>net10.0</TargetFramework>
     <RootNamespace>FnTools.DesignTokens</RootNamespace>
-    <AssemblyName>FnTools.DesignTokens</AssemblyName>
+    <AssemblyName>FnTools.DesignTokens.Format</AssemblyName>
     <Nullable>enable</Nullable>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>FS3261</NoWarn>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="DesignTokens.fs" />
+    <Compile Include="Json.fs" />
+    <Compile Include="Format.fs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\FnTools.DesignTokens.Foundation\FnTools.DesignTokens.Foundation.fsproj" />
-    <ProjectReference Include="..\FnTools.DesignTokens.Format\FnTools.DesignTokens.Format.fsproj" />
-    <ProjectReference Include="..\FnTools.DesignTokens.Validation\FnTools.DesignTokens.Validation.fsproj" />
-    <ProjectReference Include="..\FnTools.DesignTokens.Resolver\FnTools.DesignTokens.Resolver.fsproj" />
   </ItemGroup>
 </Project>

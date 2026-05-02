@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>FnTools.DesignTokens</RootNamespace>
+    <AssemblyName>FnTools.DesignTokens.Foundation</AssemblyName>
+    <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>FS3261</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Errors.fs" />
+    <Compile Include="Domain.fs" />
+  </ItemGroup>
+</Project>

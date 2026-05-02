@@ -15,26 +15,23 @@ Phases 1–4 (single-assembly NEXUS.DesignTokens) are complete and tracked in `t
 
 ### Solution file decision
 
-- [ ] Decide: `.sln` or no `.sln`
-  - NEXUS workspace convention: no `.sln` per repo
-  - FnTools is multi-project but each project is its own repo, so per-repo a single `.sln` is only useful if multiple projects coexist in this repo (which the layer split below introduces)
-  - Tentative: add `FnTools.DesignTokens.sln` once the layer split is done, since it'll have 5 source projects + 1 test project
+- [x] Decide: `.sln` or no `.sln` — added `FnTools.DesignTokens.slnx` (SDK default format) covering all 5 source projects + 1 test project
 
 ### Layer split
 
 Replace the single `src/FnTools.DesignTokens/` project with the four-layer architecture documented in `CLAUDE.md`:
 
-- [ ] `FnTools.DesignTokens.Foundation` — pure types, smart constructors, zero non-BCL deps
+- [x] `FnTools.DesignTokens.Foundation` — pure types, smart constructors, zero non-BCL deps
   - `Errors.fs`, `Domain.fs` (no Json/Validation; pure model only)
-- [ ] `FnTools.DesignTokens.Format` — JSON parse/serialize via `System.Text.Json`
+- [x] `FnTools.DesignTokens.Format` — JSON parse/serialize via `System.Text.Json`
   - depends on `Foundation`
   - contains `Json.fs`, `Format.fs`
-- [ ] `FnTools.DesignTokens.Validation` — invariants (alpha/component ranges, fontWeight, alias cycles, hex/components consistency)
+- [x] `FnTools.DesignTokens.Validation` — invariants (alpha/component ranges, fontWeight, alias cycles, hex/components consistency)
   - depends on `Foundation`
   - `FsToolkit.ErrorHandling` dependency lives here
-- [ ] `FnTools.DesignTokens.Resolver` — multi-set / modifier resolver document semantics
+- [x] `FnTools.DesignTokens.Resolver` — multi-set / modifier resolver document semantics
   - depends on `Foundation` + `Format` (to parse resolver JSON)
-- [ ] `FnTools.DesignTokens` — meta-package re-exporting the four above as `FnTools.DesignTokens.Api`
+- [x] `FnTools.DesignTokens` — meta-package re-exporting the four above as `FnTools.DesignTokens.Api`
   - depends on all four
 
 Test project `FnTools.DesignTokens.Tests` references the meta-package and stays as one assembly.

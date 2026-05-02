@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/FnTools.DesignTokens.Format/FnTools.DesignTokens.Format.fsproj" />
+    <Project Path="src/FnTools.DesignTokens.Foundation/FnTools.DesignTokens.Foundation.fsproj" />
+    <Project Path="src/FnTools.DesignTokens.Resolver/FnTools.DesignTokens.Resolver.fsproj" />
+    <Project Path="src/FnTools.DesignTokens.Validation/FnTools.DesignTokens.Validation.fsproj" />
+    <Project Path="src/FnTools.DesignTokens/FnTools.DesignTokens.fsproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/FnTools.DesignTokens.Tests/FnTools.DesignTokens.Tests.fsproj" />
+  </Folder>
+</Solution>

@@ -52,3 +52,9 @@
 - [x] Created public GitHub repo `IvanTheGeek/FnTools.DesignTokens`, wired as `origin`, pushed `main`
 - [x] Recorded the move in `/home/ivan/nexus` history (deletion commit)
 - [x] Added `LICENSE` (AGPL-3.0)
+
+### Phase 5 — Namespace rename + layer split (2026-05-02)
+- [x] Renamed namespace `NEXUS.DesignTokens` → `FnTools.DesignTokens` across all `.fs`, `.fsproj`, docs
+- [x] Split single assembly into Foundation / Format / Validation / Resolver / meta-package
+- [x] Added `FnTools.DesignTokens.slnx` covering all 5 source projects + 1 test project
+- [x] Build: 0 warnings, 0 errors across all 6 projects; tests: 50/50 pass
