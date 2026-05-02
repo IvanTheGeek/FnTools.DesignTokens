@@ -176,6 +176,15 @@ The components are the **primary validation target** for the token pipeline. Whe
 
 ---
 
+## Namespace architecture decision (2026-05-02)
+
+`FnTools.DesignTokens` stays as a standalone library — independent NuGet, no FnHCI dependency.
+`FnTools.FnHCI.Tokens` will be a future aggregator layer that depends on `FnTools.DesignTokens`
+alongside ConsoleTokens, TuiTokens, etc. when that work starts.
+
+Do NOT rename `FnTools.DesignTokens.*` to `FnTools.FnHCI.Tokens.Design.*` — the current name
+is better for standalone publishing and keeps the DTCG library useful outside the FnHCI context.
+
 ## FnHCI token model
 
 FnHCI extends the token concept beyond visual/DTCG to cover all rendering targets:
