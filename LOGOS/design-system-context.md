@@ -166,6 +166,7 @@ The components are the **primary validation target** for the token pipeline. Whe
 |---|---|---|
 | Token format | DTCG 2025.10 `.tokens.json` | Community standard; JSONC comments work today |
 | Non-DTCG tokens | TOML | Console/TUI/thermal/braille; shallow config-like structure |
+| TOML parser | `Tomlyn` (`xoofx/Tomlyn`, NuGet) | F#-friendly TOML 1.0 library; use for FnHCI non-visual token files |
 | CSS authoring | DTCG files → CSS emitter | No handwritten CSS vars; emitter is the source |
 | CSS binding in F# | Fun.Css `CssVar` | Same author as Fun.Blazor; composable |
 | UI framework | Fun.Blazor | F# DSL for Blazor; SSR/WASM/PWA/MAUI Hybrid |
@@ -211,6 +212,27 @@ See `experiments-planned.md` for the specific experiments. The intended workflow
 Penpot is visual exploration; Fun.Blazor is ground truth. The two sync at the token layer (shared CSS vars from emitted DTCG tokens).
 
 ---
+
+## Penpot local instance
+
+Penpot is running locally at `http://localhost:9001`.
+REST API: `http://localhost:9001/api/rpc/command/<endpoint>`
+Auth header: `Authorization: Token <token>` (not Bearer — "Token" prefix)
+
+Token storage convention (same pattern as Forgejo): `~/.config/penpot-claude.token`
+
+Key endpoints:
+- `get-profile` — verify token
+- `list-projects` — list all projects
+- `get-file` — file content including design token/variable data
+- SVG export path to be confirmed from `http://localhost:9001/api/_doc`
+
+Claude Code env in `.claude/settings.json` (project-level):
+```json
+{ "env": { "PENPOT_TOKEN": "$(cat ~/.config/penpot-claude.token)" } }
+```
+
+To create a token: Penpot UI → Profile menu → API Access Tokens → New token. Self-hosted instances need `enable-access-tokens = true` in the Penpot config (check if already enabled).
 
 ## Git remotes
 
