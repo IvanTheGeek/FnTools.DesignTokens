@@ -4,7 +4,7 @@
 
 F# library implementing the **DTCG 2025.10** spec (Design Tokens W3C Community Group) as a strongly-typed domain with parse, validate, serialize, and resolve capabilities.
 
-- Repo: `IvanTheGeek/FnTools.DesignTokens` (formerly `NEXUS-Tokens` at `/home/ivan/nexus/NEXUS-Tokens`; moved 2026-05-01)
+- Repo: `forgejo.ivanthegeek.com/FnTools/FnTools.DesignTokens` (primary); mirrored to `IvanTheGeek/FnTools.DesignTokens` on GitHub (formerly `NEXUS-Tokens` at `/home/ivan/nexus/NEXUS-Tokens`; moved 2026-05-01)
 - Path: `/home/ivan/DEVELOPMENT/FnTools/FnTools.DesignTokens`
 - Namespace: `FnTools.DesignTokens` / AssemblyName: `FnTools.DesignTokens`
 - Minimal dependencies — `System.Text.Json` (BCL) + `FsToolkit.ErrorHandling` (validation CE for error accumulation in parsers)
@@ -12,15 +12,15 @@ F# library implementing the **DTCG 2025.10** spec (Design Tokens W3C Community G
 - JSON schemas (ground truth for type shapes): `/home/ivan/nexus/VARIOUS/community-group/www/public/schemas/2025.10/`
 - License: **AGPL-3.0** (see `LICENSE`)
 
-## Architecture (planned split — not yet executed)
+## Architecture
 
-The current single-assembly design will be split into layered packages, all under the `FnTools.DesignTokens` namespace. See `LOGOS/planned-work.md` for the migration plan.
+Five layered packages, all under the `FnTools.DesignTokens` namespace:
 
-- `FnTools.DesignTokens.Foundation` — pure types, smart constructors, zero non-BCL deps. Other layers and external consumers code against this contract.
+- `FnTools.DesignTokens.Foundation` — pure types, smart constructors, zero non-BCL deps.
 - `FnTools.DesignTokens.Format` — JSON parse/serialize (`System.Text.Json`).
 - `FnTools.DesignTokens.Validation` — invariants (alpha range, fontWeight, alias cycles, hex/component consistency).
 - `FnTools.DesignTokens.Resolver` — multi-set / modifier resolver document semantics.
-- `FnTools.DesignTokens` — meta-package re-exporting the four above as `FnTools.DesignTokens.Api`.
+- `FnTools.DesignTokens` — meta-package; depends on all four above.
 
 ## Git Workflow Notes
 
