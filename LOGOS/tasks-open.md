@@ -8,12 +8,6 @@
 - [ ] Primary test: LaundryLog design system HTML → `cb.tokens.json` + `ll.tokens.json`
 - [ ] Round-trip: `Format.parse` the output with zero errors
 
-### Typed F# bindings emitter
-
-- [ ] Resolved tree → `Tokens.*` module with `CssVar` bindings
-- [ ] Numeric scale: `500` → `N500` in F# identifier
-- [ ] Statically typed — no strings at call site
-
 ### Penpot round-trip experiment
 
 - [ ] Import a Fun.Blazor rendered HTML page into Penpot

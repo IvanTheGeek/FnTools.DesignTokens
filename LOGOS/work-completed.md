@@ -1,3 +1,24 @@
+## Phase 6 — CSS emitter + typed F# bindings emitter (completed 2026-05-02)
+
+### CSS emitter — `FnTools.DesignTokens.Css`
+
+- [x] `CssEmitter.fs` — all 13 DTCG token types → CSS custom properties; typography expands to 5 sub-vars
+- [x] OKLCH, OKLab, LCH, Lab, HSL, HWB → dedicated CSS functions; other spaces → `color()` generic syntax
+- [x] `emit` function: resolved token seq → `:root { }` CSS block
+- [x] 26 tests covering color, scalar, shadow, varName, emit (including LaundryLog integration)
+- [x] LaundryLog `ll.css` emitted: 124 custom properties, 5148 bytes
+- [x] Added to slnx and meta-package
+
+### Typed F# bindings emitter — `FnTools.DesignTokens.Bindings`
+
+- [x] `BindingsEmitter.fs` — resolved token seq → nested `module` F# source with `var()` string constants
+- [x] `toFsharpIdent`: N-prefix for numeric segments, PascalCase via hyphen-splitting, no backtick needed (keywords capitalise cleanly)
+- [x] Typography tokens expand to 5 sub-property bindings matching CSS emitter suffixes
+- [x] Generated file has zero runtime dependencies
+- [x] 22 tests: ident conversion, module structure, typography expansion, LaundryLog integration
+- [x] LaundryLog `Tokens.fs` emitted: 161 lines covering all cb + ll tokens
+- [x] Added to slnx and meta-package
+
 ## Phase 5 — Namespace rename + layer split (completed 2026-05-02)
 
 Phases 1–4 (single-assembly NEXUS.DesignTokens) are complete and tracked in `tasks-completed.md`. This phase finished the relocation: renamed the namespace and split the assembly into layers under the FnTools brand.

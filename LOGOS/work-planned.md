@@ -44,15 +44,11 @@ Clean break from legacy `--cb-*` / `--ll-*` names — new names are derived from
 - [ ] Dark mode: emit `[data-theme="dark"]` override block for themed tokens
 - [ ] CSS file writer + `:root { }` wrapper
 
-## Typed F# bindings emitter
+## ~~Typed F# bindings emitter~~ ✓ done 2026-05-02
 
-Resolved DTCG token tree → `Tokens.*` module with `CssVar` bindings for Fun.Blazor/Fun.Css.
-
-- [ ] Generate `Tokens.Color.Action.default` → `CssVar "--color-action-default"`
-- [ ] Numeric scale names: `500` → `N500` in generated F# identifiers
-- [ ] Module nesting mirrors token group hierarchy
-- [ ] All aliases resolved before emission (no `CssVar` for intermediate alias nodes)
-- [ ] Generated file is a standalone `.fs` module; no FnTools.DesignTokens runtime dependency at generated-code call sites
+`FnTools.DesignTokens.Bindings` — resolved token tree → `Tokens.*` module with `string` var() constants.
+N-prefix for numeric segments, PascalCase identifiers, typography expands to 5 sub-props.
+Generated file has zero runtime dependencies; values work directly in Fun.Css property builders.
 
 ## Penpot round-trip workflow
 
