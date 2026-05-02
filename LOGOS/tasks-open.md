@@ -8,12 +8,6 @@
 - [ ] Primary test: LaundryLog design system HTML → `cb.tokens.json` + `ll.tokens.json`
 - [ ] Round-trip: `Format.parse` the output with zero errors
 
-### CSS emitter
-
-- [ ] Resolved `ResolvedToken seq` → CSS `:root { --var: value; }` block
-- [ ] Dark mode: `[data-theme="dark"] { --var: value; }` override block
-- [ ] All 13 token types mapped to correct CSS representation
-
 ### Typed F# bindings emitter
 
 - [ ] Resolved tree → `Tokens.*` module with `CssVar` bindings
