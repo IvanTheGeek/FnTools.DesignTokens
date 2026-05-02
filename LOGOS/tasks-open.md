@@ -5,8 +5,8 @@
 ### Phase 5 — Namespace rename + layer split
 
 - [x] Rename `NEXUS.DesignTokens` → `FnTools.DesignTokens` across all `.fs` files, `.fsproj` files, and project directories; update test `open`s; verify build + 50/50 tests
-- [ ] Decide on `.sln` (lean: yes, after the layer split)
-- [ ] Layer split into Foundation / Format / Validation / Resolver / facade meta-package
+- [x] Decide on `.sln` — added `FnTools.DesignTokens.slnx`
+- [x] Layer split into Foundation / Format / Validation / Resolver / facade meta-package
 
 ### Future
 
