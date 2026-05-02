@@ -234,6 +234,8 @@ Claude Code env in `.claude/settings.json` (project-level):
 
 To create a token: Penpot UI → Profile menu → API Access Tokens → New token. Self-hosted instances need `enable-access-tokens = true` in the Penpot config (check if already enabled).
 
+Fallback options if direct REST API is insufficient: Penpot MCP server, Penpot Plugins API. Both are more setup overhead — try REST first.
+
 ## Git remotes
 
 ```
