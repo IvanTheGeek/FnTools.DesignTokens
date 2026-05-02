@@ -4,14 +4,14 @@ Phases 1–4 (single-assembly NEXUS.DesignTokens) are complete and tracked in `t
 
 ### Namespace rename — NEXUS.DesignTokens → FnTools.DesignTokens
 
-- [ ] Rename namespace in every `.fs` file under `src/` and `tests/`
-- [ ] Update every `open NEXUS.DesignTokens*` in tests and any future consumers
-- [ ] Rename `src/NEXUS.DesignTokens/` directory + `NEXUS.DesignTokens.fsproj` → `FnTools.DesignTokens.fsproj`
-- [ ] Rename `tests/NEXUS.DesignTokens.Tests/` directory + `NEXUS.DesignTokens.Tests.fsproj` → `FnTools.DesignTokens.Tests.fsproj`
-- [ ] Update `AssemblyName` / `RootNamespace` in both `.fsproj` files
-- [ ] Update test project's `<ProjectReference>` to the renamed source project
-- [ ] Update `CLAUDE.md` — move the "Namespace _(current)_" line to "Namespace: FnTools.DesignTokens" once the rename lands; remove the "Planned rename" note
-- [ ] Verify: `dotnet build` (0 warnings, 0 errors) + `dotnet test` (50/50 pass)
+- [x] Rename namespace in every `.fs` file under `src/` and `tests/`
+- [x] Update every `open NEXUS.DesignTokens*` in tests and any future consumers
+- [x] Rename `src/NEXUS.DesignTokens/` directory + `NEXUS.DesignTokens.fsproj` → `FnTools.DesignTokens.fsproj`
+- [x] Rename `tests/NEXUS.DesignTokens.Tests/` directory + `NEXUS.DesignTokens.Tests.fsproj` → `FnTools.DesignTokens.Tests.fsproj`
+- [x] Update `AssemblyName` / `RootNamespace` in both `.fsproj` files
+- [x] Update test project's `<ProjectReference>` to the renamed source project
+- [x] Update `CLAUDE.md` — move the "Namespace _(current)_" line to "Namespace: FnTools.DesignTokens" once the rename lands; remove the "Planned rename" note
+- [x] Verify: `dotnet build` (0 warnings, 0 errors) + `dotnet test` (50/50 pass)
 
 ### Solution file decision
 

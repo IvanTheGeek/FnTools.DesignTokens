@@ -6,8 +6,7 @@ F# library implementing the **DTCG 2025.10** spec (Design Tokens W3C Community G
 
 - Repo: `IvanTheGeek/FnTools.DesignTokens` (formerly `NEXUS-Tokens` at `/home/ivan/nexus/NEXUS-Tokens`; moved 2026-05-01)
 - Path: `/home/ivan/DEVELOPMENT/FnTools/FnTools.DesignTokens`
-- Namespace _(current)_: `NEXUS.DesignTokens` / AssemblyName: `NEXUS.DesignTokens`
-  - **Planned rename to `FnTools.DesignTokens`** — see `LOGOS/planned-work.md`
+- Namespace: `FnTools.DesignTokens` / AssemblyName: `FnTools.DesignTokens`
 - Minimal dependencies — `System.Text.Json` (BCL) + `FsToolkit.ErrorHandling` (validation CE for error accumulation in parsers)
 - Spec research and full implementation plan: `docs/spec-context.md`
 - JSON schemas (ground truth for type shapes): `/home/ivan/nexus/VARIOUS/community-group/www/public/schemas/2025.10/`
