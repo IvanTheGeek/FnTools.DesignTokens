@@ -98,8 +98,8 @@ Component-level inheritance (a LaundryLog button extending a CheddarBooks button
 
 The public API has two tiers in one file using F# nested modules:
 
-- **Top-level `NEXUS.DesignTokens`**: three functions (`import`, `importWithResolver`, `export`), one error type (`ImportError`). Covers every real use case. `export` is infallible — no `Result` wrapper. An AI or developer sees three functions and picks the right one by name.
-- **`NEXUS.DesignTokens.Primitives`**: all raw functions. The module name signals "advanced — you don't need this unless you have a specific reason."
+- **Top-level `FnTools.DesignTokens`**: three functions (`import`, `importWithResolver`, `export`), one error type (`ImportError`). Covers every real use case. `export` is infallible — no `Result` wrapper. An AI or developer sees three functions and picks the right one by name.
+- **`FnTools.DesignTokens.Primitives`**: all raw functions. The module name signals "advanced — you don't need this unless you have a specific reason."
 
 Key properties that make the simple tier idiot-proof:
 1. Always returns `ResolvedToken` — `Alias` is structurally absent, type is non-optional. The consumer cannot encounter an unresolved state.
