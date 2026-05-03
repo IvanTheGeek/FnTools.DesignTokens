@@ -220,7 +220,19 @@ When two output formats share identical structure but differ in one sub-operatio
 
 2025.10 → Second Editors' Draft export is explicitly lossy: OKLCH colors without a stored hex are serialized as 2025.10 object form (not Second ED hex strings), because gamut-mapping OKLCH → sRGB without rounding errors requires color-math that belongs outside the codec. The `IAcceptDataLoss` requirement documents this gap. Correct behavior is: fail visibly on the caller for the feature you haven't built yet, not silently produce wrong data.
 
-## CssAudit: property-name dispatch before value-pattern dispatch
+## OKLCH → sRGB gamut mapping is permanently out of scope for this library
+
+This library is a DTCG codec. Gamut mapping (converting OKLCH colors to sRGB without hue shift or clipping artifacts) requires color-math — an OKLab chroma-reduction loop, full sRGB gamut boundary test, and an iteration budget. That is a separate utility concern, not a codec concern. ADR-013 states this explicitly.
+
+**The correct pattern**: token authors set `ColorValue.Hex` when authoring OKLCH tokens that will cross DTCG boundaries:
+
+```fsharp
+{ ColorSpace = Oklch; Components = [0.56; 0.14; 230.0]; Alpha = None; Hex = Some "#3a7fd4" }
+```
+
+When `serializePenpot` or `serializeAs SecondEditorsDraft` is called, it reads `Hex` directly. Gamut mapping happened at token-authoring time, by the person who knows whether the approximation is acceptable. The codec never performs color space conversions.
+
+**Not a deferred feature**: there is no plan to add gamut mapping here. If it is ever needed, it belongs in a separate `FnTools.ColorMath` package that the caller uses before invoking this library.
 
 When classifying CSS property values, dispatch on property name first (e.g., `box-shadow`, `font-family`) before pattern-matching on value shape. A shadow shorthand like `0 4px 20px rgba(26,110,26,0.26)` doesn't start with a color pattern — it would be misclassified as Unknown if you pattern-match the value without first checking the property. Property name → semantic category → value type.
 
