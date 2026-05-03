@@ -63,14 +63,14 @@ Known instance IDs:
 - TokenExperiments: `637c8a56-1cd8-812f-8007-f5cafb98e360` (our test file)
 
 Laura files — IDs change on each import. Use `get-project-files` to find the current IDs.
-After 2026-05-03 re-import (two copies of each exist in Drafts):
+After 2026-05-03 re-import. Working copies were deleted; re-import IDs are now the live files:
 
-| File | ID (re-import) | ID (working copy) |
-|---|---|---|
-| System library | `11baa5c9-2a66-8156-8007-f74800eaf8c8` | `11baa5c9-2a66-8156-8007-f71618d1eabd` |
-| Design mocks | `11baa5c9-2a66-8156-8007-f74800eaf8c9` | `11baa5c9-2a66-8156-8007-f71618d1eabe` |
+| File | ID |
+|---|---|
+| System library | `11baa5c9-2a66-8156-8007-f74800eaf8c8` |
+| Design mocks | `11baa5c9-2a66-8156-8007-f74800eaf8c9` |
 
-Working copy = the one with our experiment changes (renamed frames, etc.).
+Use `penpot.currentFile.id` in MCP to get the ID of the file open in the browser.
 
 ### `get-file` — features string is mandatory
 
@@ -340,8 +340,8 @@ inside the browser context and updates the canvas immediately.
 ### What the `breakpoint` token actually controls
 
 On the Landing page (confirmed from archive and live MCP 2026-05-03):
-- **"Landing page" frame**: `appliedTokens.width = "breakpoint"`, width = 1020px at Tablet
-- **"Swatches" frame**: `appliedTokens.width = "breakpoint"`, width = 1020px at Tablet
+- **"Landing page" frame**: `shape.tokens.width = "breakpoint"`, width = 1020px at Tablet
+- **"Swatches" frame**: `shape.tokens.width = "breakpoint"`, width = 1020px at Tablet
 
 Actual token values (verified live — earlier 768 figure was wrong):
 - `Breakpoints/Mobile.breakpoint = 360`
@@ -350,6 +350,40 @@ Actual token values (verified live — earlier 768 figure was wrong):
 
 Switching the active breakpoint theme changes the resolved width of these frames
 within one Plugin API call cycle — the update is immediate.
+
+### `set.active` (Plugin API) vs `active-themes` (REST)
+
+These are two separate mechanisms and they do not stay in sync automatically.
+
+**`TokenSet.active = true/false` (Plugin API)**:
+- Activates/deactivates an individual token set immediately in the browser
+- Resolves all affected token paths against the new active-set union
+- Writes the resolved geometry values (width, height, fills, etc.) to shapes in the DB
+- Does **not** update `~:active-themes` in `tokens-lib`
+
+**`active-themes` in REST `get-file`**:
+- Tracks which named Tokens Studio *themes* are active (e.g. `"Breakpoint/Tablet"`)
+- Only updated by `set-active-token-themes` REST change-op or `theme.toggleActive()` Plugin API
+- Survives file saves but does not reflect direct `set.active` toggles
+- A fresh re-import starts with `active-themes = ["/__PENPOT__HIDDEN__TOKEN__THEME__"]` only
+
+**Practical consequence (verified 2026-05-03)**:
+After switching Breakpoints/Mobile active via `set.active = true`:
+- MCP `shape.width` → `360` ✓
+- REST `get-file` shape width → `360` ✓ (geometry persisted)
+- REST `active-themes` → `["/__PENPOT__HIDDEN__TOKEN__THEME__"]` (not updated)
+- REST `Breakpoints/Mobile` in response → appears only in set *definitions*, not as active marker
+
+If you need `active-themes` to reflect the current set state (e.g. for another consumer
+reading the file via REST), use `set-active-token-themes` separately after the MCP toggle.
+
+### `shape.tokens` vs `shape.width` (Plugin API)
+
+`shape.tokens` — the token path bindings: `{ fill: "color.background.body", width: "breakpoint" }`.
+Static; does not change when themes switch.
+
+`shape.width` (and other geometry props) — the resolved value for the currently active sets.
+Changes when token resolution changes. This value is what gets persisted to the DB.
 
 ### `token.value` vs `token.resolvedValue`
 
