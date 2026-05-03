@@ -4,12 +4,12 @@ Companion to `CssIngest` — covers the values that are NOT in CSS custom proper
 Feeds the human/AI naming step (step 3) in the CSS Bootstrap / Migration workflow.
 See `design-system-app-vision.md § CSS Bootstrap / Migration` for full workflow context.
 
-- [ ] Parse all CSS rules (not just `:root`) from a CSS or HTML file
-- [ ] Extract unique values grouped by inferred type: colors, dimensions (px/rem), font families, font weights, durations, radii
-- [ ] Record selector context and frequency for each unique value (which rules use it, how many times)
-- [ ] Output a structured audit report — JSON or human-readable — listing candidates for tokenisation
-- [ ] Flag values that already match an existing token's `$value` (duplication detector)
-- [ ] Integrate into `FnTools.DesignTokens.Css` as `CssAudit` module alongside `CssIngest`
+- [x] Parse all CSS rules (not just `:root`) from a CSS or HTML file
+- [x] Extract unique values grouped by inferred type: colors, dimensions (px/rem), font families, font weights, durations, shadows
+- [x] Record selector context and frequency for each unique value (which rules use it, how many times)
+- [x] Output a structured audit report — `AuditResult` with typed `AuditEntry` list sorted by count
+- [ ] Flag values that already match an existing token's `$value` (duplication detector) — deferred
+- [x] Integrate into `FnTools.DesignTokens.Css` as `CssAudit` module alongside `CssIngest`
 
 ## Design system app (future)
 
