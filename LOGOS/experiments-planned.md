@@ -80,30 +80,62 @@ DTCG token CSS vars. Renders correctly in browser; Penpot import not possible.
 
 ## EXP-04: Penpot DTCG token variable import
 
-**Status**: priority — run next (2026-05-02)
+**Status**: concluded — hypothesis partially confirmed (2026-05-03)
 
 **Hypothesis**: Penpot can import a DTCG `.tokens.json` file and expose the token values as
 Penpot variables, which can then be applied to component fills, strokes, and text styles.
 
-**Why it matters**: Confirmed by a 2026 practitioner article: Penpot supports the W3C DTCG
-spec natively — import/export as JSON, multiple themed token sets, light/dark mode. This is
-the actual code-design bridge. The TOKENS tab is already visible in the TokenExperiments
-workspace.
+**Result**: Import works, but with a critical format constraint: Penpot's `design-tokens/v1`
+feature does NOT support the DTCG 2025.10 color format (`{ "colorSpace": "oklch", "components":
+[...] }`). It only accepts hex strings (`#RRGGBB`). Our `ll.tokens.json` uses DTCG 2025.10
+OKLCH throughout, so it imports as 1 error token instead of 9. A hex-adapted version imports
+all 9 tokens correctly across the full `machine.*` hierarchy.
 
-**Method**:
-1. Create a Penpot API token (Penpot UI → profile → Account settings → Access tokens)
-   Store at `~/.config/penpot-claude.token`. Configure `PENPOT_TOKEN` env var in
-   `.claude/settings.json` — never echo the value in commands.
-2. Import `tokens/ll.tokens.json` into Penpot via the TOKENS tab
-3. Apply a token variable to a shape fill (e.g., washer teal)
-4. Verify the token value is referenced, not hardcoded
-5. Export back to DTCG JSON, run through `Format.parse` — verify zero errors
-6. Check: does Penpot export in DTCG 2025.10 format or an older variant?
+**Detailed findings** (see `LOGOS/penpot-api.md` for full technical reference):
 
-**Known limitations (from research)**:
-- Stroke color token application is unreliable in Penpot's current token UI
-- Tokens break when changing component variants
-- No quick token application from color pickers — manual assignment required
-- Can't preview themes side by side (light vs dark)
+**Format Penpot actually accepts**:
+```json
+{
+  "machine": {
+    "washer": {
+      "default": { "$type": "color", "$value": "#0d9488" }
+    }
+  }
+}
+```
+- File name → set name (e.g., `lltokens-hex.json` → set "lltokens-hex")
+- Top-level JSON keys → token group names
+- `$type` must be on each **leaf** token, NOT on a group
+- Color values must be hex (`#RRGGBB`) — oklch objects are silently ignored (produce error token)
+- No `$schema` key required
+
+**Export format** (Token Studio variant, not DTCG 2025.10):
+```json
+{
+  "lltokens-hex": {
+    "machine": {
+      "washer": {
+        "default": { "$value": "#0d9488", "$type": "color", "$description": "" }
+      }
+    }
+  }
+}
+```
+- Set name wraps the entire structure (extra nesting level vs. import)
+- `$description` always present (empty string)
+- No `$schema` declaration
+
+**What this means for the pipeline**: `ll.tokens.json` (DTCG 2025.10 OKLCH) cannot be
+imported into Penpot as-is. A Penpot adapter is needed that:
+1. Converts OKLCH `{ colorSpace, components }` → hex (gamut-map to sRGB if needed)
+2. Moves `$type` from group level to each leaf token
+3. Optionally strips `$schema` (harmless to include, just ignored)
+
+This adapter is a future task. The format gap is fundamental — Penpot is behind the 2025.10
+spec on color space support.
+
+**API auth discovery**: Penpot access tokens use `Authorization: Token <token>` (NOT Bearer).
+Self-hosted instances require `enable-access-tokens` in `PENPOT_FLAGS` to show the token
+management UI, but the `/settings/access-tokens` direct URL works even without the flag.
 
 **Prerequisite**: API token must be created by user in Penpot UI before proceeding.
