@@ -20,6 +20,15 @@ module SpecVersion =
         | V2025_10           -> "2025.10"
 
 
+// ─── Export loss acknowledgment ───────────────────────────────────────────────
+
+/// Required argument on any lossy serialization path.
+/// The caller must write the literal case name at the call site — it cannot
+/// be stored in a variable, passed through a flag, or hidden behind a helper.
+/// This makes loss explicit and traceable in code review.
+type ExportLossAcknowledged = | IAcceptDataLoss
+
+
 // ─── Error types ─────────────────────────────────────────────────────────────
 
 type ParseError =

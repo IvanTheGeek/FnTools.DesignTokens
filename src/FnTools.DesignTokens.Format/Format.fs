@@ -971,16 +971,16 @@ let private writeStrokeStyleValue (w: Utf8JsonWriter) (s: StrokeStyleValue) =
         w.WriteString("lineCap", lineCapToString obj.LineCap)
         w.WriteEndObject()
 
-let private writeBorderValue (w: Utf8JsonWriter) (b: BorderValue) =
+let private writeBorderValue (cw: Utf8JsonWriter -> ColorValue -> unit) (w: Utf8JsonWriter) (b: BorderValue) =
     w.WriteStartObject()
-    w.WritePropertyName("color");  writeValueOrRef writeColorValue w b.Color
+    w.WritePropertyName("color");  writeValueOrRef cw w b.Color
     w.WritePropertyName("width");  writeValueOrRef writeDimensionValue w b.Width
     w.WritePropertyName("style");  writeValueOrRef writeStrokeStyleValue w b.Style
     w.WriteEndObject()
 
-let private writeShadowObject (w: Utf8JsonWriter) (s: ShadowObject) =
+let private writeShadowObject (cw: Utf8JsonWriter -> ColorValue -> unit) (w: Utf8JsonWriter) (s: ShadowObject) =
     w.WriteStartObject()
-    w.WritePropertyName("color");   writeValueOrRef writeColorValue w s.Color
+    w.WritePropertyName("color");   writeValueOrRef cw w s.Color
     w.WritePropertyName("offsetX"); writeValueOrRef writeDimensionValue w s.OffsetX
     w.WritePropertyName("offsetY"); writeValueOrRef writeDimensionValue w s.OffsetY
     w.WritePropertyName("blur");    writeValueOrRef writeDimensionValue w s.Blur
@@ -988,14 +988,14 @@ let private writeShadowObject (w: Utf8JsonWriter) (s: ShadowObject) =
     match s.Inset with Some b -> w.WriteBoolean("inset", b) | None -> ()
     w.WriteEndObject()
 
-let private writeShadowValue (w: Utf8JsonWriter) (s: ShadowValue) =
+let private writeShadowValue (cw: Utf8JsonWriter -> ColorValue -> unit) (w: Utf8JsonWriter) (s: ShadowValue) =
     match s with
-    | ShadowSingle obj -> writeShadowObject w obj
+    | ShadowSingle obj -> writeShadowObject cw w obj
     | ShadowMultiple xs ->
         w.WriteStartArray()
         for x in xs do
             match x with
-            | ShadowLiteral obj -> writeShadowObject w obj
+            | ShadowLiteral obj -> writeShadowObject cw w obj
             | ShadowReference r -> writeRef w r
         w.WriteEndArray()
 
@@ -1006,11 +1006,11 @@ let private writeTransitionValue (w: Utf8JsonWriter) (t: TransitionValue) =
     w.WritePropertyName("timingFunction"); writeValueOrRef writeCubicBezier w t.TimingFunction
     w.WriteEndObject()
 
-let private writeGradientValue (w: Utf8JsonWriter) (g: GradientValue) =
+let private writeGradientValue (cw: Utf8JsonWriter -> ColorValue -> unit) (w: Utf8JsonWriter) (g: GradientValue) =
     w.WriteStartArray()
     for stop in g do
         w.WriteStartObject()
-        w.WritePropertyName("color"); writeValueOrRef writeColorValue w stop.Color
+        w.WritePropertyName("color"); writeValueOrRef cw w stop.Color
         w.WritePropertyName("position")
         match stop.Position with
         | Literal f -> w.WriteNumberValue f
@@ -1030,9 +1030,9 @@ let private writeTypographyValue (w: Utf8JsonWriter) (t: TypographyValue) =
     | Reference r -> writeRef w r
     w.WriteEndObject()
 
-let private writeTokenValue (w: Utf8JsonWriter) (v: TokenValue) =
+let private writeTokenValue (cw: Utf8JsonWriter -> ColorValue -> unit) (w: Utf8JsonWriter) (v: TokenValue) =
     match v with
-    | TokenValue.Color c       -> writeColorValue w c
+    | TokenValue.Color c       -> cw w c
     | TokenValue.Dimension d   -> writeDimensionValue w d
     | TokenValue.FontFamily f  -> writeFontFamilyValue w f
     | TokenValue.FontWeight fw -> writeFontWeightValue w fw
@@ -1040,12 +1040,38 @@ let private writeTokenValue (w: Utf8JsonWriter) (v: TokenValue) =
     | TokenValue.CubicBezier c -> writeCubicBezier w c
     | TokenValue.Number n      -> w.WriteNumberValue n
     | TokenValue.StrokeStyle s -> writeStrokeStyleValue w s
-    | TokenValue.Border b      -> writeBorderValue w b
-    | TokenValue.Shadow s      -> writeShadowValue w s
+    | TokenValue.Border b      -> writeBorderValue cw w b
+    | TokenValue.Shadow s      -> writeShadowValue cw w s
     | TokenValue.Transition t  -> writeTransitionValue w t
-    | TokenValue.Gradient g    -> writeGradientValue w g
+    | TokenValue.Gradient g    -> writeGradientValue cw w g
     | TokenValue.Typography ty -> writeTypographyValue w ty
     | TokenValue.Alias r       -> writeRef w r
+
+
+// ─── Second Editors' Draft color downgrade ────────────────────────────────────
+
+/// Convert a ColorValue to a hex string.
+/// SRGB with all three Channel components → #rrggbb or #rrggbbaa.
+/// Other colorspaces → None (gamut-mapping requires color math outside this library).
+let private colorToHexString (c: ColorValue) : string option =
+    match c.Hex with
+    | Some h -> Some h
+    | None ->
+        match c.ColorSpace, c.Components with
+        | SRGB, (Channel r, Channel g, Channel b) ->
+            let toByte v = int (Math.Round(Math.Clamp(v, 0.0, 1.0) * 255.0))
+            let hex = sprintf "#%02x%02x%02x" (toByte r) (toByte g) (toByte b)
+            match c.Alpha with
+            | Some a when a < 1.0 -> Some (sprintf "%s%02x" hex (toByte a))
+            | _ -> Some hex
+        | _ -> None
+
+/// Writes a hex string when possible; falls back to the full V2025_10 object.
+/// The fallback is still a loss — Second ED consumers will not understand the object form.
+let private writeColorValueSecondED (w: Utf8JsonWriter) (c: ColorValue) =
+    match colorToHexString c with
+    | Some h -> w.WriteStringValue h
+    | None   -> writeColorValue w c
 
 let private writeMetadata (w: Utf8JsonWriter) (m: Metadata) =
     match m.Description with Some d -> w.WriteString("$description", d) | None -> ()
@@ -1067,14 +1093,14 @@ let private writeMetadata (w: Utf8JsonWriter) (m: Metadata) =
 let private writeTokenType (w: Utf8JsonWriter) (t: TokenType) =
     w.WriteString("$type", tokenTypeToString t)
 
-let rec private writeNode (w: Utf8JsonWriter) (node: TokenNode) =
+let rec private writeNode (cw: Utf8JsonWriter -> ColorValue -> unit) (w: Utf8JsonWriter) (node: TokenNode) =
     match node with
     | TokenLeaf t ->
         w.WriteStartObject()
         match t.Type with Some tt -> writeTokenType w tt | None -> ()
         writeMetadata w t.Metadata
         w.WritePropertyName("$value")
-        writeTokenValue w t.Value
+        writeTokenValue cw w t.Value
         w.WriteEndObject()
     | Group g ->
         w.WriteStartObject()
@@ -1091,59 +1117,46 @@ let rec private writeNode (w: Utf8JsonWriter) (node: TokenNode) =
             w.WriteStartObject()
             writeMetadata w t.Metadata
             w.WritePropertyName("$value")
-            writeTokenValue w t.Value
+            writeTokenValue cw w t.Value
             w.WriteEndObject()
         | None -> ()
         for (name, child) in g.Children do
             w.WritePropertyName(TokenName.value name)
-            writeNode w child
+            writeNode cw w child
         w.WriteEndObject()
 
-let serialize (file: TokenFile) : string =
+let private serializeWith (cw: Utf8JsonWriter -> ColorValue -> unit) (schema: string option) (file: TokenFile) : string =
     use stream = new MemoryStream()
     let opts = JsonWriterOptions(Indented = true, SkipValidation = false)
     use w = new Utf8JsonWriter(stream, opts)
     w.WriteStartObject()
-    match file.Schema with Some s -> w.WriteString("$schema", s) | None -> ()
+    match schema with Some s -> w.WriteString("$schema", s) | None -> ()
     for (name, node) in file.Children do
         w.WritePropertyName(TokenName.value name)
-        writeNode w node
+        writeNode cw w node
     w.WriteEndObject()
     w.Flush()
     Encoding.UTF8.GetString(stream.ToArray())
 
-let serializeAs (target: SpecVersion) (file: TokenFile) : Result<string, SerializeError list> =
+let serialize (file: TokenFile) : string =
+    serializeWith writeColorValue file.Schema file
+
+/// Serialize to an older spec version, with explicit loss acknowledgment.
+///
+/// The caller must pass IAcceptDataLoss at the call site — it cannot be stored
+/// in a variable, passed through a flag, or hidden behind a helper.
+///
+/// Downgrade behaviour by version:
+///   SecondEditorsDraft / FirstEditorsDraft:
+///     - Color $value written as hex string (#rrggbb or #rrggbbaa).
+///       SRGB with known components → computed hex; stored Hex field used if present.
+///       Other colorspaces (OKLCH etc.) fall back to the V2025_10 object form —
+///       the receiver may not understand it, but no information is silently discarded.
+///     - $schema omitted (Second ED had no schema URL convention).
+///     - All other token types serialized as-is (best effort for composite types).
+let serializeAs (target: SpecVersion) (_ : ExportLossAcknowledged) (file: TokenFile) : string =
     match target with
-    | V2025_10 -> Ok (serialize file)
-    | older ->
-        // Older versions: collect unsupported features. For now we mark all composite types
-        // as unsupported in First/Second ED if encountered.
-        let errs = ResizeArray<SerializeError>()
-        let rec walk (path: string) (node: TokenNode) =
-            match node with
-            | TokenLeaf t ->
-                match t.Value, older with
-                | TokenValue.Gradient _, FirstEditorsDraft
-                | TokenValue.Gradient _, SecondEditorsDraft ->
-                    errs.Add (UnsupportedInTargetVersion (path, "gradient", older))
-                | TokenValue.Border _, FirstEditorsDraft
-                | TokenValue.Border _, SecondEditorsDraft ->
-                    errs.Add (UnsupportedInTargetVersion (path, "border", older))
-                | TokenValue.Shadow _, FirstEditorsDraft ->
-                    errs.Add (UnsupportedInTargetVersion (path, "shadow", older))
-                | TokenValue.Transition _, FirstEditorsDraft ->
-                    errs.Add (UnsupportedInTargetVersion (path, "transition", older))
-                | TokenValue.Typography _, FirstEditorsDraft ->
-                    errs.Add (UnsupportedInTargetVersion (path, "typography", older))
-                | TokenValue.StrokeStyle _, FirstEditorsDraft
-                | TokenValue.StrokeStyle _, SecondEditorsDraft ->
-                    errs.Add (UnsupportedInTargetVersion (path, "strokeStyle", older))
-                | _ -> ()
-            | Group g ->
-                for (name, child) in g.Children do
-                    let child_path = if path = "" then TokenName.value name else path + "." + TokenName.value name
-                    walk child_path child
-        for (name, node) in file.Children do
-            walk (TokenName.value name) node
-        if errs.Count > 0 then Error (List.ofSeq errs)
-        else Ok (serialize file)
+    | V2025_10           -> serialize file
+    | SecondEditorsDraft
+    | FirstEditorsDraft  -> serializeWith writeColorValueSecondED None file
+    | ThirdEditorsDraft  -> serialize file  // same structure as V2025_10
