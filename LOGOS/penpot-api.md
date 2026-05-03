@@ -240,6 +240,15 @@ This is the correct shape for our tokens:
 | Set wrapping in export | Not a DTCG concept | Added by Penpot |
 | Aliases | `{ "$value": "{other.token}" }` | Supported (Token Studio syntax) |
 
+**Why Penpot uses hex strings**: This is not a custom Token Studio format — it's the
+DTCG 2nd editor's draft format (the pre-stable version the ecosystem built against), which
+required color `$value` to be a hex string: "The value MUST be a string containing a hex
+triplet/quartet including the preceding `#` character." The 2025.10 stable release replaced
+this with the object format. See https://second-editors-draft.tr.designtokens.org/format/
+for the earlier spec text.
+
+Penpot GitHub issue tracking this gap: https://github.com/penpot/penpot/issues/9305
+
 **Next step for `ll.tokens.json`**: Add `"hex"` fallback to each color token. The emitter
 already reads `components` for CSS output. A Penpot adapter reads `$value.hex` to produce
 the Penpot-compatible format. `Format.parse` validates the full color object (both are
