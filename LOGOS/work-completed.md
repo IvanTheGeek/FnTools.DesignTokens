@@ -25,6 +25,18 @@
 - [x] 7 new tests (170 total); validated against `ivanthegeek.tokens.json`
 - [x] Closes the last open item in the CSS Bootstrap / Migration workflow step 2
 
+## CssAudit duplication detector + DimensionUnit spec alignment (completed 2026-05-03)
+
+- [x] `AuditEntry.MatchedToken : string option` — populated by new `auditAgainst` function
+- [x] `CssAudit.auditAgainst` — walks TokenFile, builds canonical-CSS lookup, annotates entries
+- [x] Matches: hex (with short-hex expansion), rgba (normalised spacing), dimension, font-family; Shadow/Alias return None
+- [x] 7 new tests (170 → 179 pass total)
+- [x] Reverted `DimensionUnit.Em` — spec allows only `px` and `rem`; `em` is CSS-specific and component-layer
+- [x] `isDimensionValue` in CssAudit narrowed to `px|rem` only — non-DTCG units classified as Unknown/excluded
+- [x] Removed `font.tracking.wide` from `ivanthegeek.tokens.json` (0.22em letter-spacing → component code)
+- [x] `insights.md`: DTCG dimension unit scope, em/component-layer rule of thumb
+- [x] `tasks-open.md`: CssIngest warning on non-standard units; future CssNative audit category
+
 ## ivanthegeek.com bootstrap (completed 2026-05-03)
 
 - [x] `CssIngest.ingest` against live site CSS (prefix-less, `""`)

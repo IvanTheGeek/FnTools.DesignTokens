@@ -36,7 +36,7 @@ type ColorValue = {
 
 // ─── Dimension, FontFamily, FontWeight, Duration, CubicBezier ───────────────
 
-type DimensionUnit = Px | Rem | Em
+type DimensionUnit = Px | Rem
 
 type DimensionValue = {
     Value : float

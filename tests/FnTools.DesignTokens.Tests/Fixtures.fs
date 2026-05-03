@@ -54,17 +54,6 @@ module V2025_10 =
 
     let dimensionValue : DimensionValue = { Value = 8.0; Unit = Px }
 
-    let dimensionEmJson = """
-{
-  "tracking": {
-    "$type": "dimension",
-    "wide": {
-      "$value": { "value": 0.22, "unit": "em" }
-    }
-  }
-}
-"""
-
     let aliasJson = """
 {
   "color": {

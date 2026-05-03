@@ -40,26 +40,6 @@ let allTests =
             | Error es -> failtestf "parse failed: %A" es
             | Ok _ -> ()
 
-        testCase "dimension: em unit parsed and round-trips" <| fun () ->
-            match Format.parse V2025_10.dimensionEmJson with
-            | Error es -> failtestf "parse failed: %A" es
-            | Ok file ->
-                let wide =
-                    file.Children
-                    |> List.find (fun (n, _) -> TokenName.value n = "tracking")
-                    |> snd
-                    |> function
-                       | Group g -> g.Children |> List.find (fun (n, _) -> TokenName.value n = "wide") |> snd
-                       | _ -> failwith "expected group"
-                match wide with
-                | TokenLeaf t ->
-                    match t.Value with
-                    | TokenValue.Dimension d ->
-                        Expect.equal d.Unit Em "unit is em"
-                        Expect.floatClose Accuracy.high d.Value 0.22 "value"
-                    | other -> failtestf "expected Dimension, got %A" other
-                | _ -> failtest "expected leaf"
-
         testCase "alias: $value with curly-brace syntax" <| fun () ->
             match Format.parse V2025_10.aliasJson with
             | Error es -> failtestf "parse failed: %A" es

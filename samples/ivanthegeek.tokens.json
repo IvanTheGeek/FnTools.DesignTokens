@@ -155,14 +155,6 @@
         "$description": "CTA links — interactive text",
         "$value": { "value": 0.95, "unit": "rem" }
       }
-    },
-
-    "tracking": {
-      "wide": {
-        "$type": "dimension",
-        "$description": "eyebrow and tagline letter-spacing",
-        "$value": { "value": 0.22, "unit": "em" }
-      }
     }
 
   },

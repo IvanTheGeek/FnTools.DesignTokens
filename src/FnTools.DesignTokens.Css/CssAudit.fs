@@ -185,8 +185,7 @@ let private isColorValue (v: string) : bool =
     v.StartsWith "color("
 
 let private isDimensionValue (v: string) : bool =
-    Regex.IsMatch(v,
-        @"^-?\d+(?:\.\d+)?(px|rem|em|%|vw|vh|dvh|dvw|vmin|vmax|fr|ch|ex)$")
+    Regex.IsMatch(v, @"^-?\d+(?:\.\d+)?(px|rem)$")
 
 let private isDurationValue (v: string) : bool =
     Regex.IsMatch(v, @"^\d+(?:\.\d+)?(ms|s)$")
@@ -310,7 +309,7 @@ let private tokenValueToCssStrings (v: TokenValue) : string list =
                 | _ -> []
             | _ -> []
     | TokenValue.Dimension d ->
-        let u = match d.Unit with Px -> "px" | Rem -> "rem" | Em -> "em"
+        let u = match d.Unit with Px -> "px" | Rem -> "rem"
         [sprintf "%g%s" d.Value u]
     | TokenValue.FontFamily f ->
         let q (s: string) = if s.Contains ' ' then sprintf "'%s'" s else s
