@@ -1,3 +1,16 @@
+## CSS hardcoded value scanner (bootstrap step 2)
+
+Companion to `CssIngest` — covers the values that are NOT in CSS custom properties.
+Feeds the human/AI naming step (step 3) in the CSS Bootstrap / Migration workflow.
+See `design-system-app-vision.md § CSS Bootstrap / Migration` for full workflow context.
+
+- [ ] Parse all CSS rules (not just `:root`) from a CSS or HTML file
+- [ ] Extract unique values grouped by inferred type: colors, dimensions (px/rem), font families, font weights, durations, radii
+- [ ] Record selector context and frequency for each unique value (which rules use it, how many times)
+- [ ] Output a structured audit report — JSON or human-readable — listing candidates for tokenisation
+- [ ] Flag values that already match an existing token's `$value` (duplication detector)
+- [ ] Integrate into `FnTools.DesignTokens.Css` as `CssAudit` module alongside `CssIngest`
+
 ## Design system app (future)
 
 Unified GUI for token management, component gallery, ADR review/creation, and ATLAS PATH prototyping.

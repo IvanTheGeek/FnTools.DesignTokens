@@ -10,6 +10,26 @@ A GUI tool — the design system app — that makes the token/component/decision
 
 ## Core Capabilities
 
+### CSS Bootstrap / Migration
+
+The workflow for adopting the design system from an existing CSS codebase. Runs once at adoption time; re-runs during maintenance when new hardcoded values drift in.
+
+**Step 1 — Custom property ingestion** (available today via `CssIngest`):
+Extracts `--prefix-*` or all `--*` declarations from any CSS or HTML file and produces valid DTCG 2025.10 JSON. Zero-config for sites already using CSS custom properties.
+
+**Step 2 — Hardcoded value audit** (planned tool):
+Scans every CSS rule (not just `:root`) for unique values by type: colors, font sizes, line heights, spacing, radii, durations. Groups by type and frequency of use. Output is an inventory the developer reviews — "these 5 hex values appear in your rules; here is where each one is used." This is the gap between a site that uses CSS vars and one that has a design system.
+
+**Step 3 — Token naming** (human + AI):
+Human or AI reviews the rendered page alongside the inventory and assigns token names. "This green appears in all primary buttons and active states → `accent.default`." AI can draft names from selector context and value semantics; human approves or edits. Output is additional entries in `.tokens.json`.
+
+**Step 4 — CSS refactoring** (tool-assisted):
+Replaces hardcoded values in rules with the emitted `var(--token-name)` references. Given the token file, the tool proposes find-and-replace operations across the CSS. After this step the tokens are the single source of truth and the hardcoded values are gone.
+
+Steps 1 and 4 are fully automated. Step 2 is automatable (scanner). Step 3 requires judgment — it is inherently a design decision, not a parsing problem. AI accelerates it; a human ratifies it.
+
+---
+
 ### Token Management
 - View the full resolved token tree: primitive → semantic layers, per token set
 - Edit token values and see the CSS and F# output update live
