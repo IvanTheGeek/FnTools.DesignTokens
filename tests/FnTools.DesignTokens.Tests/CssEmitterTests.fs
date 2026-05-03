@@ -219,7 +219,7 @@ let emitTests = testList "emit" [
                 Expect.stringStarts css ":root {" "starts with :root"
                 Expect.isTrue (css.Contains "--color-machine-washer-default: oklch(") "washer color present"
                 Expect.isTrue (css.Contains "--color-text-primary: oklch(")           "text.primary resolved"
-                Expect.isTrue (css.Contains "--shadow-focusRing: ")                   "focusRing shadow present"
+                Expect.isTrue (css.Contains "--shadow-focus-ring: ")                  "focus-ring shadow present"
                 Expect.isTrue (css.Contains "--spacing-N1: 4px;")                     "spacing N1 present"
                 Expect.isTrue (css.Contains "--easing-standard: cubic-bezier(")       "easing present"
         else
