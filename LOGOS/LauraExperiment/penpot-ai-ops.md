@@ -385,6 +385,34 @@ Static; does not change when themes switch.
 `shape.width` (and other geometry props) — the resolved value for the currently active sets.
 Changes when token resolution changes. This value is what gets persisted to the DB.
 
+### Color mode switching — what changes and what doesn't (verified 2026-05-03)
+
+Swapping the three Color sets (Dark Core/Accent/Component ↔ Light Core/Accent/Component)
+is a three-set toggle. The sets are named symmetrically; there is no single "Color mode" set.
+
+```javascript
+// Dark → Light
+['Color/Dark Core', 'Color/Dark Accent', 'Color/Dark Component']
+  .forEach(n => lib.sets.find(s => s.name === n).active = false);
+['Color/Light Core', 'Color/Light Accent', 'Color/Light Component']
+  .forEach(n => lib.sets.find(s => s.name === n).active = true);
+```
+
+**Observed fill changes (Landing page, Tablet breakpoint):**
+
+| Token path | Dark | Light |
+|---|---|---|
+| `color.background.body` | `#181a1b` | `#f2f2f3` |
+| `color.border.default` | `#303336` | `#bcbfc2` |
+| `color.button.primary.icon` | `#5ea6ed` | `#5ea6ed` (unchanged) |
+| `color.text.link` | `#5ea6ed` | `#5ea6ed` (unchanged) |
+
+Surface/background/border tokens invert between modes. Accent/brand tokens
+(`button.primary.icon`, `text.link`) are **mode-invariant** — they resolve the same
+value regardless of which Color set is active. This is the correct semantic color
+architecture: the `Color/Palettes and Scales` set defines the palette; the
+Dark/Light Core sets map semantic paths onto those palette values differently.
+
 ### `token.value` vs `token.resolvedValue`
 
 `value` — the raw string from that specific token's own set definition.
