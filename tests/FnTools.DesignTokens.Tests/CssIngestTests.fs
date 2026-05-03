@@ -43,6 +43,21 @@ let private llSample = """
 """
 
 
+// ivanthegeek.com inline :root — no prefix, flat names
+let private itkSample = """
+:root {
+  --bg: #e8f0e8;
+  --surface: rgba(240, 247, 240, 0.94);
+  --border: #a8c8a8;
+  --border-strong: #6a9e6a;
+  --accent: #1a6e1a;
+  --accent-hover: #0f4e0f;
+  --text: #0a1a0a;
+  --shadow: 0 18px 40px rgba(18, 42, 18, 0.08);
+}
+"""
+
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 let private ingestAndParse css prefix =
@@ -279,4 +294,59 @@ let allTests =
                     match w with
                     | CssIngest.Skipped (name, reason) ->
                         printfn "  SKIP  %s  (%s)" name reason
+
+
+        // ─── Prefix-less ingestion (ivanthegeek.com) ─────────────────────────
+
+        testCase "prefix-less: empty prefix ingests all custom properties" <| fun () ->
+            let result, parsed = ingestAndParse itkSample ""
+            match parsed with
+            | Error es -> failtestf "parse errors: %A" es
+            | Ok _ ->
+                Expect.isTrue (result.TokenCount >= 7) "at least 7 tokens"
+                Expect.isEmpty result.Warnings "no warnings"
+
+        testCase "prefix-less: flat name (--bg) maps to bg.default color" <| fun () ->
+            let _, parsed = ingestAndParse itkSample ""
+            match parsed with
+            | Error es -> failtestf "%A" es
+            | Ok file ->
+                match findLeaf "bg" "default" file with
+                | None -> failtest "missing bg.default"
+                | Some t ->
+                    match t.Value with
+                    | TokenValue.Color c -> Expect.equal c.ColorSpace SRGB "hex → sRGB"
+                    | other -> failtestf "expected Color, got %A" other
+
+        testCase "prefix-less: compound name (--accent-hover) maps to accent.hover" <| fun () ->
+            let _, parsed = ingestAndParse itkSample ""
+            match parsed with
+            | Error es -> failtestf "%A" es
+            | Ok file ->
+                match findLeaf "accent" "hover" file with
+                | None -> failtest "missing accent.hover"
+                | Some t ->
+                    match t.Value with
+                    | TokenValue.Color c -> Expect.equal c.ColorSpace SRGB "hex → sRGB"
+                    | other -> failtestf "expected Color, got %A" other
+
+        testCase "prefix-less: --border and --border-strong both land under 'border' group" <| fun () ->
+            let _, parsed = ingestAndParse itkSample ""
+            match parsed with
+            | Error es -> failtestf "%A" es
+            | Ok file ->
+                Expect.isSome (findLeaf "border" "default" file) "border.default present"
+                Expect.isSome (findLeaf "border" "strong"  file) "border.strong present"
+
+        testCase "prefix-less: --shadow maps to shadow token" <| fun () ->
+            let _, parsed = ingestAndParse itkSample ""
+            match parsed with
+            | Error es -> failtestf "%A" es
+            | Ok file ->
+                match findLeaf "shadow" "default" file with
+                | None -> failtest "missing shadow.default"
+                | Some t ->
+                    match t.Value with
+                    | TokenValue.Shadow (ShadowSingle _) -> ()
+                    | other -> failtestf "expected ShadowSingle, got %A" other
     ]
