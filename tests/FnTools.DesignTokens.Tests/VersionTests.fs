@@ -135,4 +135,48 @@ let allTests =
             | Error es -> failtestf "parse failed: %A" es
             | Ok file ->
                 Expect.isSome file.Schema "schema present"
+
+
+        // ─── serializeAs / IAcceptDataLoss ────────────────────────────────────
+
+        testCase "serializeAs SecondED: SRGB color written as hex string" <| fun () ->
+            match Format.parse V2025_10.colorBrandJson with
+            | Error es -> failtestf "parse failed: %A" es
+            | Ok file ->
+                let json = Format.serializeAs SecondEditorsDraft IAcceptDataLoss file
+                Expect.stringContains json "\"#" "hex string in output"
+                Expect.isFalse (json.Contains "\"colorSpace\"") "no colorSpace object"
+
+        testCase "serializeAs SecondED: $schema absent" <| fun () ->
+            match Format.parse V2025_10.colorBrandJson with
+            | Error es -> failtestf "parse failed: %A" es
+            | Ok file ->
+                let json = Format.serializeAs SecondEditorsDraft IAcceptDataLoss file
+                Expect.isFalse (json.Contains "$schema") "$schema omitted"
+
+        testCase "serializeAs SecondED: alpha channel preserved in hex (#rrggbbaa)" <| fun () ->
+            match Format.parse SecondED.colorAlphaJson with
+            | Error es -> failtestf "parse failed: %A" es
+            | Ok file ->
+                let json = Format.serializeAs SecondEditorsDraft IAcceptDataLoss file
+                // #0000ff80 — 9-char hex with alpha
+                Expect.stringContains json "#0000ff80" "alpha hex preserved"
+
+        testCase "serializeAs SecondED: output round-trips through parse" <| fun () ->
+            match Format.parse V2025_10.colorBrandJson with
+            | Error es -> failtestf "parse failed (input): %A" es
+            | Ok file ->
+                let secondEdJson = Format.serializeAs SecondEditorsDraft IAcceptDataLoss file
+                match Format.parse secondEdJson with
+                | Error es -> failtestf "re-parse of Second ED output failed: %A" es
+                | Ok reparsed ->
+                    Expect.equal reparsed.Version SecondEditorsDraft "detected as Second ED"
+
+        testCase "serializeAs V2025_10: identical to serialize" <| fun () ->
+            match Format.parse V2025_10.colorBrandJson with
+            | Error es -> failtestf "parse failed: %A" es
+            | Ok file ->
+                let via_serialize   = Format.serialize file
+                let via_serializeAs = Format.serializeAs V2025_10 IAcceptDataLoss file
+                Expect.equal via_serializeAs via_serialize "V2025_10 output identical"
     ]
