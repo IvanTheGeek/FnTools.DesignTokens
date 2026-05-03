@@ -6,8 +6,97 @@ status: reference — 2026-05-03
 # Penpot Integration Reference
 
 Technical reference for interacting with the self-hosted Penpot instance at
-`http://localhost:9001`. Covers API authentication, token import/export format, internal
-storage structure, and browser automation notes for AI agents.
+`http://localhost:9001`. Covers the three interaction surfaces, API authentication,
+token import/export format, internal storage structure, and setup notes.
+
+---
+
+## Three interaction surfaces
+
+| | REST API | Penpot MCP server | Claude browser extension |
+|---|---|---|---|
+| **Needs browser open** | No | Yes (plugin must be loaded) | Yes |
+| **Needs Penpot file open** | No | Yes | Yes |
+| **Scope** | Any file in the instance | Currently open file only | Currently open file only |
+| **Token read/write** | Broken — serialization issues with tokens present | Full (via Plugin API, added 2.14) | Full (direct DOM/JS access) |
+| **Shape create/modify** | Underdocumented, fragile | Full | Full |
+| **Export shape as image** | Via exporter service | Yes (`export_shape` tool) | Yes (screenshot) |
+| **File management** | Yes (create/rename/delete files, projects) | No | No |
+| **Multi-file operations** | Yes | No | No |
+| **Webhooks** | Yes (outbound on file changes) | No | No |
+| **Token format** | N/A (broken) | Token Studio / hex strings | Token Studio / hex strings |
+| **Auth** | Personal access token | Browser session (no extra auth) | Browser session |
+| **Headless / CI** | Yes | No | No |
+
+### REST API — use for
+File and project CRUD, webhooks, server-side automation that doesn't touch tokens.
+
+### MCP server — use for
+Everything token-related; shape creation and inspection; design validation from Claude Code.
+Requires: MCP server running + browser open with Penpot + plugin connected. See setup below.
+
+### Claude browser extension — use for
+Interactive design work: exploring an open file, ad-hoc automation while designing, visual
+inspection without writing any code. No setup beyond having the extension installed.
+
+**Key constraint for MCP and browser extension**: Both require a design file to be open.
+Neither can be used headlessly — a human must have Penpot open in a browser.
+
+---
+
+## MCP server setup
+
+### Architecture
+
+```
+Claude Code ──(HTTP MCP)──► MCP server (port 4401)
+                                  │
+                           WebSocket (port 4402)
+                                  │
+                          Penpot Plugin (browser)
+                                  │
+                           Penpot Plugin API
+                                  │
+                           Penpot (localhost:9001)
+```
+
+The MCP server does not talk to Penpot directly. It sends JavaScript code to a plugin
+running inside the browser; the plugin executes that code via the Penpot Plugin API.
+The primary MCP tool is `execute_code` — arbitrary Plugin API JavaScript.
+
+Other tools: `high_level_overview`, `penpot_api_info` (type docs), `export_shape` (PNG/SVG),
+`import_image` (file → rectangle).
+
+### Start the MCP server
+
+```bash
+penpot-mcp          # ~/.local/bin/penpot-mcp — runs @penpot/mcp@2.14.1
+# or directly:
+npx -y @penpot/mcp@2.14.1
+```
+
+Ports: `4400` (plugin web server), `4401` (MCP HTTP + SSE), `4402` (WebSocket for plugin).
+
+The server is added to Claude Code's global user config:
+```bash
+claude mcp list    # should show: penpot ✓ Connected (when server is running)
+```
+
+### Load the plugin in Penpot (one-time per browser session)
+
+1. Open `http://localhost:9001` and open a design file
+2. Plugins menu (top bar) → Add plugin → paste `http://localhost:4400/manifest.json`
+3. Open the plugin panel → click "Connect to MCP server"
+4. Status changes to "Connected" — Claude Code can now use MCP tools against that file
+
+The plugin connection must stay open (don't close the plugin panel) while using MCP tools.
+
+### Claude Code MCP config
+
+Stored in `~/.claude.json` (managed by `claude mcp add`). Entry:
+```json
+{ "penpot": { "type": "http", "url": "http://localhost:4401/mcp" } }
+```
 
 ---
 
