@@ -178,7 +178,7 @@ with a different syntax. The key insight: **theme switching is resolver switchin
 
 ## Architecture of Laura's design system
 
-The demo file implements a complete scalable system using four layers:
+The demo file implements a complete scalable system using five layers:
 
 ### Layer 1: Foundations/Base — the mathematical root
 
@@ -287,14 +287,15 @@ nested structure flattened to dots.
 
 ## Penpot API-first workflow
 
-The transcript mentions:
-- Token support is coming to the **Plugins API** in the next release
-- **Penpot MCP server** beta is live
+Both surfaces are live in **Penpot 2.14**:
+- **Plugins API** (`penpot.tokens`) — available since 2.14, confirmed working
+- **REST API** — `update-file` with `set-token-set` / `set-token` change ops, confirmed working in 2.14.4
+- **Penpot MCP server** (`@penpot/mcp`) — wraps the Plugins API, requires browser open
 
-With API-first access, the correct workflow is NOT import/export via file — it is:
+The correct workflow is NOT import/export via file — it is:
 1. Maintain tokens in DTCG 2025.10 format in our library
 2. Convert to Tokens Studio hex format via `serializePenpot` (one set)
-3. Push directly to Penpot via REST API (`update-file-data` endpoint or Plugins API)
+3. Push directly to Penpot via REST `update-file` or via MCP `execute_code`
 4. Query token application via Plugins API / MCP — "which shapes use `color.text.main`?"
 
 The MCP server enables Claude to:

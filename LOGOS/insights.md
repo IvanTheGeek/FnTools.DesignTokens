@@ -170,7 +170,16 @@ TOML is the right choice for **non-DTCG tokens** (FnHCI: console, TUI, thermal, 
 
 ## Penpot as design surface — round-trip workflow
 
-Penpot supports DTCG token import/export. It also supports SVG export (reliable) and HTML import (new, untested as of 2026-05-02).
+Penpot stores tokens in **Tokens Studio's multi-set format** (DTCG 2nd editor's draft, hex
+strings), not DTCG 2025.10. The `hex` sub-field in a DTCG 2025.10 color object is the bridge:
+a `serializePenpot` adapter reads `$value.hex` and emits the hex string Penpot requires.
+
+Three interaction surfaces in 2.14.4 — see `penpot-api.md`:
+- REST `update-file` with `set-token-set` / `set-token` change ops (headless, CI-friendly)
+- MCP server (`@penpot/mcp`) wrapping the Plugins API (requires browser open)
+- Claude browser extension (interactive, no setup)
+
+Penpot also supports SVG export (reliable) and HTML import (new, untested as of 2026-05-02).
 
 **Proposed workflow**:
 1. Author Fun.Blazor components in F# using typed token bindings
