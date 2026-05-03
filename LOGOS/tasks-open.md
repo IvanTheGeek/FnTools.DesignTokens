@@ -2,12 +2,6 @@
 
 > Phases 1–5 complete — see `tasks-completed.md` and `work-completed.md`. Detailed plan for items below: `work-planned.md`.
 
-### CSS ingestion tool
-
-- [x] Parse CSS custom properties from an HTML/CSS file → DTCG `.tokens.json`
-- [x] Primary test: LaundryLog design system HTML → `cb.tokens.json` + `ll.tokens.json`
-- [x] Round-trip: `Format.parse` the output with zero errors
-
 ### FnHCI non-visual targets
 
 - [ ] ConsoleTokens / TuiTokens / ThermalTokens / BrailleTokens domain design

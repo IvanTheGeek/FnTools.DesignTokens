@@ -26,18 +26,17 @@ See `design-system-app-vision.md` for full scope.
 
 - [ ] CI publish on tag (deferred until first stable release)
 
-## CSS ingestion tool
+## ~~CSS ingestion tool~~ ✓ done 2026-05-02
 
 Convert an existing CSS custom-property file (or inline `<style>` block) to DTCG `.tokens.json` files.
-Primary test case: LaundryLog HTML design system at `/home/ivan/nexus/LaundryLog/artifacts/LaundryLog_Design_System_Handoff/LaundryLog Design System.html`
-Output: `cb.tokens.json` (CheddarBooks primitives) + `ll.tokens.json` (LaundryLog semantic overrides)
-Approach: parse CSS `--var-name: value;` declarations, infer type from value shape, map to `FnTools.DesignTokens` domain.
+Primary test case: LaundryLog HTML design system + ivanthegeek.com.
 
-- [ ] CSS custom-property parser (regex or proper CSS tokenizer)
-- [ ] Type inference heuristics (OKLCH → color, px/rem → dimension, etc.)
-- [ ] Group/hierarchy inference from naming convention (e.g., `--cb-color-action-default` → `color / action / default`)
-- [ ] Output writer: DTCG JSON with correct `$type` + `$value` structure
-- [ ] Round-trip validation: parse output back through `Format.parse` with zero errors
+- [x] CSS custom-property parser (regex-based)
+- [x] Type inference heuristics (OKLCH → color, px/rem → dimension, rgba → color with alpha, shadow, etc.)
+- [x] Group/hierarchy inference from naming convention (e.g., `--cb-color-action-default` → `color / action / default`)
+- [x] Prefix-less mode: pass `""` to accept all `--*` vars regardless of prefix
+- [x] Output writer: DTCG JSON with correct `$type` + `$value` structure
+- [x] Round-trip validation: parse output back through `Format.parse` with zero errors
 
 ## ~~CSS emitter~~ ✓ done 2026-05-02
 

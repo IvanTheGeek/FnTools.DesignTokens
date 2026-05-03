@@ -1,3 +1,12 @@
+## CssAudit duplication detector (completed 2026-05-03)
+
+- [x] `AuditEntry.MatchedToken : string option` — populated by `auditAgainst`, always `None` from `audit`
+- [x] `auditAgainst (cssText: string) (file: TokenFile) : AuditResult` — annotates each entry with the path of a matching token
+- [x] Token lookup: canonical CSS strings computed from `ColorValue` (hex / sRGB components→rgba), `DimensionValue`, `FontFamilyValue`
+- [x] Input normalisation: short hex expanded (`#fff`→`#ffffff`), rgba spacing canonicalised
+- [x] 7 new tests (170 total); validated against `ivanthegeek.tokens.json`
+- [x] Closes the last open item in the CSS Bootstrap / Migration workflow step 2
+
 ## ivanthegeek.com bootstrap (completed 2026-05-03)
 
 - [x] `CssIngest.ingest` against live site CSS (prefix-less, `""`)
