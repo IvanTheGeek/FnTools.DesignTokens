@@ -8,12 +8,6 @@
 - [ ] Primary test: LaundryLog design system HTML → `cb.tokens.json` + `ll.tokens.json`
 - [ ] Round-trip: `Format.parse` the output with zero errors
 
-### Penpot round-trip experiment
-
-- [ ] Import a Fun.Blazor rendered HTML page into Penpot
-- [ ] Make a change in Penpot, export SVG, reconstruct in Fun.Blazor
-- [ ] Document the workflow and limitations
-
 ### FnHCI non-visual targets
 
 - [ ] ConsoleTokens / TuiTokens / ThermalTokens / BrailleTokens domain design
@@ -21,10 +15,10 @@
 
 ### `#RRGGBBAA` alpha hex — silent failure in upgrade path
 
-- [ ] `upgradeStringValues` (Format.fs) only handles 7-char `#RRGGBB` (`s.Length = 7`)
-- [ ] 9-char `#RRGGBBAA` falls through silently — no error, no upgrade, token silently dropped
-- [ ] Fix: either return `Error (InvalidValue ...)`, or parse alpha from last 2 hex digits and set `Alpha`
-- [ ] Add test: parse Second Editor's Draft file with `#RRGGBBAA` color → expect error or correct alpha
+- [x] `upgradeStringValues` (Format.fs) only handles 7-char `#RRGGBB` (`s.Length = 7`)
+- [x] 9-char `#RRGGBBAA` falls through silently — no error, no upgrade, token silently dropped
+- [x] Fix: parse alpha from last 2 hex digits and set `Alpha`
+- [x] Add test: parse Second Editor's Draft file with `#RRGGBBAA` color → correct alpha and hex preserved
 
 ### Spec-version export / downgrade
 
