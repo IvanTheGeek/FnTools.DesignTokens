@@ -11,22 +11,27 @@ These are concrete experiments with a specific hypothesis, method, and expected 
 
 ## EXP-01: Penpot HTML import round-trip
 
-**Status**: planned
+**Status**: concluded — hypothesis falsified (2026-05-02)
 
-**Hypothesis**: A rendered Fun.Blazor HTML page can be imported into Penpot as a design canvas, allowing visual refinement in Penpot followed by structured extraction back to Fun.Blazor.
+**Hypothesis**: A rendered Fun.Blazor HTML page can be imported into Penpot as a design canvas.
 
-**Why it matters**: If Penpot HTML import works, the design loop is: write F# → render → Penpot refinement → Fun.Blazor update. If it does not work, the loop goes: Penpot SVG design → Fun.Blazor reconstruction from SVG reference.
+**Result**: HTML import does not exist in Penpot as of May 2026. It is a community feature
+request (open since March 2025) with no implementation. The File menu has no import option
+beyond Penpot's own `.penpot` format. The Plugins menu offers only a plugin manager.
 
-**Method**:
-1. Render `LaundryLog.UI` entry form page to a static HTML file (e.g., `dotnet run` + screenshot, or prerender)
-2. Import the HTML into Penpot via File > Import
-3. Verify: are layout, typography, and colors reflected accurately?
-4. Make a change in Penpot (e.g., adjust a color or move a component)
-5. Export to SVG; attempt to extract the delta back to Fun.Blazor
+The workflow direction is reversed: Penpot → code, not code → Penpot. Penpot's Inspect tab
+generates CSS/HTML/SVG from designs.
 
-**Expected result**: Either a usable round-trip workflow with documented limitations, or a clear statement of what Penpot HTML import cannot do.
+**What does exist**: A Plugin API (since Penpot 2.3, Nov 2024) could theoretically support
+an HTML→Penpot plugin, but none exists as an installable plugin at this time.
 
-**Notes**: Penpot announced HTML import in early 2026. Not tested. SVG export is reliable and is the fallback.
+**Revised design loop**: design components natively in Penpot using DTCG tokens as variables
+(EXP-04), then use the Inspect tab to validate CSS output matches what the F# component
+would produce. SVG export from Penpot remains available as a reference.
+
+**Component test artifact**: `/tmp/machine-chips-component.html` — static HTML rendering
+of `MachineTypeChips` in all four states (none, washer, dryer, supplies selected) using
+DTCG token CSS vars. Renders correctly in browser; Penpot import not possible.
 
 ---
 
@@ -75,17 +80,30 @@ These are concrete experiments with a specific hypothesis, method, and expected 
 
 ## EXP-04: Penpot DTCG token variable import
 
-**Status**: planned
+**Status**: priority — run next (2026-05-02)
 
-**Hypothesis**: Penpot can import a DTCG `.tokens.json` file and expose the token values as Penpot variables, which can then be applied to component fills, strokes, and text styles.
+**Hypothesis**: Penpot can import a DTCG `.tokens.json` file and expose the token values as
+Penpot variables, which can then be applied to component fills, strokes, and text styles.
 
-**Why it matters**: If Penpot variables can be driven by DTCG files, design changes in Penpot token values propagate to the exported CSS/SVG. The token file is the shared source of truth for both tools.
+**Why it matters**: Confirmed by a 2026 practitioner article: Penpot supports the W3C DTCG
+spec natively — import/export as JSON, multiple themed token sets, light/dark mode. This is
+the actual code-design bridge. The TOKENS tab is already visible in the TokenExperiments
+workspace.
 
 **Method**:
-1. Export `ll.tokens.json` from the LaundryLog token set
-2. Import into Penpot via the tokens panel
-3. Apply a token variable to a component fill
-4. Change the token value in Penpot, re-export to DTCG, verify the change is in the exported file
-5. Round-trip: re-import the exported file through `Format.parse`
+1. Create a Penpot API token (Penpot UI → profile → Account settings → Access tokens)
+   Store at `~/.config/penpot-claude.token`. Configure `PENPOT_TOKEN` env var in
+   `.claude/settings.json` — never echo the value in commands.
+2. Import `tokens/ll.tokens.json` into Penpot via the TOKENS tab
+3. Apply a token variable to a shape fill (e.g., washer teal)
+4. Verify the token value is referenced, not hardcoded
+5. Export back to DTCG JSON, run through `Format.parse` — verify zero errors
+6. Check: does Penpot export in DTCG 2025.10 format or an older variant?
 
-**Expected result**: Token values are editable in Penpot and exportable back to valid DTCG JSON.
+**Known limitations (from research)**:
+- Stroke color token application is unreliable in Penpot's current token UI
+- Tokens break when changing component variants
+- No quick token application from color pickers — manual assignment required
+- Can't preview themes side by side (light vs dark)
+
+**Prerequisite**: API token must be created by user in Penpot UI before proceeding.
