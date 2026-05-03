@@ -28,10 +28,12 @@
 
 ### Spec-version export / downgrade
 
-- [ ] Add `serializeAs : SpecVersion -> TokenDocument -> JsonNode` (or similar) that emits an older wire format
+- [ ] Add a single-case DU `type ExportLossAcknowledged = | IAcceptDataLoss` — required parameter on any lossy export path
+- [ ] Signature: `serializeAs : SpecVersion -> ExportLossAcknowledged -> TokenDocument -> JsonNode`
+      vs. lossless: `serialize : TokenDocument -> JsonNode` — the type difference is the contract
+- [ ] Caller must literally write `IAcceptDataLoss` at the call site; cannot be a variable, config flag, or condition
 - [ ] Second Editor's Draft emitter: write color `$value` as hex string (`$value.hex` fallback, or gamut-map if missing)
 - [ ] Penpot adapter = thin shim on Second Editor's Draft emitter: strip `$schema`, add set-name wrapper
-- [ ] Make lossiness explicit at the call site — return `Result<JsonNode, ExportLoss list>` or accumulate `LossWarning` so callers know what was dropped or approximated
 - [ ] Style Dictionary: consumer of DTCG, not a format target — no adapter needed
 - [ ] Figma Variables API: completely different schema (REST CRUD, not DTCG) — separate integration if ever needed
 
