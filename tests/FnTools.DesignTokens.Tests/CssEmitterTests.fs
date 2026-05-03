@@ -227,6 +227,58 @@ let emitTests = testList "emit" [
 ]
 
 
+// ─── emitBlock / emitMultiMode ────────────────────────────────────────────────
+
+let multiModeTests = testList "emitMultiMode" [
+
+    testCase "emitBlock uses given selector" <| fun () ->
+        let tokens = seq { yield ["spacing"; "sm"], resolvedDim 4.0 Px }
+        let css = CssEmitter.emitBlock "[data-theme=\"dark\"]" tokens
+        Expect.stringStarts css "[data-theme=\"dark\"] {" "starts with override selector"
+
+    testCase "emit is equivalent to emitBlock :root" <| fun () ->
+        let tokens = [ ["color"; "bg"], resolvedColor SRGB 0.1 0.1 0.1 None ]
+        Expect.equal (emit (List.toSeq tokens)) (CssEmitter.emitBlock ":root" (List.toSeq tokens)) "identical output"
+
+    testCase "emitMultiMode: no override block when all tokens identical" <| fun () ->
+        let tokens = [ ["color"; "bg"], resolvedColor SRGB 0.9 0.9 0.9 None ]
+        let css = CssEmitter.emitMultiMode (List.toSeq tokens) (List.toSeq tokens) "[data-theme=\"dark\"]"
+        Expect.isFalse (css.Contains "[data-theme=\"dark\"]") "no override block"
+        Expect.stringContains css ":root {" ":root block present"
+
+    testCase "emitMultiMode: override block emitted when color differs" <| fun () ->
+        let light = [ ["color"; "bg"], resolvedColor SRGB 0.9 0.9 0.9 None ]
+        let dark  = [ ["color"; "bg"], resolvedColor SRGB 0.1 0.1 0.1 None ]
+        let css = CssEmitter.emitMultiMode (List.toSeq light) (List.toSeq dark) "[data-theme=\"dark\"]"
+        Expect.stringContains css ":root {"             ":root block present"
+        Expect.stringContains css "[data-theme=\"dark\"]" "override block present"
+
+    testCase "emitMultiMode: only differing token appears in override block" <| fun () ->
+        let sharedDim = ["spacing"; "sm"], resolvedDim 4.0 Px
+        let lightBg   = ["color"; "bg"],   resolvedColor SRGB 0.9 0.9 0.9 None
+        let darkBg    = ["color"; "bg"],   resolvedColor SRGB 0.1 0.1 0.1 None
+        let light = [sharedDim; lightBg]
+        let dark  = [sharedDim; darkBg]
+        let css = CssEmitter.emitMultiMode (List.toSeq light) (List.toSeq dark) "[data-theme=\"dark\"]"
+        // Override block must contain bg but NOT spacing
+        let overrideStart = css.IndexOf "[data-theme"
+        let overrideBlock = css.[overrideStart..]
+        Expect.stringContains overrideBlock "--color-bg"     "bg in override"
+        Expect.isFalse (overrideBlock.Contains "--spacing-sm") "spacing not in override"
+
+    testCase "emitMultiMode: new token in override (not in base) is included" <| fun () ->
+        let base_     = [ ["color"; "bg"],     resolvedColor SRGB 0.9 0.9 0.9 None ]
+        let override_ = [ ["color"; "bg"],     resolvedColor SRGB 0.9 0.9 0.9 None
+                          ["color"; "accent"], resolvedColor SRGB 0.0 0.5 1.0 None ]
+        let css = CssEmitter.emitMultiMode (List.toSeq base_) (List.toSeq override_) "[data-theme=\"dark\"]"
+        let overrideStart = css.IndexOf "[data-theme"
+        let overrideBlock = css.[overrideStart..]
+        Expect.stringContains overrideBlock "--color-accent" "new token in override"
+        Expect.isFalse (overrideBlock.Contains "--color-bg")  "unchanged token not in override"
+
+]
+
+
 // ─── All ──────────────────────────────────────────────────────────────────────
 
 let allTests =
@@ -236,4 +288,5 @@ let allTests =
         shadowTests
         varNameTests
         emitTests
+        multiModeTests
     ]

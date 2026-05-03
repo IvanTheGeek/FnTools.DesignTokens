@@ -1,3 +1,13 @@
+## Dark-mode CSS emitter (completed 2026-05-03)
+
+- [x] `CssEmitter.emitBlock (selector: string) (tokens: ...) : string` — emits any selector block
+- [x] `CssEmitter.emit` refactored as `emitBlock ":root"` wrapper; existing callers unchanged
+- [x] `CssEmitter.emitMultiMode (baseTokens) (overrideTokens) (overrideSelector) : string` — diff-only override block
+  - Override block omitted entirely when all tokens are identical
+  - New tokens present only in override set are included in the override block
+- [x] Functions wrapped in `[<AutoOpen>] module CssEmitter` for qualified access without breaking `emit`
+- [x] 6 new tests (180 total): emitBlock selector, emit ≡ emitBlock :root, no-diff suppression, color diff, partial diff, new-token inclusion
+
 ## Penpot export shim (completed 2026-05-03)
 
 - [x] `Format.serializePenpot (setName: string) (_ : ExportLossAcknowledged) (file: TokenFile) : string`

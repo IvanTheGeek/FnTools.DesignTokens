@@ -203,19 +203,69 @@ let tokenToCssDecls (path: string list) (token: ResolvedToken) : (string * strin
 
 // ─── Top-level emitter ────────────────────────────────────────────────────────
 
-/// <summary>
-/// Emits all resolved tokens as a CSS <c>:root { }</c> block of custom properties.
-/// </summary>
-/// <param name="tokens">
-/// Flat sequence of <c>(path, token)</c> pairs — the output of
-/// <see cref="FnTools.DesignTokens.Api.importWithResolver"/> or equivalent.
-/// </param>
-/// <returns>CSS text ready to write to a <c>.css</c> file.</returns>
-let emit (tokens: (string list * ResolvedToken) seq) : string =
-    let sb = StringBuilder()
-    sb.AppendLine ":root {" |> ignore
-    for (path, token) in tokens do
-        for (name, value) in tokenToCssDecls path token do
-            sb.AppendLine (sprintf "  %s: %s;" name value) |> ignore
-    sb.AppendLine "}" |> ignore
-    sb.ToString()
+/// Top-level CSS emitter functions.
+/// The module is auto-opened so <c>emit</c> is usable unqualified;
+/// <c>emitBlock</c> and <c>emitMultiMode</c> can also be called as <c>CssEmitter.*</c>.
+[<AutoOpen>]
+module CssEmitter =
+
+    /// <summary>
+    /// Emits all resolved tokens as a CSS block under the given selector.
+    /// </summary>
+    /// <param name="selector">CSS selector for the block, e.g. <c>":root"</c> or <c>"[data-theme=\"dark\"]"</c>.</param>
+    /// <param name="tokens">Flat sequence of <c>(path, token)</c> pairs.</param>
+    let emitBlock (selector: string) (tokens: (string list * ResolvedToken) seq) : string =
+        let sb = StringBuilder()
+        sb.AppendLine (selector + " {") |> ignore
+        for (path, token) in tokens do
+            for (name, value) in tokenToCssDecls path token do
+                sb.AppendLine (sprintf "  %s: %s;" name value) |> ignore
+        sb.AppendLine "}" |> ignore
+        sb.ToString()
+
+    /// <summary>
+    /// Emits all resolved tokens as a CSS <c>:root { }</c> block of custom properties.
+    /// </summary>
+    /// <param name="tokens">
+    /// Flat sequence of <c>(path, token)</c> pairs — the output of
+    /// <see cref="FnTools.DesignTokens.Api.importWithResolver"/> or equivalent.
+    /// </param>
+    /// <returns>CSS text ready to write to a <c>.css</c> file.</returns>
+    let emit (tokens: (string list * ResolvedToken) seq) : string =
+        emitBlock ":root" tokens
+
+    /// <summary>
+    /// Emits a two-block CSS file: a <c>:root</c> block with all base tokens, followed by
+    /// an override block containing only the tokens whose values differ between the two
+    /// resolved sets.
+    /// </summary>
+    /// <param name="baseTokens">Tokens resolved for the default/light context.</param>
+    /// <param name="overrideTokens">Tokens resolved for the override context (e.g. dark theme).</param>
+    /// <param name="overrideSelector">CSS selector for the override block, e.g. <c>"[data-theme=\"dark\"]"</c>.</param>
+    /// <returns>
+    /// CSS text with <c>:root { }</c> followed by the override block.
+    /// If no tokens differ, only the <c>:root</c> block is emitted.
+    /// </returns>
+    let emitMultiMode
+        (baseTokens:       (string list * ResolvedToken) seq)
+        (overrideTokens:   (string list * ResolvedToken) seq)
+        (overrideSelector: string)
+        : string =
+        let baseDecls =
+            baseTokens
+            |> Seq.map (fun (path, token) -> String.concat "." path, tokenToCssDecls path token)
+            |> dict
+        let diffs =
+            overrideTokens
+            |> Seq.filter (fun (path, token) ->
+                let key = String.concat "." path
+                match baseDecls.TryGetValue key with
+                | false, _          -> true   // new token not in base — include it
+                | true,  baseDecl   -> tokenToCssDecls path token <> baseDecl)
+            |> Array.ofSeq
+        let sb = StringBuilder()
+        sb.Append (emitBlock ":root" baseTokens) |> ignore
+        if diffs.Length > 0 then
+            sb.AppendLine "" |> ignore
+            sb.Append (emitBlock overrideSelector diffs) |> ignore
+        sb.ToString()
