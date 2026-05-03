@@ -784,7 +784,7 @@ let rec private upgradeStringValues (inheritedType: string option) (node: JsonNo
             | None -> ()
         | Some v, Some "color" ->
             match tryGetString v with
-            | Some s when s.StartsWith "#" && s.Length = 7 ->
+            | Some s when s.StartsWith "#" && (s.Length = 7 || s.Length = 9) ->
                 let parseHex (i: int) =
                     Convert.ToInt32(s.Substring(i, 2), 16) |> float
                     |> (fun x -> x / 255.0)
@@ -798,6 +798,8 @@ let rec private upgradeStringValues (inheritedType: string option) (node: JsonNo
                 comps.Add(JsonValue.Create(g))
                 comps.Add(JsonValue.Create(b))
                 obj.["components"] <- comps
+                if s.Length = 9 then
+                    obj.["alpha"] <- JsonValue.Create(parseHex 7)
                 obj.["hex"] <- JsonValue.Create(s)
                 o.["$value"] <- obj
             | _ -> ()

@@ -178,6 +178,15 @@ module SecondED =
 }
 """
 
+    let colorAlphaJson = """
+{
+  "color": {
+    "$type": "color",
+    "brand": { "$value": "#0000ff80" }
+  }
+}
+"""
+
     let dimensionStringJson = """
 {
   "spacing": {
