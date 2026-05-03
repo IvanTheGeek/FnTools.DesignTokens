@@ -117,7 +117,7 @@ all 9 tokens correctly across the full `machine.*` hierarchy.
 - Color values must be hex (`#RRGGBB`) — oklch objects are silently ignored (produce error token)
 - No `$schema` key required
 
-**Export format** (Token Studio variant, not DTCG 2025.10):
+**Export format** (Tokens Studio variant, not DTCG 2025.10):
 ```json
 {
   "lltokens-hex": {

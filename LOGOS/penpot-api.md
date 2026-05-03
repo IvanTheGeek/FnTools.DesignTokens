@@ -24,7 +24,7 @@ token import/export format, internal storage structure, and setup notes.
 | **File management** | Yes (create/rename/delete files, projects) | No | No |
 | **Multi-file operations** | Yes | No | No |
 | **Webhooks** | Yes (outbound on file changes) | No | No |
-| **Token format** | transit+json (verbose, parseable) | Token Studio / hex strings | Token Studio / hex strings |
+| **Token format** | transit+json (verbose, parseable) | Tokens Studio / hex strings | Tokens Studio / hex strings |
 | **Auth** | Personal access token | Browser session (no extra auth) | Browser session |
 | **Headless / CI** | Yes | No | No |
 
@@ -238,7 +238,7 @@ content directly in the script instead of fetching from a local server.
 
 ## Token export format
 
-Penpot exports in a **Token Studio variant**, not DTCG 2025.10:
+Penpot exports in a **Tokens Studio variant**, not DTCG 2025.10:
 
 ```json
 {
@@ -333,9 +333,9 @@ This is the correct shape for our tokens:
 | `$type` on group | Valid DTCG | NOT supported (group parsed as error leaf) |
 | `$schema` key | Standard | Ignored |
 | Set wrapping in export | Not a DTCG concept | Added by Penpot |
-| Aliases | `{ "$value": "{other.token}" }` | Supported (Token Studio syntax) |
+| Aliases | `{ "$value": "{other.token}" }` | Supported (Tokens Studio syntax) |
 
-**Why Penpot uses hex strings**: This is not a custom Token Studio format — it's the
+**Why Penpot uses hex strings**: This is not a custom Tokens Studio format — it's the
 DTCG 2nd editor's draft format (the pre-stable version the ecosystem built against), which
 required color `$value` to be a hex string: "The value MUST be a string containing a hex
 triplet/quartet including the preceding `#` character." The 2025.10 stable release replaced

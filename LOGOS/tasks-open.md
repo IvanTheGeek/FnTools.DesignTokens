@@ -2,14 +2,14 @@
 
 > Phases 1–5 complete — see `tasks-completed.md` and `work-completed.md`. Detailed plan for items below: `work-planned.md`.
 
-### Penpot × Token Studio learning experiments
+### Penpot × Tokens Studio learning experiments
 
-Analysis file: `penpot-token-studio-format.md`. The Design mocks.penpot file from Laura's
+Analysis file: `penpot-tokens-studio-format.md`. The Design mocks.penpot file from Laura's
 demo is in `/home/ivan/ARCHIVE/Penpot-DesignTokens/`. Primary interaction is via the
 **MCP server + browser extension** — not the REST API (broken for tokens) and not file
 import/export. See `penpot-api.md` for the three-surface comparison.
 
-- [ ] **Token Studio parser shim** — read a Token Studio `tokens.json`, strip non-DTCG types
+- [ ] **Tokens Studio parser shim** — read a Tokens Studio `tokens.json`, strip non-DTCG types
   (`fontFamilies`, `fontSizes`, `spacing`, `borderWidth`) and math/HSL expressions, return
   parseable DTCG JSON per set. Use Laura's file as test input. This is a separate function
   (not `Format.parse`) — it lives in a `TokenStudio` module.
@@ -20,7 +20,7 @@ import/export. See `penpot-api.md` for the three-surface comparison.
 - [ ] **MCP coverage query** — after pushing tokens, use the MCP to query which shapes in a
   test frame have `appliedTokens` referencing a given token path; validate coverage.
 - [ ] **Theme-aware CSS emitter** — given a list of active theme names, resolve the multi-set
-  merge in our resolver and emit `:root` + override blocks. Maps Token Studio `$themes`
+  merge in our resolver and emit `:root` + override blocks. Maps Tokens Studio `$themes`
   activation to our resolver's `resolutionOrder`.
 
 ### CSS ingestion — non-standard unit handling
