@@ -22,7 +22,7 @@
       vs. lossless: `serialize : TokenFile -> string` — the type difference is the contract
 - [x] Caller must literally write `IAcceptDataLoss` at the call site; cannot be a variable, config flag, or condition
 - [x] Second Editor's Draft emitter: write color `$value` as hex string (stored Hex field first, then computed from SRGB; OKLCH falls back to V2025_10 object form)
-- [ ] Penpot adapter = thin shim on Second Editor's Draft emitter: strip `$schema` ✓ (already done), add set-name wrapper — deferred
+- [x] Penpot adapter = `Format.serializePenpot (setName: string) IAcceptDataLoss file` — wraps Second ED output in `{ "sets": { "<name>": { ...tokens } } }`
 - [ ] Style Dictionary: consumer of DTCG, not a format target — no adapter needed
 - [ ] Figma Variables API: completely different schema (REST CRUD, not DTCG) — separate integration if ever needed
 

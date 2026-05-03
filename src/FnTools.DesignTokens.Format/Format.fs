@@ -1161,3 +1161,25 @@ let serializeAs (target: SpecVersion) (_ : ExportLossAcknowledged) (file: TokenF
     | SecondEditorsDraft
     | FirstEditorsDraft  -> serializeWith writeColorValueSecondED None file
     | ThirdEditorsDraft  -> serialize file  // same structure as V2025_10
+
+/// Serialize for Penpot token import.
+///
+/// Penpot expects Second Editors' Draft DTCG format (hex color strings, no $schema)
+/// wrapped in a sets object: <c>{ "sets": { "&lt;setName&gt;": { ...tokens } } }</c>.
+/// The setName appears as the library name in Penpot's token panel.
+///
+/// Loss rules are identical to <see cref="serializeAs"/> with SecondEditorsDraft.
+let serializePenpot (setName: string) (_ : ExportLossAcknowledged) (file: TokenFile) : string =
+    let inner = serializeWith writeColorValueSecondED None file
+    use stream = new MemoryStream()
+    let opts   = JsonWriterOptions(Indented = true, SkipValidation = false)
+    use w      = new Utf8JsonWriter(stream, opts)
+    w.WriteStartObject ()
+    w.WritePropertyName "sets"
+    w.WriteStartObject ()
+    w.WritePropertyName setName
+    w.WriteRawValue inner
+    w.WriteEndObject ()
+    w.WriteEndObject ()
+    w.Flush ()
+    Encoding.UTF8.GetString(stream.ToArray())

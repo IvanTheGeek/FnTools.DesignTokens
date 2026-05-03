@@ -1,3 +1,11 @@
+## Penpot export shim (completed 2026-05-03)
+
+- [x] `Format.serializePenpot (setName: string) (_ : ExportLossAcknowledged) (file: TokenFile) : string`
+- [x] Wraps Second ED output in `{ "sets": { "<name>": { ...tokens } } }` — Penpot's token import format
+- [x] No `$schema`; colors as hex strings (inherits Second ED rules)
+- [x] Re-exported as `Primitives.serializePenpot` in meta-package
+- [x] 4 new tests (174 total): sets wrapper, no $schema, hex colors, inner content round-trips
+
 ## CssAudit duplication detector (completed 2026-05-03)
 
 - [x] `AuditEntry.MatchedToken : string option` — populated by `auditAgainst`, always `None` from `audit`

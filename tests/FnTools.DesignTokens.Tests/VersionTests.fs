@@ -179,4 +179,42 @@ let allTests =
                 let via_serialize   = Format.serialize file
                 let via_serializeAs = Format.serializeAs V2025_10 IAcceptDataLoss file
                 Expect.equal via_serializeAs via_serialize "V2025_10 output identical"
+
+
+        // ─── serializePenpot ──────────────────────────────────────────────────
+
+        testCase "serializePenpot: sets wrapper with named set present" <| fun () ->
+            match Format.parse V2025_10.colorBrandJson with
+            | Error es -> failtestf "parse failed: %A" es
+            | Ok file ->
+                let json = Format.serializePenpot "my-brand" IAcceptDataLoss file
+                Expect.stringContains json "\"sets\""     "sets key present"
+                Expect.stringContains json "\"my-brand\"" "set name present"
+
+        testCase "serializePenpot: $schema absent" <| fun () ->
+            match Format.parse V2025_10.colorBrandJson with
+            | Error es -> failtestf "parse failed: %A" es
+            | Ok file ->
+                let json = Format.serializePenpot "brand" IAcceptDataLoss file
+                Expect.isFalse (json.Contains "$schema") "$schema absent"
+
+        testCase "serializePenpot: color written as hex string (Second ED rules)" <| fun () ->
+            match Format.parse V2025_10.colorBrandJson with
+            | Error es -> failtestf "parse failed: %A" es
+            | Ok file ->
+                let json = Format.serializePenpot "brand" IAcceptDataLoss file
+                Expect.stringContains json "\"#"              "hex string present"
+                Expect.isFalse (json.Contains "\"colorSpace\"") "no colorSpace object"
+
+        testCase "serializePenpot: token content round-trips through parse" <| fun () ->
+            match Format.parse V2025_10.colorBrandJson with
+            | Error es -> failtestf "parse failed (input): %A" es
+            | Ok file ->
+                let penpotJson = Format.serializePenpot "brand" IAcceptDataLoss file
+                // Extract the inner set content and re-parse it as a token file
+                let doc = System.Text.Json.JsonDocument.Parse penpotJson
+                let inner = doc.RootElement.GetProperty("sets").GetProperty("brand").ToString()
+                match Format.parse inner with
+                | Error es -> failtestf "inner content failed to parse: %A" es
+                | Ok reparsed -> Expect.equal reparsed.Version SecondEditorsDraft "detected as Second ED"
     ]
