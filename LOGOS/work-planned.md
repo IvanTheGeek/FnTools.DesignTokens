@@ -8,7 +8,7 @@ See `design-system-app-vision.md § CSS Bootstrap / Migration` for full workflow
 - [x] Extract unique values grouped by inferred type: colors, dimensions (px/rem), font families, font weights, durations, shadows
 - [x] Record selector context and frequency for each unique value (which rules use it, how many times)
 - [x] Output a structured audit report — `AuditResult` with typed `AuditEntry` list sorted by count
-- [ ] Flag values that already match an existing token's `$value` (duplication detector) — deferred; becomes useful once the bootstrap workflow has been run on a real site (e.g. ivanthegeek.com) and a tokens file exists to compare against
+- [x] Flag values that already match an existing token's `$value` (duplication detector) — `auditAgainst (cssText: string) (file: TokenFile) : AuditResult`; `AuditEntry.MatchedToken` field; validated against ivanthegeek.com
 - [x] Integrate into `FnTools.DesignTokens.Css` as `CssAudit` module alongside `CssIngest`
 
 ## Design system app (future)
