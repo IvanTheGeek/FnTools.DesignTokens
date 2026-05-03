@@ -4,9 +4,9 @@
 
 ### CSS ingestion tool
 
-- [ ] Parse CSS custom properties from an HTML/CSS file → DTCG `.tokens.json`
-- [ ] Primary test: LaundryLog design system HTML → `cb.tokens.json` + `ll.tokens.json`
-- [ ] Round-trip: `Format.parse` the output with zero errors
+- [x] Parse CSS custom properties from an HTML/CSS file → DTCG `.tokens.json`
+- [x] Primary test: LaundryLog design system HTML → `cb.tokens.json` + `ll.tokens.json`
+- [x] Round-trip: `Format.parse` the output with zero errors
 
 ### FnHCI non-visual targets
 
