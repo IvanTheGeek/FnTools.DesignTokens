@@ -16,15 +16,15 @@ establishes a baseline.
 **Goal**: Establish what the MCP/REST gives us for components and token bindings. No code
 written — just reading and documenting.
 
-- [ ] Read the Dashboard page shape tree via MCP — list all components, their `appliedTokens`,
+- [x] Read the Dashboard page shape tree via MCP — list all components, their `appliedTokens`,
       and their variant structure
-- [ ] Identify which Penpot components map naturally to Fun.Blazor components
+- [x] Identify which Penpot components map naturally to Fun.Blazor components
       (strong 1:1) vs which are layout/composition only
-- [ ] Document what a Penpot component's variant set tells us about Fun.Blazor parameter types
-- [ ] Read the token library via REST `get-file` — confirm the Tokens Studio multi-set
+- [x] Document what a Penpot component's variant set tells us about Fun.Blazor parameter types
+- [x] Read the token library via REST `get-file` — confirm the Tokens Studio multi-set
       structure matches what we extracted from the archive
-- [ ] Read prototype connections on the Dashboard page — document what navigation intent is
-      expressed
+- [x] Read prototype connections on the Dashboard page — document what navigation intent is
+      expressed (none found — static mockups only)
 
 Findings → `phase1-findings.md`
 
