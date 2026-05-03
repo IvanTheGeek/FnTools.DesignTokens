@@ -334,3 +334,45 @@ module Invalid =
   "b": { "$type": "color", "$value": "{a}" }
 }
 """
+
+
+// ─── CssAudit duplication detector ──────────────────────────────────────────
+
+module CssAuditMatch =
+
+    /// Small token file whose values map to hardcoded values in the CssAuditTests fixture CSS.
+    /// Colors: accent=#1a6e1a, white=#fff(→#ffffff); Dimension: spacing-sm=8px;
+    /// FontFamily: body='Exo 2',sans-serif.
+    let tokensJson = """
+{
+  "$schema": "https://design-tokens.org/schemas/2025.10/format.schema.json",
+  "color": {
+    "accent": {
+      "$type": "color",
+      "$value": { "colorSpace": "srgb", "components": [0.1020, 0.4314, 0.1020], "hex": "#1a6e1a" }
+    },
+    "white": {
+      "$type": "color",
+      "$value": { "colorSpace": "srgb", "components": [1.0, 1.0, 1.0], "hex": "#ffffff" }
+    },
+    "overlay": {
+      "$type": "color",
+      "$value": { "colorSpace": "srgb", "components": [0.0, 0.0, 0.0], "alpha": 0.1 }
+    }
+  },
+  "spacing": {
+    "sm": {
+      "$type": "dimension",
+      "$value": { "value": 8, "unit": "px" }
+    }
+  },
+  "font": {
+    "family": {
+      "body": {
+        "$type": "fontFamily",
+        "$value": ["Exo 2", "sans-serif"]
+      }
+    }
+  }
+}
+"""

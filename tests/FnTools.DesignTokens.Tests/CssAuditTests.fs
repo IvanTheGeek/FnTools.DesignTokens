@@ -2,6 +2,7 @@ module FnTools.DesignTokens.Tests.CssAuditTests
 
 open Expecto
 open FnTools.DesignTokens
+open FnTools.DesignTokens.Tests.Fixtures
 
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
@@ -146,5 +147,59 @@ let allTests =
             // #111111 from .base (outside media), #222222 from .base inside @media
             Expect.isSome (findEntry "#111111" result) "#111111 found"
             Expect.isSome (findEntry "#222222" result) "#222222 found"
+
+
+        // ─── auditAgainst ────────────────────────────────────────────────────
+
+        testCase "auditAgainst: plain audit has all MatchedToken = None" <| fun () ->
+            let result = CssAudit.audit fixture
+            let anyMatched = result.Entries |> List.exists (fun e -> e.MatchedToken.IsSome)
+            Expect.isFalse anyMatched "plain audit has no matches"
+
+        testCase "auditAgainst: hex color matched to token path" <| fun () ->
+            let file = Format.parse CssAuditMatch.tokensJson |> Result.defaultWith (fun e -> failwithf "%A" e)
+            let result = CssAudit.auditAgainst fixture file
+            match findEntry "#1a6e1a" result with
+            | None   -> failtest "missing #1a6e1a"
+            | Some e -> Expect.equal e.MatchedToken (Some "color.accent") "matched color.accent"
+
+        testCase "auditAgainst: short hex #fff expanded and matched to #ffffff token" <| fun () ->
+            let file = Format.parse CssAuditMatch.tokensJson |> Result.defaultWith (fun e -> failwithf "%A" e)
+            let result = CssAudit.auditAgainst fixture file
+            match findEntry "#fff" result with
+            | None   -> failtest "missing #fff"
+            | Some e -> Expect.equal e.MatchedToken (Some "color.white") "matched color.white"
+
+        testCase "auditAgainst: rgba matched to color token computed from components" <| fun () ->
+            let file = Format.parse CssAuditMatch.tokensJson |> Result.defaultWith (fun e -> failwithf "%A" e)
+            let result = CssAudit.auditAgainst fixture file
+            // fixture has rgba(0,0,0,0.1) → should match color.overlay (0,0,0,alpha=0.1)
+            match findEntry "0 2px 8px rgba(0,0,0,0.1)" result with
+            | None   -> failtest "missing shadow entry"
+            | Some e ->
+                // shadow entries are not comparable — MatchedToken should be None
+                Expect.isNone e.MatchedToken "shadow not matched (not comparable)"
+
+        testCase "auditAgainst: dimension matched to spacing token" <| fun () ->
+            let file = Format.parse CssAuditMatch.tokensJson |> Result.defaultWith (fun e -> failwithf "%A" e)
+            let result = CssAudit.auditAgainst fixture file
+            match findEntry "8px" result with
+            | None   -> failtest "missing 8px"
+            | Some e -> Expect.equal e.MatchedToken (Some "spacing.sm") "matched spacing.sm"
+
+        testCase "auditAgainst: font-family matched to fontFamily token" <| fun () ->
+            let file = Format.parse CssAuditMatch.tokensJson |> Result.defaultWith (fun e -> failwithf "%A" e)
+            let result = CssAudit.auditAgainst fixture file
+            match findEntry "'Exo 2', sans-serif" result with
+            | None   -> failtest "missing font-family entry"
+            | Some e -> Expect.equal e.MatchedToken (Some "font.family.body") "matched font.family.body"
+
+        testCase "auditAgainst: unmatched value stays None" <| fun () ->
+            let file = Format.parse CssAuditMatch.tokensJson |> Result.defaultWith (fun e -> failwithf "%A" e)
+            let result = CssAudit.auditAgainst fixture file
+            // #eef5ed and #0f4e0f are not in the token file
+            match findEntry "#eef5ed" result with
+            | None   -> failtest "missing #eef5ed"
+            | Some e -> Expect.isNone e.MatchedToken "#eef5ed has no token match"
 
     ]

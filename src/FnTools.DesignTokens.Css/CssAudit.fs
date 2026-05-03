@@ -29,10 +29,14 @@ type AuditOccurrence = {
 }
 
 type AuditEntry = {
-    RawValue    : string
-    ValueType   : AuditValueType
-    Count       : int
-    Occurrences : AuditOccurrence list
+    RawValue     : string
+    ValueType    : AuditValueType
+    Count        : int
+    Occurrences  : AuditOccurrence list
+    /// Path of a matching token (e.g. <c>"color.accent.subtle"</c>) when this
+    /// hardcoded value is already covered by a token in the file passed to
+    /// <see cref="auditAgainst"/>. Always <c>None</c> from plain <see cref="audit"/>.
+    MatchedToken : string option
 }
 
 type AuditResult = {
@@ -236,11 +240,117 @@ let audit (cssText: string) : AuditResult =
         occMap
         |> Seq.map (fun kv ->
             let (vt, occs) = kv.Value
-            { RawValue    = kv.Key
-              ValueType   = vt
-              Count       = occs.Count
-              Occurrences = List.ofSeq occs })
+            { RawValue     = kv.Key
+              ValueType    = vt
+              Count        = occs.Count
+              Occurrences  = List.ofSeq occs
+              MatchedToken = None })
         |> Seq.sortByDescending (fun e -> e.Count)
         |> List.ofSeq
 
     { Entries = entries; RuleCount = allRules.Length }
+
+
+// ─── Duplication detector ─────────────────────────────────────────────────────
+
+/// Expand 3- or 4-char hex to 6- or 8-char form: #rgb → #rrggbb, #rgba → #rrggbbaa.
+let private expandShortHex (s: string) : string =
+    match s.Length with
+    | 4 -> sprintf "#%c%c%c%c%c%c" s.[1] s.[1] s.[2] s.[2] s.[3] s.[3]
+    | 5 -> sprintf "#%c%c%c%c%c%c%c%c" s.[1] s.[1] s.[2] s.[2] s.[3] s.[3] s.[4] s.[4]
+    | _ -> s
+
+/// Normalise an rgba/rgb string to "rgba(r, g, b, a)" canonical form.
+let private normalizeRgbaStr (s: string) : string =
+    let m = Regex.Match(s,
+        @"^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*([\d.]+))?\s*\)$",
+        RegexOptions.IgnoreCase)
+    if not m.Success then s
+    else
+        let r = int m.Groups.[1].Value
+        let g = int m.Groups.[2].Value
+        let b = int m.Groups.[3].Value
+        if m.Groups.[4].Success then
+            sprintf "rgba(%d, %d, %d, %g)" r g b (float m.Groups.[4].Value)
+        else
+            sprintf "rgb(%d, %d, %d)" r g b
+
+/// Return the canonical CSS string(s) to look up for an audit entry.
+/// Short hex is expanded so #fff matches #ffffff; rgba spacing is normalised.
+let private normalizeCssEntry (e: AuditEntry) : string list =
+    match e.ValueType with
+    | Color ->
+        let s = e.RawValue.Trim().ToLowerInvariant()
+        if s.StartsWith "#" then
+            let expanded = expandShortHex s
+            if expanded = s then [s] else [s; expanded]
+        else
+            let norm = normalizeRgbaStr s
+            if norm = s then [s] else [s; norm]
+    | _ -> [e.RawValue.Trim()]
+
+/// Compute all canonical CSS string forms a token value could appear as in CSS.
+/// Returns [] for types that cannot be meaningfully compared (Shadow, Alias, etc.).
+let private tokenValueToCssStrings (v: TokenValue) : string list =
+    match v with
+    | TokenValue.Color c ->
+        let alpha = Option.defaultValue 1.0 c.Alpha
+        match c.Hex with
+        | Some hex -> [hex.ToLowerInvariant()]
+        | None ->
+            match c.ColorSpace with
+            | SRGB ->
+                match c.Components with
+                | Channel r, Channel g, Channel b ->
+                    let rb = int (Math.Round(r * 255.0))
+                    let gb = int (Math.Round(g * 255.0))
+                    let bb = int (Math.Round(b * 255.0))
+                    if alpha = 1.0 then [sprintf "#%02x%02x%02x" rb gb bb]
+                    else [sprintf "rgba(%d, %d, %d, %g)" rb gb bb alpha]
+                | _ -> []
+            | _ -> []
+    | TokenValue.Dimension d ->
+        let u = match d.Unit with Px -> "px" | Rem -> "rem" | Em -> "em"
+        [sprintf "%g%s" d.Value u]
+    | TokenValue.FontFamily f ->
+        let q (s: string) = if s.Contains ' ' then sprintf "'%s'" s else s
+        match f with
+        | Single s  -> [q s]
+        | Stack lst -> [lst |> List.map q |> String.concat ", "]
+    | _ -> []
+
+/// Walk the token tree and build a dictionary: canonical CSS value → first token path.
+let private buildTokenLookup (file: TokenFile) : Collections.Generic.Dictionary<string, string> =
+    let lookup = Collections.Generic.Dictionary<string, string>(StringComparer.Ordinal)
+    let rec collect (path: string) (nodes: (TokenName * TokenNode) list) =
+        for (name, node) in nodes do
+            let p =
+                if path = "" then TokenName.value name
+                else sprintf "%s.%s" path (TokenName.value name)
+            match node with
+            | TokenLeaf t ->
+                for s in tokenValueToCssStrings t.Value do
+                    if not (lookup.ContainsKey s) then lookup.[s] <- p
+            | Group g -> collect p g.Children
+    collect "" file.Children
+    lookup
+
+/// Audit CSS text and annotate each entry with the path of a matching token in
+/// <paramref name="file"/>, if any. Entries without a match have
+/// <c>MatchedToken = None</c>.
+///
+/// Use after bootstrapping a tokens file to see which hardcoded values are already
+/// covered and which still need to be migrated to token references.
+let auditAgainst (cssText: string) (file: TokenFile) : AuditResult =
+    let baseResult = audit cssText
+    let lookup     = buildTokenLookup file
+    let entries =
+        baseResult.Entries |> List.map (fun e ->
+            let matched =
+                normalizeCssEntry e
+                |> List.tryPick (fun s ->
+                    match lookup.TryGetValue s with
+                    | true, path -> Some path
+                    | _          -> None)
+            { e with MatchedToken = matched })
+    { baseResult with Entries = entries }
