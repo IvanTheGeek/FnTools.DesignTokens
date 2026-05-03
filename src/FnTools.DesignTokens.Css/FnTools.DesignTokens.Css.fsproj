@@ -17,6 +17,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="CssEmitter.fs" />
+    <Compile Include="CssIngest.fs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\FnTools.DesignTokens.Foundation\FnTools.DesignTokens.Foundation.fsproj" />

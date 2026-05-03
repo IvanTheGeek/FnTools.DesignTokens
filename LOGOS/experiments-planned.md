@@ -37,7 +37,7 @@ DTCG token CSS vars. Renders correctly in browser; Penpot import not possible.
 
 ## EXP-02: CSS ingestion round-trip
 
-**Status**: planned
+**Status**: concluded — hypothesis confirmed
 
 **Hypothesis**: The CSS custom-property declarations in the LaundryLog HTML design system handoff file can be reliably converted to valid DTCG 2025.10 token files with zero parse errors.
 
@@ -49,12 +49,20 @@ DTCG token CSS vars. Renders correctly in browser; Penpot import not possible.
 3. Measure: how many tokens ingested, how many type-inference failures, how many validation errors
 
 **Acceptance criteria**:
-- Zero `Format.parse` errors on output files
-- All OKLCH colors captured with correct component values
-- All dimension values captured with correct unit
-- No tokens silently dropped
+- Zero `Format.parse` errors on output files ✓
+- All OKLCH colors captured with correct component values ✓
+- All dimension values captured with correct unit ✓
+- No tokens silently dropped ✓ (skipped values are explicitly warned)
 
-**Notes**: Some CSS properties may not map to DTCG types (e.g., `box-shadow` shorthand → `shadow` composite). Type inference for composite types may need special casing.
+**Results** (2026-05-03):
+- CB: 102 tokens ingested, 0 skipped, 0 `Format.parse` errors
+- LL: 16 tokens ingested, 22 skipped, 0 `Format.parse` errors
+  - Skipped: all cross-prefix `var(--cb-*)` references (expected — need resolver doc to express), 1 `linear-gradient` value (no DTCG type)
+
+**Notes**: Three bugs found and fixed during implementation:
+1. CSS block comments containing `--` declarations were being parsed as tokens (fixed: `stripBlockComments` pre-pass)
+2. Shadow dim-count mismatch crashed on unexpected token shapes (fixed: `None` fallback instead of crash)
+3. `JsonNode` extracted from a `tokenLeaf` retains its parent pointer, causing "node already has a parent" on shadow color assignment (fixed: `DeepClone()` on extraction)
 
 ---
 
