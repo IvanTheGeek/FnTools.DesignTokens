@@ -13,10 +13,10 @@ import/export. See `penpot-api.md` for the three-surface comparison.
   (`fontFamilies`, `fontSizes`, `spacing`, `borderWidth`) and math/HSL expressions, return
   parseable DTCG JSON per set. Use Laura's file as test input. This is a separate function
   (not `Format.parse`) — it lives in a `TokenStudio` module.
-- [ ] **MCP token round-trip** — push `ivanthegeek.tokens.json` into Penpot via the MCP
-  `execute_code` tool (Plugin API `penpot.tokens`), then read it back and verify the values
-  survived the round-trip through Penpot's internal storage. REST API is not used here —
-  token read/write is Plugin API only (added in Penpot 2.14, confirmed running 2.14.4).
+- [ ] **Token round-trip** — push `ivanthegeek.tokens.json` into Penpot and read it back.
+  Two paths to compare: (a) MCP `execute_code` with `penpot.tokens` Plugin API, (b) REST
+  `update-file` with `set-token-set` + `set-token` change ops. Both verified working in
+  2.14.4 — REST uses transit+json, MCP uses JS. See `penpot-api.md` REST token change types.
 - [ ] **MCP coverage query** — after pushing tokens, use the MCP to query which shapes in a
   test frame have `appliedTokens` referencing a given token path; validate coverage.
 - [ ] **Theme-aware CSS emitter** — given a list of active theme names, resolve the multi-set

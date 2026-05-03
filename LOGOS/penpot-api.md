@@ -18,21 +18,27 @@ token import/export format, internal storage structure, and setup notes.
 | **Needs browser open** | No | Yes (plugin must be loaded) | Yes |
 | **Needs Penpot file open** | No | Yes | Yes |
 | **Scope** | Any file in the instance | Currently open file only | Currently open file only |
-| **Token read/write** | Broken — serialization issues with tokens present | Full (via Plugin API, added 2.14) | Full (direct DOM/JS access) |
-| **Shape create/modify** | Underdocumented, fragile | Full | Full |
+| **Token read/write** | Yes — `get-file` returns full token data; `update-file` with `set-token` / `set-token-set` / `set-token-theme` change types (verified 2.14.4) | Yes (via Plugin API) | Yes (direct DOM/JS access) |
+| **Shape create/modify** | Yes via `update-file` change ops | Full | Full |
 | **Export shape as image** | Via exporter service | Yes (`export_shape` tool) | Yes (screenshot) |
 | **File management** | Yes (create/rename/delete files, projects) | No | No |
 | **Multi-file operations** | Yes | No | No |
 | **Webhooks** | Yes (outbound on file changes) | No | No |
-| **Token format** | N/A (broken) | Token Studio / hex strings | Token Studio / hex strings |
+| **Token format** | transit+json (verbose, parseable) | Token Studio / hex strings | Token Studio / hex strings |
 | **Auth** | Personal access token | Browser session (no extra auth) | Browser session |
 | **Headless / CI** | Yes | No | No |
 
+**Note on REST token support**: claims in community posts that REST token support is broken
+are outdated. Verified working in Penpot 2.14.4 — see [REST token change types](#rest-token-change-types).
+The complexity is the transit+json format, not missing functionality.
+
 ### REST API — use for
-File and project CRUD, webhooks, server-side automation that doesn't touch tokens.
+Token and file operations from F# scripts or CI, headless automation, multi-file queries,
+webhooks. Verbose format but complete functionality.
 
 ### MCP server — use for
-Everything token-related; shape creation and inspection; design validation from Claude Code.
+Token and shape work from Claude Code while a file is open. More ergonomic than REST for
+interactive AI sessions — Plugin API JavaScript is easier to compose than transit+json.
 Requires: MCP server running + browser open with Penpot + plugin connected. See setup below.
 
 ### Claude browser extension — use for
@@ -342,6 +348,71 @@ Penpot GitHub issue tracking this gap: https://github.com/penpot/penpot/issues/9
 already reads `components` for CSS output. A Penpot adapter reads `$value.hex` to produce
 the Penpot-compatible format. `Format.parse` validates the full color object (both are
 present and correct per schema).
+
+---
+
+## REST token change types
+
+Verified working in Penpot 2.14.4. All use `update-file` with `Content-Type: application/transit+json`.
+
+### Create / update a token set
+
+```
+["^ ",
+  "~:type", "~:set-token-set",
+  "~:id",   "~u<set-uuid>",
+  "~:attrs", ["^ ",
+    "~:id",          "~u<set-uuid>",
+    "~:name",        "<set-name>",
+    "~:description", ""
+  ]
+]
+```
+
+Pass `"~:attrs", null` to delete the set.
+
+### Create / update a token
+
+```
+["^ ",
+  "~:type",     "~:set-token",
+  "~:set-id",   "~u<set-uuid>",
+  "~:token-id", "~u<token-uuid>",
+  "~:attrs", ["^ ",
+    "~:id",          "~u<token-uuid>",
+    "~:name",        "dot.separated.path",
+    "~:type",        "~:color",
+    "~:value",       "#1a6e1a",
+    "~:description", ""
+  ]
+]
+```
+
+Pass `"~:attrs", null` to delete the token. Token `~:type` values match Penpot's type set
+(not DTCG): `~:color`, `~:number`, `~:dimension`, `~:fontFamily`, `~:fontWeight`,
+`~:fontSizes`, `~:spacing`, `~:borderRadius`, etc.
+
+### Other token change types (from source)
+
+- `set-token-theme` — create/update/delete a theme (`~:id`, `~:attrs`)
+- `set-active-token-themes` — set which themes are active (`~:theme-paths` as a set of strings)
+- `rename-token-set-group` — rename a group prefix
+- `move-token-set` / `move-token-set-group` — reorder sets
+
+### Full update-file request shape
+
+```
+["^ ",
+  "~:id",         "~u<file-uuid>",
+  "~:revn",       <current-revn>,
+  "~:vern",       <current-vern>,
+  "~:session-id", "~u<any-uuid>",
+  "~:changes",    [<change-1>, <change-2>, ...]
+]
+```
+
+`revn` and `vern` come from the last `get-file` or `update-file` response. `session-id` can
+be any UUID — it identifies the editing session for conflict tracking.
 
 ---
 
