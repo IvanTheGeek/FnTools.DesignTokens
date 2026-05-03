@@ -60,9 +60,17 @@ the first entry fully; subsequent entries reuse those key positions.
 Known instance IDs:
 - Team: `637c8a56-1cd8-812f-8007-f5caba4278ee`
 - Project: `637c8a56-1cd8-812f-8007-f5caba450606`
-- System library: `11baa5c9-2a66-8156-8007-f71618d1eabd` (imported Laura file)
-- Design mocks: `11baa5c9-2a66-8156-8007-f71618d1eabe` (imported Laura file)
 - TokenExperiments: `637c8a56-1cd8-812f-8007-f5cafb98e360` (our test file)
+
+Laura files — IDs change on each import. Use `get-project-files` to find the current IDs.
+After 2026-05-03 re-import (two copies of each exist in Drafts):
+
+| File | ID (re-import) | ID (working copy) |
+|---|---|---|
+| System library | `11baa5c9-2a66-8156-8007-f74800eaf8c8` | `11baa5c9-2a66-8156-8007-f71618d1eabd` |
+| Design mocks | `11baa5c9-2a66-8156-8007-f74800eaf8c9` | `11baa5c9-2a66-8156-8007-f71618d1eabe` |
+
+Working copy = the one with our experiment changes (renamed frames, etc.).
 
 ### `get-file` — features string is mandatory
 
@@ -254,6 +262,63 @@ fetching from a local server.
 
 ---
 
+## Tokens Studio theme model
+
+A **theme** is a named preset that specifies which token sets are active — nothing more.
+Activating a theme activates its sets; all shapes in the file resolve token paths against
+the union of all currently active sets.
+
+Laura's system library has 12 themes in 5 groups. Pick one from each group to form
+a complete active state:
+
+| Group | Options |
+|---|---|
+| Always-on | Global (always active — base sets for typography, spacing, radius, sizing) |
+| Color mode | Light, Dark |
+| Brand | NeonBooks, Eco Tools, Core |
+| Breakpoint | **Mobile** (`Breakpoints/Mobile`), **Tablet** (`Breakpoints/Tablet`), **Desktop** (`Breakpoints/Desktop`) |
+| Text zoom | 100%, 150%, 200% |
+
+Example active combination: Always-on + Light + Core + Mobile + 100%
+
+**Themes are file-wide in Penpot 2.14.4.** There is no per-frame theme activation.
+All shapes on all pages resolve tokens against the same active theme set. There is no
+mechanism to have frame A show Mobile breakpoint values while frame B shows Desktop —
+you switch the active Breakpoint theme to view each breakpoint version.
+
+### Breakpoint theme switching workflow
+
+To view/export each breakpoint version of a design:
+1. Open the TOKENS panel (left sidebar → Tokens tab)
+2. Under the Breakpoint group, activate "Mobile" → file shows mobile token values
+3. Inspect / export the "Landing page — Mobile" frame
+4. Switch to "Tablet" → inspect the Tablet frame
+5. Switch to "Desktop" → inspect the Desktop frame
+
+**The 3 breakpoint frame copies are organisational labels.** They don't hold different
+token states — they mark which frame is the reference for each breakpoint version.
+All three always reflect the currently active breakpoint theme.
+
+### Setting active themes via REST
+
+```
+["^ ",
+  "~:type", "~:set-active-token-themes",
+  "~:theme-paths", ["~#set", ["Mobile/Breakpoint", "Light/Color mode", "Global/Always-on"]]
+]
+```
+
+The `~:theme-paths` value is a set of strings in `<theme-name>/<group-name>` format,
+matching the `name` / `group` fields from the `$themes` array in `tokens.json`.
+
+### Per-frame token resolution (not yet in Penpot)
+
+Feature request is open. As of 2.14.4, not available. The CSS emitter (Phase 4)
+handles per-breakpoint resolution correctly by outputting separate `:root` + `@media`
+blocks — the canvas frames are documentation, not the mechanism.
+
+---
+
 ## Common pitfalls
 
 | Pitfall | Correct approach |
@@ -265,6 +330,9 @@ fetching from a local server.
 | Trying to read shape JSON from `get-file` transit response | Extract `.penpot` archive and read individual JSON files |
 | Expecting page list in archive file manifest | List the `pages/` directory instead |
 | Using `fdata/objects-map` and expecting inline shapes | Shapes are doubly-encoded strings; use archive JSON instead |
+| Re-importing a file expecting old IDs to remain valid | IDs change on each import; use `get-project-files` to find current IDs |
+| Expecting per-frame theme activation | Themes are file-wide in 2.14.4; switch theme to view each breakpoint version |
+| Manually setting frame width for breakpoint copies | Width of a breakpoint frame is driven by the `breakpoint` token when the correct theme is active; don't hardcode it |
 
 ---
 
