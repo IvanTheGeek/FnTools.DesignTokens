@@ -1,6 +1,6 @@
 /// CSS custom-property ingestion — converts --prefix-* declarations to DTCG 2025.10 JSON.
 ///
-/// Supports: color (oklch, rgba), dimension (px, rem), duration (ms, s),
+/// Supports: color (oklch, rgba, #rrggbb, #rrggbbaa), dimension (px, rem), duration (ms, s),
 /// cubicBezier, fontFamily, fontWeight, number, shadow, and intra-file aliases.
 /// Skips values it cannot classify with an entry in IngestWarning list.
 module FnTools.DesignTokens.CssIngest
@@ -76,31 +76,40 @@ let private aliasLeaf (path: string) : JsonNode =
 
 /// Strip --{prefix}- and split on the first hyphen → (group, leaf).
 /// "accent" (no hyphen) → ("accent", "default").
+/// Empty prefix accepts all custom properties — propName is used as-is.
 let private toGroupLeaf (prefix: string) (propName: string) : (string * string) option =
-    let pfxDash = prefix + "-"
-    if not (propName.StartsWith pfxDash) then None
-    else
-        let remaining = propName.Substring(pfxDash.Length)
-        let idx = remaining.IndexOf('-')
-        if idx < 0 then Some (remaining, "default")
+    let remaining =
+        if prefix = "" then Some propName
         else
-            let grp  = remaining.Substring(0, idx)
-            let leaf = remaining.Substring(idx + 1)
-            Some (grp, leaf)
+            let pfxDash = prefix + "-"
+            if propName.StartsWith pfxDash then Some (propName.Substring pfxDash.Length)
+            else None
+    match remaining with
+    | None -> None
+    | Some r ->
+        let idx = r.IndexOf('-')
+        if idx < 0 then Some (r, "default")
+        else Some (r.Substring(0, idx), r.Substring(idx + 1))
 
 /// var(--{prefix}-a[-b]) → "a.b" or "a.default".  Returns None for cross-prefix refs.
+/// Empty prefix accepts all var() references as same-file aliases.
 let private varToPath (prefix: string) (varExpr: string) : string option =
     let m = Regex.Match(varExpr.Trim(), @"^var\(--([a-z0-9-]+)(?:,.*?)?\)$")
     if not m.Success then None
     else
-        let full    = m.Groups.[1].Value
-        let pfxDash = prefix + "-"
-        if not (full.StartsWith pfxDash) then None
-        else
-            let remaining = full.Substring(pfxDash.Length)
-            let idx = remaining.IndexOf('-')
-            if idx < 0 then Some (remaining + ".default")
-            else Some (remaining.Substring(0, idx) + "." + remaining.Substring(idx + 1))
+        let full = m.Groups.[1].Value
+        let remaining =
+            if prefix = "" then Some full
+            else
+                let pfxDash = prefix + "-"
+                if full.StartsWith pfxDash then Some (full.Substring pfxDash.Length)
+                else None
+        match remaining with
+        | None -> None
+        | Some r ->
+            let idx = r.IndexOf('-')
+            if idx < 0 then Some (r + ".default")
+            else Some (r.Substring(0, idx) + "." + r.Substring(idx + 1))
 
 
 // ─── Value parsers ────────────────────────────────────────────────────────────
@@ -141,6 +150,23 @@ let private tryParseRgba (s: string) : JsonNode option =
         v.["colorSpace"] <- JsonValue.Create("srgb")
         v.["components"] <- comps
         if a <> 1.0 then v.["alpha"] <- JsonValue.Create(a)
+        Some (tokenLeaf "color" (v :> JsonNode))
+
+let private tryParseHex (s: string) : JsonNode option =
+    let s = s.Trim()
+    if (s.Length <> 7 && s.Length <> 9) || s.[0] <> '#' then None
+    elif not (s |> Seq.skip 1 |> Seq.forall (fun c -> Char.IsAsciiHexDigit c)) then None
+    else
+        let parseHex (i: int) = Convert.ToInt32(s.Substring(i, 2), 16) |> float |> fun x -> x / 255.0
+        let comps = JsonArray()
+        comps.Add(JsonValue.Create(parseHex 1))
+        comps.Add(JsonValue.Create(parseHex 3))
+        comps.Add(JsonValue.Create(parseHex 5))
+        let v = JsonObject()
+        v.["colorSpace"] <- JsonValue.Create("srgb")
+        v.["components"] <- comps
+        if s.Length = 9 then v.["alpha"] <- JsonValue.Create(parseHex 7)
+        v.["hex"] <- JsonValue.Create(s)
         Some (tokenLeaf "color" (v :> JsonNode))
 
 let private tryParseDimension (s: string) : JsonNode option =
@@ -278,10 +304,13 @@ let private tryParseShadow (prefix: string) (s: string) : JsonNode option =
 let private inferToken (prefix: string) (grp: string) (leaf: string) (value: string)
     : JsonNode option * IngestWarning list =
     let nameParts = [grp; leaf]
-    let fullName  = sprintf "--%s-%s-%s" prefix grp leaf
+    let fullName  =
+        if prefix = "" then sprintf "--%s-%s" grp leaf
+        else sprintf "--%s-%s-%s" prefix grp leaf
     let result =
         tryParseOklch value
         |> Option.orElseWith (fun () -> tryParseRgba value)
+        |> Option.orElseWith (fun () -> tryParseHex value)
         |> Option.orElseWith (fun () -> tryParseDimension value)
         |> Option.orElseWith (fun () -> tryParseDuration value)
         |> Option.orElseWith (fun () -> tryParseCubicBezier value)
@@ -375,12 +404,15 @@ let private extractDeclarations (block: string) : (string * string) list =
 /// Ingest CSS custom properties with the given prefix from :root { } declarations.
 ///
 /// prefix  — the CSS variable prefix without dashes, e.g. "cb" for --cb-*
+///           Pass "" to accept all custom properties regardless of prefix.
 ///
 /// Name mapping: --{prefix}-group[-leaf] → DTCG path group.leaf
 /// (no leaf → uses "default"; e.g. --cb-accent → accent.default)
+/// With empty prefix: --accent → accent.default, --accent-hover → accent.hover
 ///
-/// Cross-prefix var() references (e.g. --cb-* referenced from --ll-*) are skipped
-/// with a warning — they require a resolver document to express correctly.
+/// Cross-prefix var() references are skipped with a warning — they require a
+/// resolver document to express correctly. With empty prefix, all var() refs
+/// are treated as same-file aliases.
 let ingest (cssText: string) (prefix: string) : IngestResult =
     let root = JsonObject()
     root.["$schema"] <- JsonValue.Create("https://design-tokens.org/schemas/2025.10/format.schema.json")
