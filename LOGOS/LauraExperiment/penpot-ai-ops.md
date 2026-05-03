@@ -299,17 +299,58 @@ To view/export each breakpoint version of a design:
 token states — they mark which frame is the reference for each breakpoint version.
 All three always reflect the currently active breakpoint theme.
 
+### active-themes storage location
+
+Stored in the **consuming file** (Design mocks), not the System library.
+Inside the file's `tokens-lib` → `~:active-themes`. The System library file has no
+`active-themes` field — it only holds the token sets and theme definitions.
+
+Current active state in the fresh Design mocks re-import (verified 2026-05-03):
+```
+["Brand/Core", "Global/Always-on", "Color mode/Dark", "Breakpoint/Tablet",
+ "/__PENPOT__HIDDEN__TOKEN__THEME__", "Text zoom/100%"]
+```
+The hidden theme (`/__PENPOT__HIDDEN__TOKEN__THEME__`) appears automatically and its
+group is `""` (empty string). It tracks a snapshot of previously active sets.
+
+Theme path format: `<group>/<name>` — e.g. `"Breakpoint/Mobile"`, `"Color mode/Light"`.
+Group is the string from the theme's `~:group` field; name is `~:name`.
+
 ### Setting active themes via REST
 
 ```
 ["^ ",
   "~:type", "~:set-active-token-themes",
-  "~:theme-paths", ["~#set", ["Mobile/Breakpoint", "Light/Color mode", "Global/Always-on"]]
+  "~:theme-paths", ["~#set", ["Brand/Core", "Global/Always-on", "Color mode/Dark",
+                              "Breakpoint/Mobile", "/__PENPOT__HIDDEN__TOKEN__THEME__",
+                              "Text zoom/100%"]]
 ]
 ```
 
-The `~:theme-paths` value is a set of strings in `<theme-name>/<group-name>` format,
-matching the `name` / `group` fields from the `$themes` array in `tokens.json`.
+Apply to the **consuming file** (Design mocks), not the System library.
+
+**Critical finding**: REST `set-active-token-themes` persists to the database correctly
+(verified: revn increments, `~:active-themes` updates on next `get-file`) but does **not**
+push a live update to the Penpot editor. The canvas does not re-render on page refresh
+either — the Penpot editor must reload the file from scratch to pick up the change.
+
+Use MCP `execute_code` (Plugin API) for real-time theme switching — the plugin runs
+inside the browser context and updates the canvas immediately.
+
+### What the `breakpoint` token actually controls
+
+On the Landing page (confirmed from archive):
+- **"Landing page" frame**: `appliedTokens.width = "breakpoint"`, stored width = 1020px
+- **"Swatches" frame**: `appliedTokens.width = "breakpoint"`, stored width = 1020px
+
+The `breakpoint` token path resolves to the value in the active `Breakpoints/*` set:
+- `Breakpoints/Mobile.breakpoint = 360`
+- `Breakpoints/Tablet.breakpoint = 768`
+- `Breakpoints/Desktop.breakpoint = 1200`
+
+So switching the active breakpoint theme changes the resolved width of these full-width
+container frames. The stored width (1020) in the archive is the baked value from when
+the file was exported — it reflects whatever theme was active at export time.
 
 ### Per-frame token resolution (not yet in Penpot)
 
