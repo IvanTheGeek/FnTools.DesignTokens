@@ -26,23 +26,14 @@ Approach: parse CSS `--var-name: value;` declarations, infer type from value sha
 - [ ] Output writer: DTCG JSON with correct `$type` + `$value` structure
 - [ ] Round-trip validation: parse output back through `Format.parse` with zero errors
 
-## CSS emitter
+## ~~CSS emitter~~ ✓ done 2026-05-02
 
-Resolved DTCG token tree → CSS custom properties.
-Clean break from legacy `--cb-*` / `--ll-*` names — new names are derived from token paths.
+`FnTools.DesignTokens.Css` — resolved token tree → CSS custom properties in `:root {}` block.
+All 13 token types supported. Path segments → hyphen-delimited CSS var names.
 
-- [ ] Path → CSS var name mapper: `color.action.default` → `--color-action-default`
-- [ ] All 13 token types → CSS representation
-  - color: OKLCH function syntax; hex fallback optional
-  - dimension: `{value}{unit}`
-  - duration: `{value}ms`
-  - fontFamily: comma-separated quoted list
-  - gradient: linear-gradient with stop list
-  - shadow: multi-shadow shorthand
-  - transition: shorthand
-  - typography/border/strokeStyle: expand to multiple vars per component or single shorthand (TBD)
-- [ ] Dark mode: emit `[data-theme="dark"]` override block for themed tokens
-- [ ] CSS file writer + `:root { }` wrapper
+Remaining gap: dark-mode override block (`[data-theme="dark"]`) is manually maintained in
+`tokens.css` — the emitter only produces light-mode `:root {}`. Needs a second resolver pass
+for multi-mode output when the emitter is extended.
 
 ## ~~Typed F# bindings emitter~~ ✓ done 2026-05-02
 

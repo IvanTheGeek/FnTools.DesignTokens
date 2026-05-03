@@ -56,5 +56,13 @@
 ### Phase 5 — Namespace rename + layer split (2026-05-02)
 - [x] Renamed namespace `NEXUS.DesignTokens` → `FnTools.DesignTokens` across all `.fs`, `.fsproj`, docs
 - [x] Split single assembly into Foundation / Format / Validation / Resolver / meta-package
-- [x] Added `FnTools.DesignTokens.slnx` covering all 5 source projects + 1 test project
-- [x] Build: 0 warnings, 0 errors across all 6 projects; tests: 50/50 pass
+- [x] Added `FnTools.DesignTokens.Css` emitter project (DTCG → CSS custom properties)
+- [x] Added `FnTools.DesignTokens.Bindings` emitter project (DTCG → typed F# var() constants)
+- [x] Added `FnTools.DesignTokens.slnx` covering all 8 projects (6 src + 1 meta + 1 tests)
+- [x] Build: 0 warnings, 0 errors across solution; tests: 124/124 pass
+- [x] LaundryLog: migrated all CSS from `--cb-*`/`--ll-*` to DTCG-emitted names
+- [x] LaundryLog: generated `tokens/Tokens.fs` F# bindings; wired into `LaundryLog.UI.fsproj`
+- [x] Token rename batch (2026-05-02): fixed fused camelCase segments, casing inconsistencies
+  - `feedback.{success,danger,info}` → promoted to groups with `.default` + `.subtle`
+  - `shadow.focusRing` → `shadow.focus-ring`
+  - `font.lineHeight` → `font.line-height`; `font.letterSpacing` → `font.letter-spacing`
