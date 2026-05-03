@@ -60,7 +60,7 @@ let colorToCss (c: ColorValue) : string =
 
 /// Converts a <see cref="DimensionValue"/> to a CSS length string (e.g. <c>"4px"</c>, <c>"0.6875rem"</c>).
 let dimensionToCss (d: DimensionValue) : string =
-    let u = match d.Unit with Px -> "px" | Rem -> "rem"
+    let u = match d.Unit with Px -> "px" | Rem -> "rem" | Em -> "em"
     sprintf "%g%s" d.Value u
 
 /// Converts a <see cref="DurationValue"/> to a CSS time string (e.g. <c>"200ms"</c>).

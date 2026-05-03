@@ -1,0 +1,276 @@
+{
+  "$schema": "https://design-tokens.org/schemas/2025.10/format.schema.json",
+
+  "color": {
+
+    "bg": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [0.9098039215686274, 0.9411764705882353, 0.9098039215686274],
+        "hex": "#e8f0e8"
+      }
+    },
+
+    "surface": {
+      "base": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [0.9411764705882353, 0.9686274509803922, 0.9411764705882353],
+          "alpha": 0.94
+        }
+      },
+      "elevated": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [0.9607843137254902, 0.9803921568627451, 0.9568627450980393],
+          "alpha": 0.92
+        }
+      },
+      "panel": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [0.9372549019607843, 0.9647058823529412, 0.9333333333333333],
+          "alpha": 0.78
+        }
+      }
+    },
+
+    "border": {
+      "default": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [0.6588235294117647, 0.7843137254901961, 0.6588235294117647],
+          "hex": "#a8c8a8"
+        }
+      },
+      "strong": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [0.41568627450980394, 0.6196078431372549, 0.41568627450980394],
+          "hex": "#6a9e6a"
+        }
+      }
+    },
+
+    "accent": {
+      "default": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [0.10196078431372549, 0.43137254901960786, 0.10196078431372549],
+          "hex": "#1a6e1a"
+        }
+      },
+      "hover": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [0.058823529411764705, 0.3058823529411765, 0.058823529411764705],
+          "hex": "#0f4e0f"
+        }
+      },
+      "subtle": {
+        "$type": "color",
+        "$description": "accent at 8% opacity — used for secondary hover background",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [0.10196078431372549, 0.43137254901960786, 0.10196078431372549],
+          "alpha": 0.08
+        }
+      }
+    },
+
+    "secondary": {
+      "$type": "color",
+      "$description": "amber accent — eyebrow text, status labels, signal bullets, cursor blink",
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [0.8313725490196079, 0.5294117647058824, 0.0392156862745098],
+        "hex": "#d4870a"
+      }
+    },
+
+    "text": {
+      "default": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [0.0392156862745098, 0.10196078431372549, 0.0392156862745098],
+          "hex": "#0a1a0a"
+        }
+      },
+      "muted": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [0.2901960784313726, 0.43137254901960786, 0.2901960784313726],
+          "hex": "#4a6e4a"
+        }
+      }
+    },
+
+    "white": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [1.0, 1.0, 1.0],
+        "hex": "#ffffff"
+      }
+    }
+
+  },
+
+  "font": {
+
+    "family": {
+      "body": {
+        "$type": "fontFamily",
+        "$value": ["Exo 2", "sans-serif"]
+      },
+      "mono": {
+        "$type": "fontFamily",
+        "$value": ["Share Tech Mono", "monospace"]
+      }
+    },
+
+    "size": {
+      "label": {
+        "$type": "dimension",
+        "$description": "eyebrow, status stack, signal list — small label text",
+        "$value": { "value": 0.78, "unit": "rem" }
+      },
+      "body": {
+        "$type": "dimension",
+        "$description": "tagline, hero copy — reading text",
+        "$value": { "value": 0.88, "unit": "rem" }
+      },
+      "ui": {
+        "$type": "dimension",
+        "$description": "CTA links — interactive text",
+        "$value": { "value": 0.95, "unit": "rem" }
+      }
+    },
+
+    "tracking": {
+      "wide": {
+        "$type": "dimension",
+        "$description": "eyebrow and tagline letter-spacing",
+        "$value": { "value": 0.22, "unit": "em" }
+      }
+    }
+
+  },
+
+  "spacing": {
+    "sm": {
+      "$type": "dimension",
+      "$description": "signal list gap, signal item gap",
+      "$value": { "value": 0.55, "unit": "rem" }
+    },
+    "md": {
+      "$type": "dimension",
+      "$description": "panel-header gap/padding, hero-grid gap",
+      "$value": { "value": 1.0, "unit": "rem" }
+    },
+    "lg": {
+      "$type": "dimension",
+      "$description": "hero gap, footer margin-top, responsive panel padding",
+      "$value": { "value": 1.2, "unit": "rem" }
+    },
+    "xl": {
+      "$type": "dimension",
+      "$description": "hero margin-top, divider margin-top",
+      "$value": { "value": 1.4, "unit": "rem" }
+    }
+  },
+
+  "shadow": {
+
+    "panel": {
+      "$type": "shadow",
+      "$description": "main page panel — large diffuse lift",
+      "$value": {
+        "color": {
+          "colorSpace": "srgb",
+          "components": [0.07058823529411765, 0.16470588235294117, 0.07058823529411765],
+          "alpha": 0.08
+        },
+        "offsetX": { "value": 0, "unit": "px" },
+        "offsetY": { "value": 18, "unit": "px" },
+        "blur":    { "value": 40, "unit": "px" },
+        "spread":  { "value": 0,  "unit": "px" }
+      }
+    },
+
+    "card": {
+      "$type": "shadow",
+      "$description": "hero-copy, section-card — subtle card lift",
+      "$value": {
+        "color": {
+          "colorSpace": "srgb",
+          "components": [0.058823529411764705, 0.16470588235294117, 0.058823529411764705],
+          "alpha": 0.04
+        },
+        "offsetX": { "value": 0, "unit": "px" },
+        "offsetY": { "value": 8, "unit": "px" },
+        "blur":    { "value": 22, "unit": "px" },
+        "spread":  { "value": 0,  "unit": "px" }
+      }
+    },
+
+    "cta": {
+      "$type": "shadow",
+      "$description": "primary CTA button resting elevation",
+      "$value": {
+        "color": {
+          "colorSpace": "srgb",
+          "components": [0.10196078431372549, 0.43137254901960786, 0.10196078431372549],
+          "alpha": 0.26
+        },
+        "offsetX": { "value": 0, "unit": "px" },
+        "offsetY": { "value": 4, "unit": "px" },
+        "blur":    { "value": 20, "unit": "px" },
+        "spread":  { "value": 0,  "unit": "px" }
+      }
+    },
+
+    "cta-hover": {
+      "$type": "shadow",
+      "$description": "primary CTA button hover elevation",
+      "$value": {
+        "color": {
+          "colorSpace": "srgb",
+          "components": [0.10196078431372549, 0.43137254901960786, 0.10196078431372549],
+          "alpha": 0.34
+        },
+        "offsetX": { "value": 0, "unit": "px" },
+        "offsetY": { "value": 8, "unit": "px" },
+        "blur":    { "value": 28, "unit": "px" },
+        "spread":  { "value": 0,  "unit": "px" }
+      }
+    },
+
+    "subtle": {
+      "$type": "shadow",
+      "$description": "secondary CTA button — barely-there accent glow",
+      "$value": {
+        "color": {
+          "colorSpace": "srgb",
+          "components": [0.10196078431372549, 0.43137254901960786, 0.10196078431372549],
+          "alpha": 0.08
+        },
+        "offsetX": { "value": 0, "unit": "px" },
+        "offsetY": { "value": 4, "unit": "px" },
+        "blur":    { "value": 16, "unit": "px" },
+        "spread":  { "value": 0,  "unit": "px" }
+      }
+    }
+
+  }
+}

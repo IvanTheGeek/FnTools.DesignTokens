@@ -1,3 +1,11 @@
+## ivanthegeek.com bootstrap (completed 2026-05-03)
+
+- [x] `CssIngest.ingest` against live site CSS (prefix-less, `""`)
+- [x] `CssAudit.audit` — 44 distinct hardcoded values inventoried
+- [x] Named and grouped: 13 color tokens, 6 font tokens, 4 spacing tokens, 5 shadow tokens = 28 total
+- [x] `samples/ivanthegeek.tokens.json` authored — parses and round-trips clean
+- [x] Gap found and fixed: `DimensionUnit` added `Em` case; parser + both emitters updated
+
 ## Phase 6 — CSS emitter + typed F# bindings emitter (completed 2026-05-02)
 
 ### CSS emitter — `FnTools.DesignTokens.Css`

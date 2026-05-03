@@ -192,6 +192,42 @@ DTCG 2025.10 itself does not mandate naming conventions beyond path syntax. Comm
 
 **Our naming convention**: separate files per tier, no tier prefix in token names. CSS var names derived from token paths. Numeric scales with N prefix in generated F#. Full detail in `design-system-context.md`.
 
+## Single-case DU enforces explicit acknowledgment at call sites
+
+`type ExportLossAcknowledged = | IAcceptDataLoss` — a single-case DU used as a required parameter on lossy export paths. The caller must write the literal case name at the call site:
+
+```fsharp
+Format.serializeAs SecondEditorsDraft IAcceptDataLoss file
+```
+
+This is better than a `bool` flag or a `unit` argument because:
+- It cannot be stored in a `let accepted = true` variable and then passed transparently
+- Code review sees the data loss acknowledgment explicitly
+- Refactors that swap `true` for `false` don't accidentally suppress the acknowledgment
+- The type name documents *what* is being acknowledged, not just *that* a decision was made
+
+Pattern: use a single-case DU whenever a boolean parameter would hide intent or allow silent suppression.
+
+## Function-parameter polymorphism for shared serializer pipelines
+
+When two output formats share identical structure but differ in one sub-operation (e.g., how a color is written), thread the differing operation as a function parameter through the call chain. Example: `cw: Utf8JsonWriter -> ColorValue -> unit` was threaded through `writeBorderValue → writeShadowObject → writeTokenValue → writeNode`. No duplication; no new type required. Pattern: prefer function parameters over interfaces/DUs when the variation is a single leaf operation in an otherwise identical pipeline.
+
+## `JsonNode.DeepClone()` — nodes have exactly one parent
+
+`System.Text.Json.Nodes.JsonNode` is a tree with ownership: every node has at most one parent. Assigning a `JsonNode` that is already a child of another object throws `"The node already has a parent"`. Fix: always call `.DeepClone()` before moving a node to a new parent. This applies to any value extracted from a `JsonObject` and re-inserted elsewhere.
+
+## `serializeAs` is lossy by design — and that's correct
+
+2025.10 → Second Editors' Draft export is explicitly lossy: OKLCH colors without a stored hex are serialized as 2025.10 object form (not Second ED hex strings), because gamut-mapping OKLCH → sRGB without rounding errors requires color-math that belongs outside the codec. The `IAcceptDataLoss` requirement documents this gap. Correct behavior is: fail visibly on the caller for the feature you haven't built yet, not silently produce wrong data.
+
+## CssAudit: property-name dispatch before value-pattern dispatch
+
+When classifying CSS property values, dispatch on property name first (e.g., `box-shadow`, `font-family`) before pattern-matching on value shape. A shadow shorthand like `0 4px 20px rgba(26,110,26,0.26)` doesn't start with a color pattern — it would be misclassified as Unknown if you pattern-match the value without first checking the property. Property name → semantic category → value type.
+
+## Bootstrap workflow validates the library against real-world CSS
+
+Running `CssIngest + CssAudit` against `ivanthegeek.com` revealed two gaps immediately: `DimensionUnit` was missing `em` (letter-spacing tokens fail to parse), and the audit needed property-name dispatch for `box-shadow`. These gaps would not have appeared in synthetic test fixtures. Maintaining a real-world sample file (`samples/ivanthegeek.tokens.json`) that must parse and round-trip is a cheap regression net for the codec.
+
 ## LaundryLog existing components use hard-coded CSS class names
 
 The Fun.Blazor components in `/home/ivan/nexus/LaundryLog/src/LaundryLog.UI/Components/` reference CSS class names from the old `--ll-*`/`--cb-*` design system (e.g., `ll-machine-chip`, `ll-machine-group`). These class names will need to be updated when the CSS emitter + typed bindings are available. The components are a concrete test case for the migration path — they represent real UI using the old system.
