@@ -1153,6 +1153,9 @@ let serialize (file: TokenFile) : string =
 ///       SRGB with known components → computed hex; stored Hex field used if present.
 ///       Other colorspaces (OKLCH etc.) fall back to the V2025_10 object form —
 ///       the receiver may not understand it, but no information is silently discarded.
+///       To force a hex output for an OKLCH token, set its <c>Hex</c> field before
+///       calling this function; gamut-mapping math is the caller's responsibility
+///       and is intentionally out of scope for this codec (see ADR-013).
 ///     - $schema omitted (Second ED had no schema URL convention).
 ///     - All other token types serialized as-is (best effort for composite types).
 let serializeAs (target: SpecVersion) (_ : ExportLossAcknowledged) (file: TokenFile) : string =
@@ -1168,7 +1171,10 @@ let serializeAs (target: SpecVersion) (_ : ExportLossAcknowledged) (file: TokenF
 /// wrapped in a sets object: <c>{ "sets": { "&lt;setName&gt;": { ...tokens } } }</c>.
 /// The setName appears as the library name in Penpot's token panel.
 ///
-/// Loss rules are identical to <see cref="serializeAs"/> with SecondEditorsDraft.
+/// Loss rules are identical to <see cref="serializeAs"/> with SecondEditorsDraft:
+/// SRGB colors → hex string; OKLCH and other wide-gamut spaces → V2025_10 object form
+/// (Penpot will not understand these — set the <c>Hex</c> field on the token before
+/// calling if you need a specific hex; gamut-mapping is the caller's responsibility).
 let serializePenpot (setName: string) (_ : ExportLossAcknowledged) (file: TokenFile) : string =
     let inner = serializeWith writeColorValueSecondED None file
     use stream = new MemoryStream()
