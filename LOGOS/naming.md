@@ -71,42 +71,24 @@ Key principles:
 
 ## Known gaps
 
-### 1. Fused compound segments — fix required
+### 1. Fused compound segments — FIXED (2026-05-02)
 
-`successSubtle`, `dangerSubtle`, `infoSubtle`, `focusRing` are each two levels compressed into one
-camelCase segment. This violates the one-level-per-segment rule and produces camelCase in the
-emitted CSS var name — inconsistent with every other token in the system.
+`successSubtle`, `dangerSubtle`, `infoSubtle`, `focusRing`, `lineHeight`, `letterSpacing` were
+renamed as a single breaking commit. The feedback group was restructured to use `.default` +
+`.subtle` sub-tokens so the hierarchy is consistent.
 
-| Current | Should be | Emits |
+| Was | Now | CSS var |
 |---|---|---|
+| `color.feedback.success` | `color.feedback.success.default` | `--color-feedback-success-default` |
 | `color.feedback.successSubtle` | `color.feedback.success.subtle` | `--color-feedback-success-subtle` |
 | `color.feedback.dangerSubtle` | `color.feedback.danger.subtle` | `--color-feedback-danger-subtle` |
 | `color.feedback.infoSubtle` | `color.feedback.info.subtle` | `--color-feedback-info-subtle` |
 | `shadow.focusRing` | `shadow.focus-ring` | `--shadow-focus-ring` |
+| `font.lineHeight` | `font.line-height` | `--font-line-height-*` |
+| `font.letterSpacing` | `font.letter-spacing` | `--font-letter-spacing-*` |
 
-This is a **breaking change** to CSS var names and `Tokens.*` bindings. Do as a single rename commit.
-
-### 2. camelCase property names in font group — fix required
-
-`font.lineHeight.*` and `font.letterSpacing.*` emit with mixed casing mid-name:
-
-```
---font-lineHeight-tight        ← capital H in CSS var name
---font-letterSpacing-wide      ← capital S in CSS var name
-```
-
-vs.
-
-```
---font-size-xs                 ← all lowercase
---font-weight-semibold         ← all lowercase
-```
-
-Should be `font.line-height.*` → `--font-line-height-tight` and `font.letter-spacing.*` →
-`--font-letter-spacing-wide`. This aligns with how the CSS properties are spelled, removes the
-casing inconsistency, and makes tooling autocomplete work as expected.
-
-Also a breaking change — same rename commit as item 1.
+F# binding names for `FocusRing`, `LineHeight.*`, `LetterSpacing.*` are unchanged — the
+hyphenated segments join to the same PascalCase identifiers. Only the CSS var values changed.
 
 ### 3. `color.accent.on` — implicit property
 
@@ -205,18 +187,13 @@ manageable at current scale but breaks down as the token set grows.
 
 ---
 
-## Planned rename batch
+## Remaining work
 
-Items 1 and 2 above are concrete renames with zero logic change. They should be done together
-as a single breaking commit before any external consumers are established.
+The "fix required" items were completed 2026-05-02. Remaining lower-priority items:
 
-Tokens affected:
-- `color.feedback.successSubtle` → `color.feedback.success.subtle`
-- `color.feedback.dangerSubtle` → `color.feedback.danger.subtle`
-- `color.feedback.infoSubtle` → `color.feedback.info.subtle`
-- `shadow.focusRing` → `shadow.focus-ring`
-- `font.lineHeight` → `font.line-height` (group rename; all sub-tokens move)
-- `font.letterSpacing` → `font.letter-spacing` (group rename; all sub-tokens move)
-
-After rename: re-emit `ll.css` and `Tokens.fs`, update any F# inline styles using
-`Tokens.Font.LineHeight.*` or `Tokens.Font.LetterSpacing.*`, update `app.css` references.
+- `color.accent.on` — property is implicit; decide between `color.text.on-accent` (more explicit)
+  or `color.accent.foreground` (stays in accent group). No urgency until the accent palette grows.
+- `color.feedback.*` missing property level — `--color-feedback-success-default` is used as a
+  fill/background but the token name doesn't say so. Revisit when the feedback group expands.
+- Dark mode in token files — currently manual in `tokens.css`. Emitter needs a second pass for
+  multi-mode output before this can be automated.
