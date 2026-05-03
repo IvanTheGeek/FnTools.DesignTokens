@@ -22,12 +22,12 @@
 
 ### Spec-version export / downgrade
 
-- [ ] Add a single-case DU `type ExportLossAcknowledged = | IAcceptDataLoss` — required parameter on any lossy export path
-- [ ] Signature: `serializeAs : SpecVersion -> ExportLossAcknowledged -> TokenDocument -> JsonNode`
-      vs. lossless: `serialize : TokenDocument -> JsonNode` — the type difference is the contract
-- [ ] Caller must literally write `IAcceptDataLoss` at the call site; cannot be a variable, config flag, or condition
-- [ ] Second Editor's Draft emitter: write color `$value` as hex string (`$value.hex` fallback, or gamut-map if missing)
-- [ ] Penpot adapter = thin shim on Second Editor's Draft emitter: strip `$schema`, add set-name wrapper
+- [x] Add a single-case DU `type ExportLossAcknowledged = | IAcceptDataLoss` — required parameter on any lossy export path
+- [x] Signature: `serializeAs : SpecVersion -> ExportLossAcknowledged -> TokenFile -> string`
+      vs. lossless: `serialize : TokenFile -> string` — the type difference is the contract
+- [x] Caller must literally write `IAcceptDataLoss` at the call site; cannot be a variable, config flag, or condition
+- [x] Second Editor's Draft emitter: write color `$value` as hex string (stored Hex field first, then computed from SRGB; OKLCH falls back to V2025_10 object form)
+- [ ] Penpot adapter = thin shim on Second Editor's Draft emitter: strip `$schema` ✓ (already done), add set-name wrapper — deferred
 - [ ] Style Dictionary: consumer of DTCG, not a format target — no adapter needed
 - [ ] Figma Variables API: completely different schema (REST CRUD, not DTCG) — separate integration if ever needed
 
