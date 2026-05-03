@@ -107,8 +107,8 @@ Rules:
 - File name (without extension) becomes the **set name** (`lltokens-hex.json` → `lltokens-hex`)
 - Top-level JSON keys become token group prefixes
 - `$type` must be on each **leaf** token — group-level `$type` is not supported
-- Color values: **hex strings only** (`#RRGGBB` or `#RRGGBBAA`)
-- DTCG 2025.10 OKLCH format `{ "colorSpace": "oklch", "components": [L, C, H] }` is NOT
+- Color values: **hex strings only** (`#RRGGBB`) — Penpot reads `$value` as a string
+- DTCG 2025.10 object format `{ "colorSpace": "oklch", "components": [L, C, H] }` is NOT
   supported — produces 1 error token (the whole group parsed as invalid leaf)
 - No `$schema` key required (ignored if present)
 - Penpot feature supports: color, dimension, border-radius, shadow, spacing, opacity, sizing,
@@ -204,18 +204,46 @@ Token paths use dot notation matching the nested JSON structure: `machine.washer
 
 ## Format gap: DTCG 2025.10 vs Penpot
 
+**Critical finding from the spec**: DTCG 2025.10 does NOT allow hex strings as `$value` at
+all. The color schema requires `{ "colorSpace": "...", "components": [...] }` — both fields
+are marked `required`. A hex string is not a valid DTCG 2025.10 color `$value`. There is
+therefore no format that is simultaneously DTCG 2025.10 spec-compliant AND natively accepted
+by Penpot's `$value` field.
+
+However, the spec provides the `hex` field inside the color object as an **optional sRGB
+fallback**, explicitly designed for tooling compatibility:
+
+```json
+{
+  "$type": "color",
+  "$value": {
+    "colorSpace": "oklch",
+    "components": [0.560, 0.140, 200],
+    "hex": "#0d9488"
+  }
+}
+```
+
+This is the correct shape for our tokens:
+- DTCG 2025.10 compliant — OKLCH is the authoritative color
+- `hex` is a precomputed sRGB gamut-mapped approximation
+- The CSS emitter reads `components` → emits `oklch(0.56 0.14 200)`
+- The Penpot adapter reads `$value.hex` → emits `"$value": "#0d9488"` per leaf
+
 | Feature | DTCG 2025.10 | Penpot `design-tokens/v1` |
 |---|---|---|
-| Color: hex | `{ "$value": "#hex" }` | Supported |
-| Color: OKLCH | `{ "$value": { "colorSpace": "oklch", "components": [L,C,H] } }` | NOT supported |
-| Color: CSS string | `{ "$value": "oklch(0.56 0.14 200)" }` | Unknown (untested) |
-| `$type` on group | Valid DTCG | NOT supported (parses group as leaf, error) |
+| Color `$value`: object | `{ "colorSpace": "oklch", "components": [L,C,H] }` | NOT supported |
+| Color `$value`: hex string | NOT valid (hex is an optional sub-field only) | Required |
+| Color `$value.hex` fallback | Optional sRGB fallback within object (spec-designed for this) | Usable via adapter |
+| `$type` on group | Valid DTCG | NOT supported (group parsed as error leaf) |
 | `$schema` key | Standard | Ignored |
 | Set wrapping in export | Not a DTCG concept | Added by Penpot |
-| Aliases | `{ "$value": "{other.token}" }` | Supported (Token Studio alias syntax) |
+| Aliases | `{ "$value": "{other.token}" }` | Supported (Token Studio syntax) |
 
-**Implication**: `ll.tokens.json` (DTCG 2025.10 with OKLCH, group-level `$type`) cannot be
-imported into Penpot as-is. A Penpot adapter step is needed in the emitter pipeline.
+**Next step for `ll.tokens.json`**: Add `"hex"` fallback to each color token. The emitter
+already reads `components` for CSS output. A Penpot adapter reads `$value.hex` to produce
+the Penpot-compatible format. `Format.parse` validates the full color object (both are
+present and correct per schema).
 
 ---
 
