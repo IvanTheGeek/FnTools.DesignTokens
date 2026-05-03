@@ -339,18 +339,27 @@ inside the browser context and updates the canvas immediately.
 
 ### What the `breakpoint` token actually controls
 
-On the Landing page (confirmed from archive):
-- **"Landing page" frame**: `appliedTokens.width = "breakpoint"`, stored width = 1020px
-- **"Swatches" frame**: `appliedTokens.width = "breakpoint"`, stored width = 1020px
+On the Landing page (confirmed from archive and live MCP 2026-05-03):
+- **"Landing page" frame**: `appliedTokens.width = "breakpoint"`, width = 1020px at Tablet
+- **"Swatches" frame**: `appliedTokens.width = "breakpoint"`, width = 1020px at Tablet
 
-The `breakpoint` token path resolves to the value in the active `Breakpoints/*` set:
+Actual token values (verified live — earlier 768 figure was wrong):
 - `Breakpoints/Mobile.breakpoint = 360`
-- `Breakpoints/Tablet.breakpoint = 768`
+- `Breakpoints/Tablet.breakpoint = 1020`
 - `Breakpoints/Desktop.breakpoint = 1200`
 
-So switching the active breakpoint theme changes the resolved width of these full-width
-container frames. The stored width (1020) in the archive is the baked value from when
-the file was exported — it reflects whatever theme was active at export time.
+Switching the active breakpoint theme changes the resolved width of these frames
+within one Plugin API call cycle — the update is immediate.
+
+### `token.value` vs `token.resolvedValue`
+
+`value` — the raw string from that specific token's own set definition.
+`resolvedValue` — the currently winning value after applying all active sets in
+precedence order. **All tokens with the same name return the same `resolvedValue`**
+regardless of which set they belong to. Example: when `Breakpoints/Tablet` is active,
+all three breakpoint token entries (Mobile, Tablet, Desktop) show `resolvedValue: 1020`.
+Use `value` to know what a set *would* contribute; use `resolvedValue` to know what
+is actually in effect now.
 
 ### Per-frame token resolution (not yet in Penpot)
 
