@@ -12,6 +12,7 @@
 
 - [ ] ConsoleTokens / TuiTokens / ThermalTokens / BrailleTokens domain design
 - [ ] TOML authoring format + parser
+- [ ] ADR-001 (FnHCI): Fun.Css vs FSS — record CSS binding choice for Fun.Blazor consumers once the FnHCI project has a LOGOS directory
 
 ### `#RRGGBBAA` alpha hex — silent failure in upgrade path
 
