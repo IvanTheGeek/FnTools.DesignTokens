@@ -59,12 +59,35 @@ type TokensStudioImportWarning =
     /// A token's alias could not be resolved in the merged file — usually because the set
     /// that contained the referenced token was excluded via SetSkipped.
     | TokenUnresolved of path: string * ref: string
+    /// A theme name passed to importTokensStudioThemed was not found in the $themes array.
+    | ThemeNotFound   of name: string
 
 /// Result of a Tokens Studio multi-set import. Partial-success: tokens that resolved are
 /// returned alongside warnings for sets that could not parse and tokens that could not resolve.
 type TokensStudioImportResult = {
     Tokens   : (string list * ResolvedToken) list
     Warnings : TokensStudioImportWarning list
+}
+
+/// One theme's fully-resolved tokens (base sets + the theme's own sets merged).
+type ThemeSet = {
+    ThemeName : string
+    Tokens    : (string list * ResolvedToken) list
+}
+
+/// Result of a theme-aware Tokens Studio import.
+///
+/// <c>BaseTokens</c> contains tokens from sets that are not specific to any of the requested
+/// themes (i.e., not listed in any theme's <c>selectedTokenSets</c>). These are the global
+/// tokens that belong in <c>:root</c>.
+///
+/// Each <c>ThemeSet</c> contains the full resolution for that theme (base sets plus the
+/// theme's own enabled/source sets). A CSS emitter computes per-theme overrides as the
+/// diff between each theme's full resolution and the base.
+type ThemeAwareImportResult = {
+    BaseTokens : (string list * ResolvedToken) list
+    Themes     : ThemeSet list
+    Warnings   : TokensStudioImportWarning list
 }
 
 
@@ -551,3 +574,5 @@ module TokensStudio =
             sprintf "SKIP  set '%s' — parse failed (contains math expressions or unsupported syntax)" name
         | TokenUnresolved (path, ref) ->
             sprintf "UNRESOLVED  %s → %s" path ref
+        | ThemeNotFound name ->
+            sprintf "THEME  '%s' — not found in $themes" name

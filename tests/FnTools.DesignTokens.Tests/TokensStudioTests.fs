@@ -55,6 +55,40 @@ let private mathExpressionJson = """
 
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
+// ─── Theme-aware fixtures ─────────────────────────────────────────────────────
+
+/// Minimal Tokens Studio file with two themes, each enabling different color sets.
+/// Base (global) sets: "primitives"
+/// Theme sets: "light-colors" (Light theme), "dark-colors" (Dark theme)
+let private twoThemeJson = """
+{
+  "primitives": {
+    "white": { "$type": "color", "$value": "#ffffff" },
+    "black": { "$type": "color", "$value": "#000000" }
+  },
+  "light-colors": {
+    "bg": { "$type": "color", "$value": "{white}" }
+  },
+  "dark-colors": {
+    "bg": { "$type": "color", "$value": "{black}" }
+  },
+  "$themes": [
+    {
+      "id": "1", "name": "Light", "group": "Mode",
+      "selectedTokenSets": { "light-colors": "enabled" }
+    },
+    {
+      "id": "2", "name": "Dark", "group": "Mode",
+      "selectedTokenSets": { "dark-colors": "enabled" }
+    }
+  ],
+  "$metadata": {
+    "tokenSetOrder": ["primitives", "light-colors", "dark-colors"]
+  }
+}
+"""
+
+
 let allTests =
     testList "TokensStudio" [
 
@@ -171,5 +205,113 @@ let allTests =
                 match snd bpTokens.[0] with
                 | { Value = ResolvedDimension { Value = 1200.0 } } -> ()
                 | rt -> failtestf "expected breakpoint = 1200px, got %A" rt
+        ]
+
+        testList "importTokensStudioThemed" [
+
+            testCase "empty theme list: base has all tokens, Themes is empty" <| fun () ->
+                match Api.importTokensStudioThemed ShimConfig.defaults [] twoThemeJson with
+                | Error es -> failtestf "import failed: %A" es
+                | Ok result ->
+                    Expect.isEmpty result.Themes "no themes"
+                    // All 4 tokens (white, black, bg×2) — but bg is defined twice
+                    // (last-wins), so 3 unique paths: white, black, bg
+                    Expect.isGreaterThan (List.length result.BaseTokens) 0 "base has tokens"
+
+            testCase "unknown theme name: ThemeNotFound warning, still succeeds" <| fun () ->
+                match Api.importTokensStudioThemed ShimConfig.defaults ["NoSuchTheme"] twoThemeJson with
+                | Error es -> failtestf "import failed: %A" es
+                | Ok result ->
+                    let notFound = result.Warnings |> List.choose (function ThemeNotFound n -> Some n | _ -> None)
+                    Expect.equal notFound ["NoSuchTheme"] "ThemeNotFound recorded"
+                    Expect.isEmpty result.Themes "no themes resolved"
+
+            testCase "single theme: base has global tokens, theme has full resolution" <| fun () ->
+                match Api.importTokensStudioThemed ShimConfig.defaults ["Light"] twoThemeJson with
+                | Error es -> failtestf "import failed: %A" es
+                | Ok result ->
+                    // primitives (white, black) are global — not in any theme
+                    let basePaths = result.BaseTokens |> List.map (fst >> String.concat ".")
+                    Expect.contains basePaths "white" "white in base"
+                    Expect.contains basePaths "black" "black in base"
+                    // Light theme has base + light-colors
+                    Expect.equal (List.length result.Themes) 1 "one theme"
+                    let lightTokens = result.Themes.[0].Tokens
+                    let lightPaths = lightTokens |> List.map (fst >> String.concat ".")
+                    Expect.contains lightPaths "white" "white in light (base included)"
+                    Expect.contains lightPaths "bg"    "bg in light (light-colors set)"
+
+            testCase "two themes: base is global, each theme has its own semantic tokens" <| fun () ->
+                match Api.importTokensStudioThemed ShimConfig.defaults ["Light"; "Dark"] twoThemeJson with
+                | Error es -> failtestf "import failed: %A" es
+                | Ok result ->
+                    Expect.equal (List.length result.Themes) 2 "two themes"
+                    Expect.equal result.Themes.[0].ThemeName "Light" "first theme is Light"
+                    Expect.equal result.Themes.[1].ThemeName "Dark"  "second theme is Dark"
+                    // base: primitives only (light-colors and dark-colors are in allThemeSets)
+                    let basePaths = result.BaseTokens |> List.map (fst >> String.concat ".")
+                    Expect.contains basePaths "white" "white in base"
+                    Expect.contains basePaths "black" "black in base"
+                    Expect.isFalse (List.contains "bg" basePaths) "bg NOT in base (theme-specific)"
+                    // Light theme: base + light-colors; bg resolves to white (#ffffff)
+                    let lightBg =
+                        result.Themes.[0].Tokens
+                        |> List.tryFind (fun (p, _) -> p = ["bg"])
+                    match lightBg with
+                    | Some (_, { Value = ResolvedColor c }) when c.Hex = Some "#ffffff" -> ()
+                    | Some (_, rt) -> failtestf "light bg wrong value: %A" rt
+                    | None -> failtest "light bg token not found"
+                    // Dark theme: base + dark-colors; bg resolves to black (#000000)
+                    let darkBg =
+                        result.Themes.[1].Tokens
+                        |> List.tryFind (fun (p, _) -> p = ["bg"])
+                    match darkBg with
+                    | Some (_, { Value = ResolvedColor c }) when c.Hex = Some "#000000" -> ()
+                    | Some (_, rt) -> failtestf "dark bg wrong value: %A" rt
+                    | None -> failtest "dark bg token not found"
+
+            testList "Laura Light+Dark integration" [
+
+                let lauraPath = "samples/laura-system-library.tokens.json"
+                let lauraJson = System.IO.File.ReadAllText lauraPath
+
+                let result =
+                    match Api.importTokensStudioThemed ShimConfig.defaults ["Light"; "Dark"] lauraJson with
+                    | Error es -> failtestf "import failed: %A" es
+                    | Ok r -> r
+
+                testCase "two themes resolved" <| fun () ->
+                    Expect.equal (List.length result.Themes) 2 "Light and Dark"
+                    Expect.equal result.Themes.[0].ThemeName "Light" "first theme"
+                    Expect.equal result.Themes.[1].ThemeName "Dark"  "second theme"
+
+                testCase "base has global tokens (palette colors present)" <| fun () ->
+                    let baseColors =
+                        result.BaseTokens
+                        |> List.filter (fun (_, rt) -> rt.Type = ColorType)
+                    Expect.isGreaterThan (List.length baseColors) 0 "palette colors in base"
+
+                testCase "each theme has more tokens than base (adds semantic colors)" <| fun () ->
+                    let baseCount = List.length result.BaseTokens
+                    for t in result.Themes do
+                        Expect.isGreaterThan (List.length t.Tokens) baseCount
+                            (sprintf "%s has more tokens than base" t.ThemeName)
+
+                testCase "Light and Dark differ on at least one semantic color token" <| fun () ->
+                    let lightMap =
+                        result.Themes.[0].Tokens
+                        |> List.map (fun (p, rt) -> String.concat "." p, rt.Value)
+                        |> Map.ofList
+                    let darkMap =
+                        result.Themes.[1].Tokens
+                        |> List.map (fun (p, rt) -> String.concat "." p, rt.Value)
+                        |> Map.ofList
+                    let diffs =
+                        lightMap |> Map.filter (fun k lightVal ->
+                            match Map.tryFind k darkMap with
+                            | Some darkVal -> lightVal <> darkVal
+                            | None -> false)
+                    Expect.isGreaterThan (Map.count diffs) 0 "Light and Dark have different token values"
+            ]
         ]
     ]

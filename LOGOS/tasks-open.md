@@ -26,9 +26,10 @@ import/export. See `penpot-api.md` for the three-surface comparison.
   2.14.4 — REST uses transit+json, MCP uses JS. See `penpot-api.md` REST token change types.
 - [ ] **MCP coverage query** — after pushing tokens, use the MCP to query which shapes in a
   test frame have `appliedTokens` referencing a given token path; validate coverage.
-- [ ] **Theme-aware CSS emitter** — given a list of active theme names, resolve the multi-set
-  merge in our resolver and emit `:root` + override blocks. Maps Tokens Studio `$themes`
-  activation to our resolver's `resolutionOrder`.
+- [x] **Theme-aware CSS emitter** — `Api.importTokensStudioThemed (config) (themeNames) (json)`
+  resolves base (global) sets and per-theme sets separately; `CssEmitter.emitThemed`
+  emits `:root` + `[data-theme="X"]` override blocks for each named theme's diffs.
+  12 new tests (8 unit + 4 Laura Light/Dark integration). 203/203 pass. 2026-05-04.
 - [ ] **Penpot export comparison (Phase 4b)** — compare three paths for getting component
   code out of Penpot: (a) MCP `export_shape` → SVG, (b) Inspect tab HTML/CSS, (c) raw API
   shapes → our CSS emitter. Document tradeoffs. See `LauraExperiment/plan.md` Phase 4b.

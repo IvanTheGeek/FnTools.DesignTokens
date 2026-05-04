@@ -235,6 +235,42 @@ module CssEmitter =
         emitBlock ":root" tokens
 
     /// <summary>
+    /// Emits a multi-theme CSS file: a <c>:root</c> block with base tokens, followed by one
+    /// override block per theme containing only the tokens that differ from the base.
+    /// </summary>
+    /// <param name="selectorForTheme">Maps a theme name to a CSS selector,
+    ///   e.g. <c>fun n -&gt; sprintf "[data-theme=\"%s\"]" n</c>.</param>
+    /// <param name="baseTokens">Tokens from globally-active sets (not specific to any theme).
+    ///   These go in <c>:root</c>.</param>
+    /// <param name="themes">Sequence of <c>(themeName, fullyResolvedTokens)</c> pairs.
+    ///   Each pair produces one override selector block with only the tokens that differ
+    ///   from <c>baseTokens</c>. Themes with no differences produce no output block.</param>
+    let emitThemed
+        (selectorForTheme : string -> string)
+        (baseTokens       : (string list * ResolvedToken) seq)
+        (themes           : (string * (string list * ResolvedToken) seq) seq)
+        : string =
+        let baseDecls =
+            baseTokens
+            |> Seq.map (fun (path, token) -> String.concat "." path, tokenToCssDecls path token)
+            |> dict
+        let sb = StringBuilder()
+        sb.Append (emitBlock ":root" baseTokens) |> ignore
+        for (themeName, themeTokens) in themes do
+            let diffs =
+                themeTokens
+                |> Seq.filter (fun (path, token) ->
+                    let key = String.concat "." path
+                    match baseDecls.TryGetValue key with
+                    | false, _        -> true
+                    | true,  baseDecl -> tokenToCssDecls path token <> baseDecl)
+                |> Array.ofSeq
+            if diffs.Length > 0 then
+                sb.AppendLine "" |> ignore
+                sb.Append (emitBlock (selectorForTheme themeName) diffs) |> ignore
+        sb.ToString()
+
+    /// <summary>
     /// Emits a two-block CSS file: a <c>:root</c> block with all base tokens, followed by
     /// an override block containing only the tokens whose values differ between the two
     /// resolved sets.

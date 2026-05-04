@@ -279,6 +279,74 @@ let multiModeTests = testList "emitMultiMode" [
 ]
 
 
+// ─── emitThemed ───────────────────────────────────────────────────────────────
+
+let private themedTests =
+    testList "emitThemed" [
+
+        testCase "no themes: only :root block emitted" <| fun () ->
+            let base_ = [ ["color"; "bg"], resolvedColor SRGB 0.9 0.9 0.9 None ]
+            let css = CssEmitter.emitThemed (fun n -> sprintf "[data-theme=\"%s\"]" n) (List.toSeq base_) Seq.empty
+            Expect.stringContains css ":root {" ":root present"
+            Expect.isFalse (css.Contains "[data-theme") "no override blocks"
+
+        testCase "two themes: correct selectors emitted" <| fun () ->
+            let base_  = [ ["prim"; "white"], resolvedColor SRGB 1.0 1.0 1.0 None
+                           ["prim"; "black"], resolvedColor SRGB 0.0 0.0 0.0 None ]
+            let light  = [ ["prim"; "white"], resolvedColor SRGB 1.0 1.0 1.0 None
+                           ["prim"; "black"], resolvedColor SRGB 0.0 0.0 0.0 None
+                           ["bg"],            resolvedColor SRGB 1.0 1.0 1.0 None ]
+            let dark   = [ ["prim"; "white"], resolvedColor SRGB 1.0 1.0 1.0 None
+                           ["prim"; "black"], resolvedColor SRGB 0.0 0.0 0.0 None
+                           ["bg"],            resolvedColor SRGB 0.0 0.0 0.0 None ]
+            let css =
+                CssEmitter.emitThemed
+                    (fun n -> sprintf "[data-theme=\"%s\"]" n)
+                    (List.toSeq base_)
+                    (seq { yield "Light", List.toSeq light; yield "Dark", List.toSeq dark })
+            Expect.stringContains css ":root {"             ":root present"
+            Expect.stringContains css "[data-theme=\"Light\"]" "Light selector"
+            Expect.stringContains css "[data-theme=\"Dark\"]"  "Dark selector"
+
+        testCase "only differing token appears in each override block" <| fun () ->
+            let white = resolvedColor SRGB 1.0 1.0 1.0 None
+            let black = resolvedColor SRGB 0.0 0.0 0.0 None
+            let base_ = [ ["spacing"; "sm"], resolvedDim 4.0 Px
+                          ["prim"; "white"], white ]
+            let light  = [ ["spacing"; "sm"], resolvedDim 4.0 Px
+                           ["prim"; "white"], white
+                           ["bg"],            white ]
+            let dark   = [ ["spacing"; "sm"], resolvedDim 4.0 Px
+                           ["prim"; "white"], white
+                           ["bg"],            black ]
+            let css =
+                CssEmitter.emitThemed
+                    (fun n -> sprintf "[data-theme=\"%s\"]" n)
+                    (List.toSeq base_)
+                    (seq { yield "Light", List.toSeq light; yield "Dark", List.toSeq dark })
+            let lightStart = css.IndexOf "[data-theme=\"Light\"]"
+            let darkStart  = css.IndexOf "[data-theme=\"Dark\"]"
+            let lightBlock = css.[lightStart .. darkStart - 1]
+            let darkBlock  = css.[darkStart..]
+            // spacing is shared, must not appear in either override block
+            Expect.isFalse (lightBlock.Contains "--spacing-sm") "spacing not in Light override"
+            Expect.isFalse (darkBlock.Contains "--spacing-sm")  "spacing not in Dark override"
+            // bg differs, must appear in both
+            Expect.stringContains lightBlock "--bg" "bg in Light override"
+            Expect.stringContains darkBlock  "--bg" "bg in Dark override"
+
+        testCase "theme with no diffs produces no override block" <| fun () ->
+            let base_   = [ ["color"; "bg"], resolvedColor SRGB 0.9 0.9 0.9 None ]
+            let same    = [ ["color"; "bg"], resolvedColor SRGB 0.9 0.9 0.9 None ]
+            let css =
+                CssEmitter.emitThemed
+                    (fun n -> sprintf "[data-theme=\"%s\"]" n)
+                    (List.toSeq base_)
+                    (seq { yield "Same", List.toSeq same })
+            Expect.isFalse (css.Contains "[data-theme") "no override block when no diffs"
+    ]
+
+
 // ─── All ──────────────────────────────────────────────────────────────────────
 
 let allTests =
@@ -289,4 +357,5 @@ let allTests =
         varNameTests
         emitTests
         multiModeTests
+        themedTests
     ]

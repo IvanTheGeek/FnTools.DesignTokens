@@ -527,6 +527,119 @@ let importTokensStudio
                 Ok { Tokens = tokens; Warnings = List.ofSeq warnings }
 
 
+/// Shim a Tokens Studio multi-set JSON export, activate a named subset of themes, and emit
+/// base tokens (for <c>:root</c>) plus per-theme resolved tokens (for override blocks).
+///
+/// <remarks>
+/// Base tokens come from sets that are not listed in any of the requested themes'
+/// <c>selectedTokenSets</c>. Each theme's resolved tokens include both the base sets and the
+/// theme's own enabled/source sets, so a CSS emitter can compute per-theme overrides as
+/// the diff between each theme's full resolution and the base.
+///
+/// If <c>themeNames</c> is empty the entire <c>tokenSetOrder</c> is treated as the base and
+/// <c>Themes</c> is empty (equivalent to a flat <c>importTokensStudio</c> call).
+///
+/// Unknown theme names produce a <see cref="ThemeNotFound"/> warning and are skipped.
+/// </remarks>
+let importTokensStudioThemed
+    (config     : ShimConfig)
+    (themeNames : string list)
+    (jsonText   : string)
+    : Result<ThemeAwareImportResult, ImportError list> =
+    match TokensStudio.shimSingleFile config jsonText with
+    | Error msg -> Error [ParseFailed [InvalidJson msg]]
+    | Ok shimResult ->
+        let warnings = ResizeArray<TokensStudioImportWarning>()
+
+        let parsedSets =
+            shimResult.Sets
+            |> Map.toList
+            |> List.choose (fun (name, setJson) ->
+                match Format.parse setJson with
+                | Ok file -> Some (name, file)
+                | Error _ ->
+                    warnings.Add (SetSkipped name)
+                    None)
+            |> Map.ofList
+
+        let allSetOrder = shimResult.Metadata.TokenSetOrder
+
+        let activeThemes =
+            themeNames
+            |> List.choose (fun name ->
+                match shimResult.Themes |> List.tryFind (fun t -> t.Name = name) with
+                | Some t -> Some t
+                | None ->
+                    warnings.Add (ThemeNotFound name)
+                    None)
+
+        // Sets explicitly listed in any active theme's selectedTokenSets
+        let allThemeSets =
+            activeThemes
+            |> List.collect (fun t -> t.SelectedTokenSets |> Map.toList |> List.map fst)
+            |> Set.ofList
+
+        // Base: sets in tokenSetOrder that are NOT listed in any active theme
+        let baseSets = allSetOrder |> List.filter (fun s -> not (allThemeSets.Contains s))
+
+        // Per-theme set list: base sets PLUS the theme's own enabled/source sets, in order
+        let setsForTheme (theme: TokensStudioTheme) : string list =
+            let themeOwn =
+                theme.SelectedTokenSets
+                |> Map.toList
+                |> List.choose (fun (name, status) ->
+                    match status with
+                    | "enabled" | "source" -> Some name
+                    | _ -> None)
+                |> Set.ofList
+            allSetOrder |> List.filter (fun s ->
+                not (allThemeSets.Contains s) || themeOwn.Contains s)
+
+        // Resolve an ordered list of set names, accumulating unresolved-alias warnings
+        let resolveNames (setNames: string list) : Result<(string list * ResolvedToken) list, ImportError list> =
+            let ordered =
+                setNames |> List.choose (fun n ->
+                    parsedSets |> Map.tryFind n |> Option.map (fun f -> n, f))
+            if ordered.IsEmpty then Ok []
+            else
+                let setDefs =
+                    ordered
+                    |> List.map (fun (n, f) ->
+                        n, { Sources = [Inline f]; Description = None; Extensions = [] })
+                let resOrder = ordered |> List.map (fun (n, _) -> SetRef n)
+                let doc = {
+                    Name            = None
+                    Version         = V2025_10
+                    Description     = None
+                    Sets            = setDefs
+                    Modifiers       = []
+                    ResolutionOrder = resOrder
+                }
+                match Resolver.resolve (fun _ -> Error "inline-only") Map.empty doc with
+                | Error es -> Error [ResolveFailed es]
+                | Ok merged ->
+                    let tokens, unresolved = partialFlattenResolvedFile merged
+                    for (p, r) in unresolved do
+                        warnings.Add (TokenUnresolved (p, r))
+                    Ok tokens
+
+        match resolveNames baseSets with
+        | Error es -> Error es
+        | Ok baseTokens ->
+            let themeResults =
+                activeThemes
+                |> List.map (fun theme ->
+                    match resolveNames (setsForTheme theme) with
+                    | Error es -> Error es
+                    | Ok tokens -> Ok { ThemeName = theme.Name; Tokens = tokens })
+            let errors = themeResults |> List.collect (function Error es -> es | Ok _ -> [])
+            if errors.IsEmpty then
+                let themes = themeResults |> List.choose (function Ok t -> Some t | Error _ -> None)
+                Ok { BaseTokens = baseTokens; Themes = themes; Warnings = List.ofSeq warnings }
+            else
+                Error errors
+
+
 /// Round-trip a resolved-token sequence back to JSON.
 /// Builds a flat TokenFile (no groups beyond what dot-paths require) and serializes.
 let export (tokens: (string list * ResolvedToken) seq) : string =
@@ -678,10 +791,11 @@ module Primitives =
     let resolveAll   = Resolver.resolveAll
     let flattenResolved = flattenResolvedFile
 
-    let shimTokensStudio       = TokensStudio.shim
-    let shimWithConfig         = TokensStudio.shimSingleFile
-    let formatShimWarning      = TokensStudio.formatWarning
-    let formatImportWarning    = TokensStudio.formatImportWarning
+    let shimTokensStudio            = TokensStudio.shim
+    let shimWithConfig              = TokensStudio.shimSingleFile
+    let formatShimWarning           = TokensStudio.formatWarning
+    let formatImportWarning         = TokensStudio.formatImportWarning
+    let importTokensStudioThemed    = importTokensStudioThemed
 
     let load (jsonText: string) : Result<TokenFile, LoadError list> =
         match Format.parse jsonText with
