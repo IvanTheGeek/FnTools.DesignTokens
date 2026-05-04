@@ -188,6 +188,14 @@ module TokensStudio =
     let private tryGetArray (key: string) (obj: JsonObject) : JsonArray option =
         tryGetNode key obj |> Option.bind (function :? JsonArray as arr -> Some arr | _ -> None)
 
+    /// Wrap a primitive value in a JsonValue node. JsonValue.Create<T> is annotated
+    /// as nullable in F# 9 even for non-nullable T; we surface the nullable result
+    /// as JsonNode | null so call sites stay null-aware. Consumers (JsonObject.Add,
+    /// JsonArray.Add, leaf.Add) all accept nullable JsonNode, so a literal null
+    /// here yields a JSON `null` entry in the surrounding container.
+    let inline private jv<'T> (x: 'T) : JsonNode | null =
+        JsonValue.Create<'T>(x) :> JsonNode | null
+
     let private isAlias (s: string) =
         let t = s.Trim()
         // A pure alias is exactly "{path}" — one brace pair, nothing else.
@@ -809,7 +817,7 @@ module TokensStudio =
     /// Add <c>key = value</c> under our vendor namespace in <c>leaf</c>'s $extensions.
     /// Creates the $extensions object and/or vendor namespace as needed.
     /// No-op if the key already exists (preserves any earlier-written value).
-    let private addVendorExtension (leaf: JsonObject) (key: string) (value: JsonNode) : unit =
+    let private addVendorExtension (leaf: JsonObject) (key: string) (value: JsonNode | null) : unit =
         let ext =
             match tryGetNode "$extensions" leaf with
             | Some (:? JsonObject as e) -> e
@@ -922,15 +930,15 @@ module TokensStudio =
                             //     from the emitted DTCG type (e.g. "spacing" → "dimension").
                             let tsTypeRenamed = (typeRenames |> Map.tryFind tsType |> Option.defaultValue tsType) <> tsType
                             if tsTypeRenamed then
-                                addVendorExtension leaf extTsTypeKey (JsonValue.Create(tsType))
+                                addVendorExtension leaf extTsTypeKey (jv tsType)
                             // (2) HSL color expression — record the original hsl(...) string
                             //     before it was collapsed to a hex value.
                             if dtcgType = "color" && not (isAlias origRawValue) && hslRx.IsMatch(origRawValue) then
-                                addVendorExtension leaf extOriginalHslKey (JsonValue.Create(origRawValue))
+                                addVendorExtension leaf extOriginalHslKey (jv origRawValue)
                             // (3) FontWeight combined value — record "400 Italic" style strings
                             //     before the numeric part was extracted.
                             if tsType = "fontWeights" && not (isAlias origRawValue) && origRawValue.Contains(" ") then
-                                addVendorExtension leaf extOriginalFontWeightKey (JsonValue.Create(origRawValue))
+                                addVendorExtension leaf extOriginalFontWeightKey (jv origRawValue)
                             result.Add(kvp.Key, leaf)
                     elif isTypelessAlias then
                         // Typeless alias leaf — emit $value only; $type is inferred later
@@ -1225,14 +1233,6 @@ module TokensStudio =
         sprintf "color(%s %s %s %s%s)"
             (colorSpaceStr c.ColorSpace) (fStr c1) (fStr c2) (fStr c3) alphaStr
 
-    /// Wrap a primitive value in a JsonValue node. JsonValue.Create<T> is annotated
-    /// as nullable in F# 9 even for non-nullable T; we surface the nullable result
-    /// as JsonNode | null so call sites stay null-aware. Consumers (JsonObject.Add,
-    /// JsonArray.Add, leaf.Add) all accept nullable JsonNode, so a literal null
-    /// here yields a JSON `null` entry in the surrounding container.
-    let inline private jv<'T> (x: 'T) : JsonNode | null =
-        JsonValue.Create<'T>(x) :> JsonNode | null
-
     let private compToNode (cc: ColorComponent) : JsonNode | null =
         match cc with
         | Channel f -> jv f
@@ -1526,7 +1526,7 @@ module TokensStudio =
                     let stripped = JsonObject()
                     for kv in vendor do
                         if not (shimExportStripKeys.Contains kv.Key) then
-                            stripped.Add(kv.Key, kv.Value.DeepClone())
+                            stripped.Add(kv.Key, cloneOrNull kv.Value)
                     if stripped.Count > 0 then
                         outer.Add(k, stripped)
                 | _ -> outer.Add(k, v.DeepClone())
@@ -1580,12 +1580,12 @@ module TokensStudio =
                 | Some (vn, origColor, descAnn) ->
                     // ADR-026: prefer the original HSL expression or fontWeight combined
                     // value over the lossy output from exportValue.
-                    let recoveredValue : JsonNode =
+                    let recoveredValue : JsonNode | null =
                         match tryReadVendorString extOriginalHslKey t.Metadata.Extensions with
-                        | Some hsl -> JsonValue.Create(hsl)
+                        | Some hsl -> jv hsl
                         | None ->
                             match tryReadVendorString extOriginalFontWeightKey t.Metadata.Extensions with
-                            | Some fw -> JsonValue.Create(fw)
+                            | Some fw -> jv fw
                             | None    -> vn
                     leaf.Add("$value", recoveredValue)
                     let desc =
