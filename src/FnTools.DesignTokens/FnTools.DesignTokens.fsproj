@@ -13,7 +13,6 @@
     <RepositoryType>git</RepositoryType>
     <Nullable>enable</Nullable>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <NoWarn>FS3261</NoWarn>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="DesignTokens.fs" />

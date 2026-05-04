@@ -241,7 +241,8 @@ let private parseShadowColor (prefix: string) (s: string) : JsonNode option =
     elif s.StartsWith "oklch" then
         tryParseOklch s |> Option.bind extractValue
     elif s.StartsWith "var(" then
-        varToPath prefix s |> Option.map (fun path -> JsonValue.Create(sprintf "{%s}" path) :> JsonNode)
+        varToPath prefix s |> Option.bind (fun path ->
+            Option.ofObj (JsonValue.Create(sprintf "{%s}" path)) |> Option.map (fun v -> v :> JsonNode))
     else None
 
 /// Parse "0" or "Npx" → dimension node.

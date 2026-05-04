@@ -145,8 +145,19 @@ module TokensStudio =
 
     let private tryGetNode (key: string) (obj: JsonObject) : JsonNode option =
         let mutable node : JsonNode | null = null
-        if obj.TryGetPropertyValue(key, &node) && not (isNull node) then Some node
+        if obj.TryGetPropertyValue(key, &node) then
+            match node with
+            | null   -> None
+            | nonNul -> Some nonNul
         else None
+
+    /// Clone a possibly-null JsonNode: non-null clones via DeepClone; null stays null.
+    /// In System.Text.Json.Nodes, a C# null inside a JsonObject/JsonArray represents
+    /// the JSON `null` literal — preserving null on input is the intended semantics.
+    let private cloneOrNull (n: JsonNode | null) : JsonNode | null =
+        match Option.ofObj n with
+        | Some v -> v.DeepClone()
+        | None -> null
 
     let private tryGetString (key: string) (obj: JsonObject) : string option =
         tryGetNode key obj |> Option.map (fun n -> n.ToString().Trim('"'))
@@ -418,14 +429,17 @@ module TokensStudio =
             match node with
             | :? JsonObject as obj ->
                 if obj.ContainsKey("$type") && obj.ContainsKey("$value") then
-                    match obj["$value"] with
-                    | null -> ()
-                    | v    -> acc.Add(prefix, v.ToString().Trim('"'))
+                    match Option.ofObj obj["$value"] with
+                    | None   -> ()
+                    | Some v -> acc.Add(prefix, v.ToString().Trim('"'))
                 else
                     for kvp in obj do
-                        if not (kvp.Key.StartsWith("$")) && kvp.Value <> null then
-                            let childPrefix = if prefix = "" then kvp.Key else prefix + "." + kvp.Key
-                            walk childPrefix kvp.Value
+                        if not (kvp.Key.StartsWith("$")) then
+                            match Option.ofObj kvp.Value with
+                            | Some child ->
+                                let childPrefix = if prefix = "" then kvp.Key else prefix + "." + kvp.Key
+                                walk childPrefix child
+                            | None -> ()
             | _ -> ()
         for (_, setObj) in allSets do
             walk "" setObj
@@ -486,16 +500,19 @@ module TokensStudio =
                     | Some k -> k
                     | None   -> kvp.Key
                 let rawStr =
-                    if kvp.Value <> null then kvp.Value.ToString().Trim('"') else ""
-                let outVal =
+                    match Option.ofObj kvp.Value with
+                    | Some n -> n.ToString().Trim('"')
+                    | None   -> ""
+                let outVal : JsonNode | null =
                     match kvp.Key with
                     | "fontFamilies" ->
                         // Unwrap single-element array: ["Figtree"] → "Figtree"
                         match kvp.Value with
-                        | :? JsonArray as arr when arr.Count = 1 && arr.[0] <> null ->
-                            arr.[0].DeepClone()
-                        | _ -> if kvp.Value <> null then kvp.Value.DeepClone()
-                               else JsonValue.Create(null: string) :> JsonNode
+                        | :? JsonArray as arr when arr.Count = 1 ->
+                            match Option.ofObj arr.[0] with
+                            | Some item -> item.DeepClone()
+                            | None      -> cloneOrNull kvp.Value
+                        | _ -> cloneOrNull kvp.Value
                     | "fontSizes" ->
                         // Dimension: literals → {value, unit}; alias refs resolved eagerly
                         // via the flat index so cross-type number→dimension aliases resolve
@@ -503,47 +520,36 @@ module TokensStudio =
                         if isAlias rawStr then
                             match MathEval.tryEval index Set.empty rawStr with
                             | Some f -> dimensionObj f "px"
-                            | None   ->
-                                if kvp.Value <> null then kvp.Value.DeepClone()
-                                else JsonValue.Create(null: string) :> JsonNode
+                            | None   -> cloneOrNull kvp.Value
                         else
                             toDimensionNode rawStr
-                            |> Option.defaultWith (fun () ->
-                                if kvp.Value <> null then kvp.Value.DeepClone()
-                                else JsonValue.Create(null: string) :> JsonNode)
+                            |> Option.map (fun n -> (n: JsonNode | null))
+                            |> Option.defaultWith (fun () -> cloneOrNull kvp.Value)
                     | "lineHeights" ->
                         // DTCG lineHeight in typography is a float (unitless ratio or percentage)
                         if isAlias rawStr then
-                            if kvp.Value <> null then kvp.Value.DeepClone()
-                            else JsonValue.Create(null: string) :> JsonNode
+                            cloneOrNull kvp.Value
                         else
                             match Double.TryParse(rawStr.TrimEnd('%').Trim(), Globalization.NumberStyles.Float, Globalization.CultureInfo.InvariantCulture) with
-                            | true, f -> JsonValue.Create(f) :> JsonNode
-                            | _ ->
-                                if kvp.Value <> null then kvp.Value.DeepClone()
-                                else JsonValue.Create(null: string) :> JsonNode
+                            | true, f -> JsonValue.Create(f) :> JsonNode | null
+                            | _       -> cloneOrNull kvp.Value
                     | "fontWeights" ->
                         // DTCG fontWeight: numeric → JSON int, keyword → JSON string.
                         // Tokens Studio may store combined values like "400 Italic" — extract
                         // the leading integer and discard the style suffix (italic is a separate
                         // DTCG field; Tokens Studio doesn't have a separate fontStyle token type).
                         if isAlias rawStr then
-                            if kvp.Value <> null then kvp.Value.DeepClone()
-                            else JsonValue.Create(null: string) :> JsonNode
+                            cloneOrNull kvp.Value
                         else
                             let numericPart = rawStr.Split(' ').[0].Trim()
                             match Double.TryParse(numericPart, Globalization.NumberStyles.Float, Globalization.CultureInfo.InvariantCulture) with
                             | true, f when f = Math.Floor(f) ->
-                                JsonValue.Create(int f) :> JsonNode
-                            | _ ->
-                                if kvp.Value <> null then kvp.Value.DeepClone()
-                                else JsonValue.Create(null: string) :> JsonNode
-                    | _ ->
-                        if kvp.Value <> null then kvp.Value.DeepClone()
-                        else JsonValue.Create(null: string) :> JsonNode
+                                JsonValue.Create(int f) :> JsonNode | null
+                            | _ -> cloneOrNull kvp.Value
+                    | _ -> cloneOrNull kvp.Value
                 result.Add(outKey, outVal)
             result :> JsonNode
-        | _ -> if v <> null then v.DeepClone() else JsonValue.Create(null: string) :> JsonNode
+        | _ -> v.DeepClone()
 
 
     // ── Single token transform ────────────────────────────────────────────────
@@ -562,10 +568,7 @@ module TokensStudio =
             | Some t -> t
             | None   -> tsType
 
-        let rawValue =
-            match value with
-            | null -> ""
-            | _    -> value.ToString().Trim('"')
+        let rawValue = value.ToString().Trim('"')
 
         match tsType with
 
@@ -628,7 +631,9 @@ module TokensStudio =
                         else 1.0
                     match hR, sR, lR with
                     | Ok h, Ok s, Ok l ->
-                        Some (dtcgType, JsonValue.Create(hslToHex h s l alpha) :> JsonNode)
+                        match Option.ofObj (JsonValue.Create(hslToHex h s l alpha)) with
+                        | Some v -> Some (dtcgType, v :> JsonNode)
+                        | None   -> Some (dtcgType, value)
                     | _ ->
                         Some (dtcgType, value)   // leave as-is; warnings already recorded
                 else
@@ -649,10 +654,11 @@ module TokensStudio =
         | "fontFamilies" ->
             let newVal =
                 match value with
-                | :? JsonArray as arr when arr.Count = 1 && arr.[0] <> null ->
-                    arr.[0].DeepClone()
-                | _ -> if value <> null then value.DeepClone()
-                       else JsonValue.Create(null: string) :> JsonNode
+                | :? JsonArray as arr when arr.Count = 1 ->
+                    match Option.ofObj arr.[0] with
+                    | Some item -> item.DeepClone()
+                    | None      -> value.DeepClone()
+                | _ -> value.DeepClone()
             Some ("fontFamily", newVal)
 
         // ── typography: rename composite field names ──────────────────────────
@@ -716,12 +722,14 @@ module TokensStudio =
                 let idx = body.IndexOf('/')
                 if idx >= 0 then body.Substring(0, idx).Trim(), Some (body.Substring(idx + 1).Trim())
                 else body.Trim(), None
-            let parseComp (s: string) : JsonNode option =
+            let parseComp (s: string) : (JsonNode | null) option =
                 let t = s.Trim()
                 if t = "none" then Some null
                 else
                     match Double.TryParse(t, Globalization.NumberStyles.Float, Globalization.CultureInfo.InvariantCulture) with
-                    | true, f -> Some (JsonValue.Create(f) :> JsonNode)
+                    | true, f ->
+                        let v : JsonNode | null = JsonValue.Create(f)
+                        Some v
                     | _       -> None
             let parts = mainStr.Split([|' '|], StringSplitOptions.RemoveEmptyEntries)
             if parts.Length < 3 then None
@@ -785,7 +793,10 @@ module TokensStudio =
         // per DTCG §7.4 type inheritance (Tokens Studio uses this pattern heavily).
         let scopeType =
             if obj.ContainsKey("$type") && not (obj.ContainsKey("$value")) then
-                let groupType = obj["$type"].ToString().Trim('"')
+                let groupType =
+                    match Option.ofObj obj["$type"] with
+                    | Some n -> n.ToString().Trim('"')
+                    | None   -> ""
                 let dtcgType  = match Map.tryFind groupType typeRenames with Some t -> t | None -> groupType
                 result.Add("$type", JsonValue.Create(dtcgType))
                 Some groupType
@@ -805,9 +816,15 @@ module TokensStudio =
                     if isLeaf then
                         // Token leaf — use own $type if present, else inherited.
                         let tsType =
-                            if childHasOwnType then child["$type"].ToString().Trim('"')
+                            if childHasOwnType then
+                                match Option.ofObj child["$type"] with
+                                | Some n -> n.ToString().Trim('"')
+                                | None   -> scopeType |> Option.defaultValue ""
                             else scopeType.Value
-                        match transformToken config index warnings childPath tsType child["$value"] with
+                        match Option.ofObj child["$value"] with
+                        | None -> ()
+                        | Some valueNode ->
+                        match transformToken config index warnings childPath tsType valueNode with
                         | None -> ()
                         | Some (dtcgType, newValue) ->
                             let leaf = JsonObject()
@@ -856,7 +873,12 @@ module TokensStudio =
                         match tryGetNode "selectedTokenSets" obj with
                         | Some (:? JsonObject as setsObj) ->
                             setsObj
-                            |> Seq.map (fun kvp -> kvp.Key, kvp.Value.ToString().Trim('"'))
+                            |> Seq.map (fun kvp ->
+                                let v =
+                                    match Option.ofObj kvp.Value with
+                                    | Some n -> n.ToString().Trim('"')
+                                    | None   -> ""
+                                kvp.Key, v)
                             |> Map.ofSeq
                         | _ -> Map.empty
                     Some {
@@ -877,7 +899,13 @@ module TokensStudio =
         | :? JsonObject as obj ->
             let strList key =
                 match tryGetArray key obj with
-                | Some arr -> arr |> Seq.map (fun n -> n.ToString().Trim('"')) |> List.ofSeq
+                | Some arr ->
+                    arr
+                    |> Seq.choose (fun n ->
+                        match Option.ofObj n with
+                        | Some node -> Some (node.ToString().Trim('"'))
+                        | None      -> None)
+                    |> List.ofSeq
                 | None     -> []
             { TokenSetOrder = strList "tokenSetOrder"
               ActiveThemes  = strList "activeThemes"
@@ -1008,9 +1036,17 @@ module TokensStudio =
         sprintf "color(%s %s %s %s%s)"
             (colorSpaceStr c.ColorSpace) (fStr c1) (fStr c2) (fStr c3) alphaStr
 
-    let private compToNode (cc: ColorComponent) : JsonNode =
+    /// Wrap a primitive value in a JsonValue node. JsonValue.Create<T> is annotated
+    /// as nullable in F# 9 even for non-nullable T; we surface the nullable result
+    /// as JsonNode | null so call sites stay null-aware. Consumers (JsonObject.Add,
+    /// JsonArray.Add, leaf.Add) all accept nullable JsonNode, so a literal null
+    /// here yields a JSON `null` entry in the surrounding container.
+    let inline private jv<'T> (x: 'T) : JsonNode | null =
+        JsonValue.Create<'T>(x) :> JsonNode | null
+
+    let private compToNode (cc: ColorComponent) : JsonNode | null =
         match cc with
-        | Channel f -> JsonValue.Create(f) :> JsonNode
+        | Channel f -> jv f
         | Missing   -> null   // JSON null preserves the "missing component" semantics
 
     /// Build the structured originalColor payload for the $extensions vendor namespace.
@@ -1069,10 +1105,10 @@ module TokensStudio =
         | Black | Heavy            -> "900"
         | ExtraBlack | UltraBlack  -> "950"
 
-    let private fwNode (fw: FontWeightValue) : JsonNode =
+    let private fwNode (fw: FontWeightValue) : JsonNode | null =
         match fw with
-        | Numeric n -> JsonValue.Create(n) :> JsonNode
-        | Keyword k -> JsonValue.Create(fwKeywordStr k) :> JsonNode
+        | Numeric n -> jv n
+        | Keyword k -> jv (fwKeywordStr k)
 
     let private dimStr (d: DimensionValue) : string =
         let u = match d.Unit with Px -> "px" | Rem -> "rem"
@@ -1087,10 +1123,10 @@ module TokensStudio =
         | CurlyBrace segs -> "{" + String.concat "." segs + "}"
         | JsonPointer p   -> p
 
-    let private vorToNode (toLit: 'T -> JsonNode) (vor: ValueOrRef<'T>) : JsonNode =
+    let private vorToNode (toLit: 'T -> JsonNode | null) (vor: ValueOrRef<'T>) : JsonNode | null =
         match vor with
         | Literal v   -> toLit v
-        | Reference r -> JsonValue.Create(refStr r) :> JsonNode
+        | Reference r -> jv (refStr r)
 
     let private strokeKwStr (k: StrokeStyleKeyword) : string =
         match k with
@@ -1124,31 +1160,31 @@ module TokensStudio =
         (path    : string)
         (v       : TokenValue)
         (warnings: ResizeArray<ExportWarning>)
-        : (JsonNode * JsonObject option * string option) option =
-        let dimN (d: DimensionValue) : JsonNode = JsonValue.Create(dimStr d) :> JsonNode
-        let durN (d: DurationValue)  : JsonNode = JsonValue.Create(durStr d)  :> JsonNode
-        let colorHexN (p: string) (c: ColorValue) : JsonNode * JsonObject option * string option =
+        : ((JsonNode | null) * JsonObject option * string option) option =
+        let dimN (d: DimensionValue) : JsonNode | null = jv (dimStr d)
+        let durN (d: DurationValue)  : JsonNode | null = jv (durStr d)
+        let colorHexN (p: string) (c: ColorValue) : (JsonNode | null) * JsonObject option * string option =
             let hex, oc = exportColorHex p c warnings
             let ann = oc |> Option.map (fun _ -> lossyAnnotation c)
-            JsonValue.Create(hex) :> JsonNode, oc, ann
-        let shadowObjN (p: string) (so: ShadowObject) : JsonNode =
+            jv hex, oc, ann
+        let shadowObjN (p: string) (so: ShadowObject) : JsonNode | null =
             let o = JsonObject()
             let cHex =
                 match so.Color with
                 | Literal c   -> fst (exportColorHex p c warnings)
                 | Reference r -> refStr r
-            o.Add("color",   JsonValue.Create(cHex))
+            o.Add("color",   jv cHex)
             o.Add("offsetX", vorToNode dimN so.OffsetX)
             o.Add("offsetY", vorToNode dimN so.OffsetY)
             o.Add("blur",    vorToNode dimN so.Blur)
             o.Add("spread",  vorToNode dimN so.Spread)
             match so.Inset with
-            | Some b -> o.Add("inset", JsonValue.Create(b))
+            | Some b -> o.Add("inset", jv b)
             | None   -> ()
-            o :> JsonNode
+            o :> JsonNode | null
         match v with
         | TokenValue.Alias r ->
-            Some (JsonValue.Create(refStr r) :> JsonNode, None, None)
+            Some (jv (refStr r), None, None)
         | TokenValue.Color c ->
             let n, oc, ann = colorHexN path c
             Some (n, oc, ann)
@@ -1157,35 +1193,35 @@ module TokensStudio =
         | TokenValue.FontFamily f ->
             match f with
             | Single s ->
-                Some (JsonValue.Create(s) :> JsonNode, None, None)
+                Some (jv s, None, None)
             | Stack ss ->
                 let arr = JsonArray()
-                for s in ss do arr.Add(JsonValue.Create(s))
-                Some (arr :> JsonNode, None, None)
+                for s in ss do arr.Add(jv s)
+                Some (arr :> JsonNode | null, None, None)
         | TokenValue.FontWeight fw ->
             Some (fwNode fw, None, None)
         | TokenValue.Duration d ->
             Some (durN d, None, None)
         | TokenValue.CubicBezier cb ->
             let arr = JsonArray()
-            arr.Add(JsonValue.Create(cb.P1x))
-            arr.Add(JsonValue.Create(cb.P1y))
-            arr.Add(JsonValue.Create(cb.P2x))
-            arr.Add(JsonValue.Create(cb.P2y))
-            Some (arr :> JsonNode, None, None)
+            arr.Add(jv cb.P1x)
+            arr.Add(jv cb.P1y)
+            arr.Add(jv cb.P2x)
+            arr.Add(jv cb.P2y)
+            Some (arr :> JsonNode | null, None, None)
         | TokenValue.Number n ->
-            Some (JsonValue.Create(n) :> JsonNode, None, None)
+            Some (jv n, None, None)
         | TokenValue.StrokeStyle s ->
             match s with
             | StrokeKeyword k ->
-                Some (JsonValue.Create(strokeKwStr k) :> JsonNode, None, None)
+                Some (jv (strokeKwStr k), None, None)
             | StrokeCustom obj ->
                 let o = JsonObject()
                 let dashArr = JsonArray()
                 for d in obj.DashArray do dashArr.Add(vorToNode dimN d)
                 o.Add("dashArray", dashArr)
-                o.Add("lineCap",   JsonValue.Create(lineCapStr obj.LineCap))
-                Some (o :> JsonNode, None, None)
+                o.Add("lineCap",   jv (lineCapStr obj.LineCap))
+                Some (o :> JsonNode | null, None, None)
         | TokenValue.Shadow sv ->
             match sv with
             | ShadowSingle obj ->
@@ -1195,39 +1231,39 @@ module TokensStudio =
                 for x in xs do
                     match x with
                     | ShadowLiteral obj -> arr.Add(shadowObjN path obj)
-                    | ShadowReference r -> arr.Add(JsonValue.Create(refStr r) :> JsonNode)
-                Some (arr :> JsonNode, None, None)
+                    | ShadowReference r -> arr.Add(jv (refStr r))
+                Some (arr :> JsonNode | null, None, None)
         | TokenValue.Border b ->
             let o = JsonObject()
             let cHex =
                 match b.Color with
                 | Literal c   -> fst (exportColorHex (path + ".color") c warnings)
                 | Reference r -> refStr r
-            o.Add("color", JsonValue.Create(cHex))
+            o.Add("color", jv cHex)
             o.Add("width", vorToNode dimN b.Width)
-            let styleN =
+            let styleN : JsonNode | null =
                 match b.Style with
-                | Literal (StrokeKeyword k) -> JsonValue.Create(strokeKwStr k) :> JsonNode
-                | Literal (StrokeCustom _)  -> JsonValue.Create("solid")        :> JsonNode
-                | Reference r               -> JsonValue.Create(refStr r)       :> JsonNode
+                | Literal (StrokeKeyword k) -> jv (strokeKwStr k)
+                | Literal (StrokeCustom _)  -> jv "solid"
+                | Reference r               -> jv (refStr r)
             o.Add("style", styleN)
-            Some (o :> JsonNode, None, None)
+            Some (o :> JsonNode | null, None, None)
         | TokenValue.Transition t ->
             let o = JsonObject()
             o.Add("duration",       vorToNode durN t.Duration)
             o.Add("delay",          vorToNode durN t.Delay)
-            let tfN =
+            let tfN : JsonNode | null =
                 match t.TimingFunction with
                 | Literal cb ->
                     let arr = JsonArray()
-                    arr.Add(JsonValue.Create(cb.P1x))
-                    arr.Add(JsonValue.Create(cb.P1y))
-                    arr.Add(JsonValue.Create(cb.P2x))
-                    arr.Add(JsonValue.Create(cb.P2y))
-                    arr :> JsonNode
-                | Reference r -> JsonValue.Create(refStr r) :> JsonNode
+                    arr.Add(jv cb.P1x)
+                    arr.Add(jv cb.P1y)
+                    arr.Add(jv cb.P2x)
+                    arr.Add(jv cb.P2y)
+                    arr :> JsonNode | null
+                | Reference r -> jv (refStr r)
             o.Add("timingFunction", tfN)
-            Some (o :> JsonNode, None, None)
+            Some (o :> JsonNode | null, None, None)
         | TokenValue.Gradient g ->
             let arr = JsonArray()
             for stop in g do
@@ -1236,34 +1272,34 @@ module TokensStudio =
                     match stop.Color with
                     | Literal c   -> fst (exportColorHex path c warnings)
                     | Reference r -> refStr r
-                o.Add("color", JsonValue.Create(cHex))
-                let posN =
+                o.Add("color", jv cHex)
+                let posN : JsonNode | null =
                     match stop.Position with
-                    | Literal f   -> JsonValue.Create(f) :> JsonNode
-                    | Reference r -> JsonValue.Create(refStr r) :> JsonNode
+                    | Literal f   -> jv f
+                    | Reference r -> jv (refStr r)
                 o.Add("position", posN)
-                arr.Add(o :> JsonNode)
-            Some (arr :> JsonNode, None, None)
+                arr.Add(o :> JsonNode | null)
+            Some (arr :> JsonNode | null, None, None)
         | TokenValue.Typography t ->
             let o = JsonObject()
-            let ffN (f: FontFamilyValue) : JsonNode =
+            let ffN (f: FontFamilyValue) : JsonNode | null =
                 match f with
                 | Single s ->
-                    JsonValue.Create(s) :> JsonNode
+                    jv s
                 | Stack ss ->
                     let arr = JsonArray()
-                    for s in ss do arr.Add(JsonValue.Create(s))
-                    arr :> JsonNode
+                    for s in ss do arr.Add(jv s)
+                    arr :> JsonNode | null
             o.Add("fontFamily",    vorToNode ffN t.FontFamily)
             o.Add("fontSize",      vorToNode dimN t.FontSize)
             o.Add("fontWeight",    vorToNode fwNode t.FontWeight)
             o.Add("letterSpacing", vorToNode dimN t.LetterSpacing)
-            let lhN =
+            let lhN : JsonNode | null =
                 match t.LineHeight with
-                | Literal f   -> JsonValue.Create(f) :> JsonNode
-                | Reference r -> JsonValue.Create(refStr r) :> JsonNode
+                | Literal f   -> jv f
+                | Reference r -> jv (refStr r)
             o.Add("lineHeight", lhN)
-            Some (o :> JsonNode, None, None)
+            Some (o :> JsonNode | null, None, None)
 
 
     // ── Export: tree walker ───────────────────────────────────────────────────
@@ -1278,8 +1314,7 @@ module TokensStudio =
         let outer = JsonObject()
         // 1. Pass through any user-authored extensions first (preserve insertion order).
         for (k, v) in userExt do
-            if not (isNull v) then
-                outer.Add(k, v.DeepClone())
+            outer.Add(k, v.DeepClone())
         // 2. Attach our originalColor payload under the vendor namespace.
         match origColor with
         | None -> ()

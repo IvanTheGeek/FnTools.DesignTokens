@@ -61,8 +61,10 @@ let tryGetBool (n: JsonNode) : bool option =
 
 let tryGetProperty (name: string) (obj: JsonObject) : JsonNode option =
     let mutable node : JsonNode | null = null
-    if obj.TryGetPropertyValue(name, &node) && not (isNull node) then
-        Some node
+    if obj.TryGetPropertyValue(name, &node) then
+        match node with
+        | null   -> None
+        | nonNul -> Some nonNul
     else None
 
 
@@ -149,23 +151,32 @@ let isRefShape (n: JsonNode) : bool =
 
 /// Copy all properties of an `$extensions` object into an order-preserving list.
 /// Each value is detached via DeepClone so it survives independently of the source document.
+/// Properties whose JSON value is literal `null` are skipped — `Extensions` values are
+/// non-nullable by construction, and a null payload carries no extension data anyway.
 let readExtensions (obj: JsonObject) : Extensions =
-    [ for kv in obj ->
-        let cloned =
-            if isNull kv.Value then null
-            else kv.Value.DeepClone()
-        kv.Key, cloned ]
+    [ for kv in obj do
+        match Option.ofObj kv.Value with
+        | None -> ()
+        | Some nonNul -> yield kv.Key, nonNul.DeepClone() ]
 
 
 // ─── Object iteration helpers ────────────────────────────────────────────────
 
 /// Iterate properties of a JsonObject as (name, node) pairs in insertion order.
+/// JSON `null` values are skipped — callers expect a non-nullable JsonNode.
 let properties (obj: JsonObject) : (string * JsonNode) seq =
-    seq { for kv in obj -> kv.Key, kv.Value }
+    seq { for kv in obj do
+            match Option.ofObj kv.Value with
+            | None       -> ()
+            | Some value -> yield kv.Key, value }
 
 /// Iterate elements of a JsonArray with their indices.
+/// JSON `null` elements are skipped — callers expect a non-nullable JsonNode.
 let elements (arr: JsonArray) : (int * JsonNode) seq =
-    seq { for i in 0 .. arr.Count - 1 -> i, arr.[i] }
+    seq { for i in 0 .. arr.Count - 1 do
+            match Option.ofObj arr.[i] with
+            | None       -> ()
+            | Some value -> yield i, value }
 
 
 // ─── Top-level parse ─────────────────────────────────────────────────────────

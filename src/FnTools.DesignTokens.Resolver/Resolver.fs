@@ -44,7 +44,11 @@ let private resolveJsonPointer (root: JsonObject) (ref_: string) : Result<JsonNo
                         err <- Some [InvalidValue ("$ref", sprintf "segment '%s' not found (in %s)" seg ref_)]
                 | :? JsonArray as arr ->
                     match Int32.TryParse seg with
-                    | true, i when i >= 0 && i < arr.Count -> current <- arr.[i]
+                    | true, i when i >= 0 && i < arr.Count ->
+                        match Option.ofObj arr.[i] with
+                        | Some n -> current <- n
+                        | None ->
+                            err <- Some [InvalidValue ("$ref", sprintf "segment '%s' resolved to null (in %s)" seg ref_)]
                     | _ ->
                         err <- Some [InvalidValue ("$ref", sprintf "segment '%s' is not a valid array index (in %s)" seg ref_)]
                 | _ ->
@@ -84,8 +88,8 @@ let rec private parseTokenSource (root: JsonObject) (path: string) (n: JsonNode)
 let private parseSources (root: JsonObject) (path: string) (n: JsonNode) : Result<TokenSource list, ParseError list> =
     match asArray n with
     | Some arr ->
-        [ for i in 0 .. arr.Count - 1 ->
-            parseTokenSource root (sprintf "%s[%d]" path i) arr.[i] ]
+        [ for i, item in elements arr ->
+            parseTokenSource root (sprintf "%s[%d]" path i) item ]
         |> collect
     | None ->
         parseTokenSource root path n |> Result.map List.singleton
@@ -247,8 +251,8 @@ let parseResolver (jsonText: string) : Result<ResolverDocument, ParseError list>
                 match tryGetProperty "resolutionOrder" o with
                 | Some node ->
                     requireArray "resolutionOrder" "resolutionOrder" node |> liftSingle >>= fun arr ->
-                        [ for i in 0 .. arr.Count - 1 ->
-                            parseResolutionItem (sprintf "resolutionOrder[%d]" i) arr.[i] ]
+                        [ for i, item in elements arr ->
+                            parseResolutionItem (sprintf "resolutionOrder[%d]" i) item ]
                         |> collect
                 | None -> Error [MissingRequiredField ("", "resolutionOrder")]
 
