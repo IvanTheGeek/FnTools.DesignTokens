@@ -64,9 +64,15 @@ import/export. See `penpot-api.md` for the three-surface comparison.
 - [x] **Penpot `$extensions` preservation test** — pre-ADR-023 empirical check.
   Result: Penpot strips `$extensions` (Plugin API Token has only `id/name/type/value/description`;
   `.extensions` assignment doesn't persist; internal transit storage has no extensions slot;
-  export format omits them). ADR-022 (`$description` annotation) retained; ADR-023
-  (`$extensions` as round-trip carrier) **deferred** — cross-tool benefit only when no
-  Penpot stage is present. Findings → `penpot-extensions-preservation-test.md`. 2026-05-04.
+  export format omits them). Findings → `penpot-extensions-preservation-test.md`;
+  upstream tracking issue: <https://github.com/penpot/penpot/issues/9307>. 2026-05-04.
+- [x] **`$extensions` carrier for lossy color metadata (ADR-023)** — supersedes ADR-022
+  carrier choice. Exporter emits both `$extensions[com.fntools.designtokens][originalColor]`
+  (structured DTCG payload, vendor-namespaced) **and** the existing `$description`
+  annotation (Penpot-survival companion). Importer recovers in priority order: extension →
+  description regex → lossy sRGB hex. User-authored vendor extensions pass through verbatim.
+  Incidental fix: shim now inherits `$type` from group level per DTCG §7.4. 5 new round-trip
+  tests covering all four scenarios + extensions passthrough. 227/227 tests pass. 2026-05-04.
 - [ ] **PATHS state mapping (Phase 7)** — read prototype connections on all mock pages;
   map each screen to a PATHS state and each connection to a transition; document what
   information Penpot carries vs what PATHS needs.

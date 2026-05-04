@@ -6,6 +6,7 @@
     <AssemblyName>FnTools.DesignTokens.Tests</AssemblyName>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
+    <NoWarn>FS3261</NoWarn>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Fixtures.fs" />
