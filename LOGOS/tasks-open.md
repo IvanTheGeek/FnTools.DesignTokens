@@ -136,9 +136,15 @@ import/export. See `penpot-api.md` for the three-surface comparison.
   export; `buildExtensionsObject` strips `shimExportStripKeys` from TS output.
   `tryReadVendorString` helper. 4 new tests + 1 test assertion updated. 258/258 pass.
   2026-05-04. Typography-composite fontWeight deferred (ADR-026 §Consequences).
-- [ ] **PATHS state mapping (Phase 7)** — read prototype connections on all mock pages;
+- [x] **PATHS state mapping (Phase 7)** — read prototype connections on all mock pages;
   map each screen to a PATHS state and each connection to a transition; document what
   information Penpot carries vs what PATHS needs.
+  Result: zero prototype connections in the file (confirmed via Plugin API + archive scan).
+  File is a design token demonstration, not an interactive prototype. 3 application screens
+  identified (Landing, Dashboard, Email); transitions inferred from structure only. Penpot
+  prototyping is a partial documentation layer — supplies happy-path graph skeleton if
+  restructured, but cannot supply guards, data binding, or error paths. Findings →
+  `LauraExperiment/phase7-findings.md`. 2026-05-04.
 
 ### CSS ingestion — non-standard unit handling
 
