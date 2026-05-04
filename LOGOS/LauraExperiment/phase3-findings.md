@@ -294,7 +294,7 @@ stripped first (single-file format wraps token maps under their set name key).
 
 ## Shim specification (what needs to be built)
 
-Module: `TokenStudio` in `FnTools.DesignTokens` (or a separate `.Css` or `.Adapters`
+Module: `TokensStudio` in `FnTools.DesignTokens` (or a separate `.Css` or `.Adapters`
 module — TBD at layer split).
 
 Input: Tokens Studio JSON (top-level set keys + `$themes` + `$metadata`)

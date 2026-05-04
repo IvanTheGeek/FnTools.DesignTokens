@@ -12,7 +12,7 @@ import/export. See `penpot-api.md` for the three-surface comparison.
 - [ ] **Tokens Studio parser shim** — read a Tokens Studio `tokens.json`, strip non-DTCG types
   (`fontFamilies`, `fontSizes`, `spacing`, `borderWidth`) and math/HSL expressions, return
   parseable DTCG JSON per set. Use Laura's file as test input. This is a separate function
-  (not `Format.parse`) — it lives in a `TokenStudio` module.
+  (not `Format.parse`) — it lives in a `TokensStudio` module.
 - [ ] **Token round-trip** — push `ivanthegeek.tokens.json` into Penpot and read it back.
   Two paths to compare: (a) MCP `execute_code` with `penpot.tokens` Plugin API, (b) REST
   `update-file` with `set-token-set` + `set-token` change ops. Both verified working in
