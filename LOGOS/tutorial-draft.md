@@ -67,6 +67,26 @@ This means:
 
 ---
 
+## The design file told us all along
+
+The system library file contains this, written directly on the canvas:
+
+> *"When you have various themes inside a group, only one of the themes in this group can be active."*
+> *"Having your sets clubbed under groups makes it more accessible to switch from a matrix of themes."*
+
+**Matrix of themes** is the exact right mental model.
+
+Groups are the axes. Themes within a group are the options on that axis. Your
+active configuration is one selection per axis — one coordinate per dimension.
+The system enforces that you can't have two themes from the same group active
+simultaneously, because that would mean two conflicting sets of values for the
+same token names.
+
+The design file documented its own architecture. Worth reading what is on the canvas
+before reverse-engineering from the API.
+
+---
+
 ## Why this matters: brand + mode + breakpoint are orthogonal
 
 Because themes are just set presets, you can layer them independently.
