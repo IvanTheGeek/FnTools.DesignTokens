@@ -55,10 +55,15 @@ Findings → `phase2-findings.md`
 
 **Goal**: Read Penpot's token library and reconstruct a DTCG-compatible subset.
 
-- [ ] Use the Tokens Studio parser shim (or a stub) to extract DTCG-compatible tokens from
-      Laura's `tokens.json` — colors, dimensions, fontFamily only; skip math/HSL expressions
-- [ ] Verify extracted tokens parse cleanly through `Format.parse`
-- [ ] Document what is lost: math expressions, HSL aliases, multi-set `$themes`
+- [x] Run `shimSingleFile` on all 22 sets — 22/22 parse cleanly, 0 warnings.
+      All token types handled: color (174), number (57), dimension (47), typography (18),
+      fontFamily (9). No subset restriction needed. 2026-05-04.
+- [x] Verify extracted tokens parse cleanly through `Format.parse`. 305 tokens shimmed;
+      250 after last-set-wins dedup in flat import. 2026-05-04.
+- [x] Document what is lost: math expression strings (evaluated to floats, originals
+      discarded), multi-set cascade semantics, cross-set alias chains (resolved in flat
+      import), TS legacy type names (one-way rename). `$themes` + `$metadata` preserved
+      in ShimResult, recoverable via `toResolverDocument` / `exportToTokensStudio`. 2026-05-04.
 
 Findings → `phase3-findings.md`
 

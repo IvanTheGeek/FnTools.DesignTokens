@@ -85,6 +85,14 @@ import/export. See `penpot-api.md` for the three-surface comparison.
   per theme (and once for base sets) with the per-theme set list. `shimCore` private helper
   factors the shared logic. 3 new tests (math-bleed fixture + Small=10/Large=20 assertions).
   230/230 tests pass. 2026-05-04.
+- [x] **Token flow inward (Phase 3)** — `shimSingleFile` + `Format.parse` on all 22 sets of
+  Laura's file: 22/22 parse cleanly, 0 warnings. 305 tokens (250 after flat last-set-wins import).
+  Type distribution: color 174, number 57, dimension 47, typography 18, fontFamily 9. Structural
+  losses documented: math expression strings (evaluated to floats, originals discarded), multi-set
+  cascade semantics, cross-set alias chains. `$themes` + `$metadata` preserved in ShimResult →
+  recoverable via `toResolverDocument` / `exportToTokensStudio`. Key finding: combined zoom +
+  breakpoint per-theme call needed for correct scale spread. See `LauraExperiment/phase3-findings.md`.
+  2026-05-04.
 - [ ] **PATHS state mapping (Phase 7)** — read prototype connections on all mock pages;
   map each screen to a PATHS state and each connection to a transition; document what
   information Penpot carries vs what PATHS needs.
