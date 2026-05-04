@@ -256,6 +256,45 @@ design file.
 
 ---
 
+## Design mocks as application states
+
+The screens in a design mocks file are not just illustrations. Each screen is a
+**specific application state** — what the user sees at a particular moment, with
+particular data, after a particular sequence of actions.
+
+A dashboard screen is the state after a successful login. An email confirmation
+screen is the state after a form is submitted. A landing page at mobile breakpoint
+is the state of the same page for a different device context.
+
+Prototype connections between screens express **transitions** — what happens when
+the user clicks a button or link. Frame A → Frame B on click is an intent: "from
+this state, this action takes you to that state."
+
+This maps directly onto any state machine or routing model:
+- Screens = states
+- Prototype connections = transitions
+- The full prototype graph = the navigable application
+
+When you build the application from the design:
+- Each distinct screen becomes a route or a component state
+- Each prototype connection becomes a navigation event or state transition
+- Token values become CSS custom properties
+- Component instances become the component tree
+
+The design file is not a picture of the app. It is a specification of the app's
+state space, expressed visually.
+
+**What Penpot prototype connections do and don't carry**:
+
+They carry: source frame, target frame, trigger type (on click, on hover, etc.),
+animation type, overlay settings.
+
+They don't carry: guard conditions ("only if logged in"), data bindings ("pass this
+user ID"), error states, back-navigation intent, loading states. Those require a
+separate translation step from designer intent to developer implementation.
+
+---
+
 ## Things still to figure out
 
 - Does the CSS emitter need to know about sets and themes, or just token values and

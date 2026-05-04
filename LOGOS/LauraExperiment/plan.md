@@ -67,23 +67,45 @@ Dashboard screen.
 - [ ] Implement theme-aware CSS emitter (open task in `tasks-open.md`): given active theme
       names, resolve multi-set merge and emit `:root` + `@media` override blocks
 - [ ] Target: Light mode + Desktop breakpoint as the baseline `:root`; Dark mode as an
-      override; Mobile as a `@media (max-width: 768px)` override
+      override; Mobile as a `@media (max-width: 360px)` override; Tablet as
+      `@media (max-width: 1020px)` — breakpoint values verified live (360/1020/1200)
 - [ ] Verify emitted CSS matches Penpot's resolved values for those themes (read via REST)
 
 Findings → `phase4-findings.md`
 
 ---
 
+## Phase 4b — Penpot export comparison
+
+**Goal**: Compare Penpot's own export paths against our API-derived approach to understand
+what each gives us and where gaps are.
+
+- [ ] **SVG export** — use MCP `export_shape` on a component instance; assess what is lost
+      (token paths, structure, interactivity) vs what is gained (ready-to-embed markup)
+- [ ] **Inspect tab HTML/CSS** — manually export a component via the Inspect tab; compare
+      the emitted CSS to what our token emitter would produce for the same component
+- [ ] **Raw API → our emitter** — what we have been building; compare output quality and
+      token fidelity against the above two
+- [ ] Document the tradeoffs: when would you use each path?
+
+Findings → `phase4b-findings.md`
+
+---
+
 ## Phase 5 — Fun.Blazor components (tokens → working UI)
 
 **Goal**: Build Fun.Blazor components for the Dashboard screen that reference the emitted
-CSS custom properties. Verify they visually match the Penpot design.
+CSS custom properties. Each screen in the mocks represents a specific application state —
+the collection of screens maps to PATHS states, and prototype connections map to PATHS
+transitions. The components built here are the implementation of those states.
 
 - [ ] Stand up a minimal Fun.Blazor project (separate repo)
 - [ ] Scaffold one component from the Dashboard — start with the simplest card
 - [ ] Wire the CSS emission from Phase 4 into the project (static file or generated)
 - [ ] Work through the component list, documenting where the token binding pattern holds
       and where it breaks
+- [ ] Identify which screens map to distinct PATHS states and which are variants of the
+      same state (e.g. breakpoint versions of the same page)
 
 Findings → `phase5-findings.md`
 
@@ -102,13 +124,23 @@ Findings → `phase6-findings.md`
 
 ---
 
-## Phase 7 — Prototype path (forward-looking)
+## Phase 7 — Prototype path → PATHS states
 
-**Goal**: Assess whether Penpot prototype connections can inform Fun.Blazor routing.
+**Goal**: Assess whether Penpot prototype connections can inform PATHS state definitions
+and Fun.Blazor routing.
 
-- [ ] Read all prototype connections on the Dashboard and other mock pages
-- [ ] Map to Blazor router structure — what pages, what navigation events
-- [ ] Document what prototype information is missing or insufficient for routing decisions
+Each screen in the Design Mocks file is a specific application state. Prototype connections
+between screens express transitions — what happens when a user clicks a button or navigates.
+This maps directly to the PATHS concept: states + transitions form the navigable graph of
+the application.
+
+- [ ] Read all prototype connections on all mock pages (Dashboard, Landing, Email, Thumbnail)
+- [ ] Map each connection to a PATHS transition: source state, trigger, target state
+- [ ] Identify what information is present in a Penpot prototype connection vs what a PATHS
+      transition needs (trigger type, guard conditions, data carried)
+- [ ] Document what is missing: conditions, data bindings, back-navigation, error states
+- [ ] Assess whether Penpot prototype authoring could be a PATHS input surface or only
+      a documentation layer
 
 Findings → `phase7-findings.md`
 

@@ -22,6 +22,12 @@ import/export. See `penpot-api.md` for the three-surface comparison.
 - [ ] **Theme-aware CSS emitter** — given a list of active theme names, resolve the multi-set
   merge in our resolver and emit `:root` + override blocks. Maps Tokens Studio `$themes`
   activation to our resolver's `resolutionOrder`.
+- [ ] **Penpot export comparison (Phase 4b)** — compare three paths for getting component
+  code out of Penpot: (a) MCP `export_shape` → SVG, (b) Inspect tab HTML/CSS, (c) raw API
+  shapes → our CSS emitter. Document tradeoffs. See `LauraExperiment/plan.md` Phase 4b.
+- [ ] **PATHS state mapping (Phase 7)** — read prototype connections on all mock pages;
+  map each screen to a PATHS state and each connection to a transition; document what
+  information Penpot carries vs what PATHS needs.
 
 ### CSS ingestion — non-standard unit handling
 
