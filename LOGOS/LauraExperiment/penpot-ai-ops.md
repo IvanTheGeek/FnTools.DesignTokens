@@ -445,6 +445,7 @@ blocks — the canvas frames are documentation, not the mechanism.
 | Re-importing a file expecting old IDs to remain valid | IDs change on each import; use `get-project-files` to find current IDs |
 | Expecting per-frame theme activation | Themes are file-wide in 2.14.4; switch theme to view each breakpoint version |
 | Manually setting frame width for breakpoint copies | Width of a breakpoint frame is driven by the `breakpoint` token when the correct theme is active; don't hardcode it |
+| Activating a new set without deactivating the old one in the same group | Sets within a group are mutually exclusive by convention. The API does not enforce this — if two sets in the same group are both active, the one lowest in the list wins (last-write semantics, same as CSS cascade). Always deactivate the outgoing set before activating the incoming one. |
 
 ---
 

@@ -85,6 +85,14 @@ same token names.
 The design file documented its own architecture. Worth reading what is on the canvas
 before reverse-engineering from the API.
 
+**The API does not enforce group mutual exclusion.** You can check multiple themes
+from the same group simultaneously — nothing stops you. When you do, the set that
+appears lowest in the list wins, because token resolution uses last-write semantics:
+later sets override earlier ones, the same way later CSS rules override earlier ones.
+If `Breakpoints/Mobile`, `Breakpoints/Tablet`, and `Breakpoints/Desktop` are all
+active, `Breakpoints/Desktop` wins because it is last. The frame shows 1200px and
+the others are silently ignored.
+
 ---
 
 ## Why this matters: brand + mode + breakpoint are orthogonal
