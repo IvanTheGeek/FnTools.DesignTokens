@@ -494,7 +494,7 @@ let allTests =
                 Expect.stringContains outJson "\"primitives\""   "primitives in tokenSetOrder"
                 Expect.stringContains outJson "\"Mode\""         "Mode group in $themes"
 
-            testCase "exportToTokensStudio: wide-gamut color produces LossyColorConversion warning and $description" <| fun () ->
+            testCase "exportToTokensStudio: wide-gamut color produces $extensions originalColor + $description companion" <| fun () ->
                 let fakeShim : ShimResult = {
                     Sets     = Map.empty
                     Themes   = []
@@ -516,12 +516,17 @@ let allTests =
                     let sets = Map [ "tokens", file ]
                     let outJson, warnings = TokensStudio.exportToTokensStudio fakeShim sets
                     Expect.equal (List.length warnings) 1 "one lossy warning"
-                    let (LossyColorConversion (path, ann)) = warnings.[0]
+                    let (LossyColorConversion (path, original)) = warnings.[0]
                     Expect.equal path "brand.primary" "warning path is brand.primary"
-                    Expect.stringContains ann "oklch"         "annotation mentions oklch"
-                    Expect.stringContains ann "Tokens Studio" "annotation mentions Tokens Studio"
-                    Expect.stringContains outJson "$description" "$description present in output"
-                    Expect.stringContains outJson "oklch"        "oklch annotation in output"
+                    Expect.stringContains original "oklch"     "warning carries DTCG color string"
+                    // Primary round-trip carrier: $extensions[com.fntools.designtokens.originalColor]
+                    Expect.stringContains outJson "$extensions"               "$extensions present"
+                    Expect.stringContains outJson "com.fntools.designtokens"  "vendor namespace present"
+                    Expect.stringContains outJson "originalColor"             "originalColor key present"
+                    Expect.stringContains outJson "oklch"                     "colorSpace preserved in payload"
+                    // Companion human annotation in $description (Penpot-survival fallback)
+                    Expect.stringContains outJson "$description"              "$description companion present"
+                    Expect.stringContains outJson "Tokens Studio compatibility" "lossy annotation in $description"
 
             testCase "exportToTokensStudio: dimension emitted as string value" <| fun () ->
                 let json = """
@@ -547,5 +552,252 @@ let allTests =
                 Expect.stringContains outJson "\"dimension\""     "DTCG 'dimension' type in output"
                 Expect.isFalse (outJson.Contains("\"spacing\""))   "no TS legacy 'spacing' type"
                 Expect.isFalse (outJson.Contains("\"fontSizes\"")) "no TS legacy 'fontSizes' type"
+
+            // ─── Round-trip via $extensions (ADR-023) ─────────────────────────
+
+            // Helper: strip the named keys from any JsonObject that has a "$value" sibling
+            // (i.e. token leaf nodes) recursively. Replaces brittle regex-based stripping.
+            let stripLeafKeys (keys: string seq) (json: string) : string =
+                let keySet = System.Collections.Generic.HashSet<string>(keys)
+                let root = System.Text.Json.Nodes.JsonNode.Parse(json)
+                let rec walk (n: System.Text.Json.Nodes.JsonNode) =
+                    match n with
+                    | :? System.Text.Json.Nodes.JsonObject as o ->
+                        let isLeaf = o.ContainsKey("$value")
+                        if isLeaf then
+                            for k in Seq.toList keys do
+                                if o.ContainsKey(k) then o.Remove(k) |> ignore
+                        for kv in Seq.toList (o :> seq<_>) do
+                            if kv.Value <> null then walk kv.Value
+                    | :? System.Text.Json.Nodes.JsonArray as a ->
+                        for i in 0 .. a.Count - 1 do
+                            if a.[i] <> null then walk a.[i]
+                    | _ -> ()
+                walk root
+                root.ToJsonString()
+
+            // Helper to extract the first color token from a parsed file's tree.
+            let firstColorLeaf (f: TokenFile) : Token =
+                let rec scan (children: (TokenName * TokenNode) list) =
+                    children
+                    |> List.tryPick (fun (_, n) ->
+                        match n with
+                        | TokenLeaf t when (match t.Value with TokenValue.Color _ -> true | _ -> false) -> Some t
+                        | TokenLeaf _ -> None
+                        | Group g -> scan g.Children)
+                match scan f.Children with
+                | Some t -> t
+                | None   -> failwith "no color leaf found"
+
+            testCase "round-trip: oklch wide-gamut DTCG → TS export → TS shim → DTCG parse preserves ColorValue" <| fun () ->
+                // Authored DTCG: oklch color, no Hex fallback.
+                let originalJson = """
+{
+  "brand": {
+    "$type": "color",
+    "primary": {
+      "$value": { "colorSpace": "oklch", "components": [0.7, 0.2, 120] }
+    }
+  }
+}"""
+                let originalFile =
+                    match Api.Primitives.parse originalJson with
+                    | Ok f    -> f
+                    | Error e -> failtestf "initial parse: %A" e
+                let originalColor =
+                    match (firstColorLeaf originalFile).Value with
+                    | TokenValue.Color c -> c
+                    | _ -> failwith "expected color"
+
+                // Export to Tokens Studio JSON (lossy).
+                let fakeShim : ShimResult = {
+                    Sets     = Map.empty
+                    Themes   = []
+                    Metadata = { TokenSetOrder = ["tokens"]; ActiveThemes = []; ActiveSets = [] }
+                    Warnings = []
+                }
+                let tsJson, warnings =
+                    TokensStudio.exportToTokensStudio fakeShim (Map [ "tokens", originalFile ])
+                Expect.equal (List.length warnings) 1 "lossy warning on export"
+
+                // Shim back to DTCG per-set JSON; parse it.
+                let sr =
+                    match TokensStudio.shim tsJson with
+                    | Ok sr -> sr | Error e -> failtestf "shim: %s" e
+                let setJson =
+                    sr.Sets |> Map.toList |> List.head |> snd
+                let roundTrippedFile =
+                    match Api.Primitives.parse setJson with
+                    | Ok f -> f | Error e -> failtestf "round-trip parse: %A" e
+                let roundTrippedColor =
+                    match (firstColorLeaf roundTrippedFile).Value with
+                    | TokenValue.Color c -> c
+                    | _ -> failwith "expected color after round-trip"
+
+                Expect.equal roundTrippedColor.ColorSpace originalColor.ColorSpace "colorSpace preserved"
+                Expect.equal roundTrippedColor.Components originalColor.Components "components preserved"
+                Expect.equal roundTrippedColor.Alpha      originalColor.Alpha      "alpha preserved"
+
+            testCase "round-trip recovery: extension-stripped TS JSON falls back to $description annotation" <| fun () ->
+                // Simulate Penpot's behaviour: keep $description, strip $extensions.
+                // The shim should still recover the wide-gamut color from the annotation.
+                let originalJson = """
+{
+  "brand": {
+    "$type": "color",
+    "accent": {
+      "$value": { "colorSpace": "display-p3", "components": [0.4, 0.8, 0.2], "alpha": 0.9 }
+    }
+  }
+}"""
+                let originalFile =
+                    match Api.Primitives.parse originalJson with
+                    | Ok f -> f | Error e -> failtestf "initial parse: %A" e
+                let fakeShim : ShimResult = {
+                    Sets     = Map.empty
+                    Themes   = []
+                    Metadata = { TokenSetOrder = ["tokens"]; ActiveThemes = []; ActiveSets = [] }
+                    Warnings = []
+                }
+                let tsJson, _ = TokensStudio.exportToTokensStudio fakeShim (Map [ "tokens", originalFile ])
+                // Strip $extensions block (Penpot-equivalent) but keep $description.
+                let stripped = stripLeafKeys [ "$extensions" ] tsJson
+                Expect.isFalse (stripped.Contains "$extensions") "extensions removed for the test"
+                Expect.stringContains stripped "$description"     "description survives"
+
+                let sr =
+                    match TokensStudio.shim stripped with
+                    | Ok sr -> sr | Error e -> failtestf "shim of stripped: %s" e
+                let setJson = sr.Sets |> Map.toList |> List.head |> snd
+                let recoveredFile =
+                    match Api.Primitives.parse setJson with
+                    | Ok f -> f | Error e -> failtestf "recovery parse: %A" e
+                let recoveredColor =
+                    match (firstColorLeaf recoveredFile).Value with
+                    | TokenValue.Color c -> c
+                    | _ -> failwith "expected color after recovery"
+
+                Expect.equal recoveredColor.ColorSpace DisplayP3 "colorSpace recovered from $description"
+                let (c1, c2, c3) = recoveredColor.Components
+                Expect.equal c1 (Channel 0.4) "component[0] recovered"
+                Expect.equal c2 (Channel 0.8) "component[1] recovered"
+                Expect.equal c3 (Channel 0.2) "component[2] recovered"
+                Expect.equal recoveredColor.Alpha (Some 0.9) "alpha recovered"
+
+            testCase "round-trip recovery: both extensions and description stripped → falls back to lossy sRGB hex" <| fun () ->
+                // Worst-case pipeline: any tool that strips both $extensions AND $description
+                // (or whose export route emitted neither). The shim cannot recover the
+                // wide-gamut original; the output should be a clean sRGB color from the hex.
+                let originalJson = """
+{
+  "brand": {
+    "$type": "color",
+    "primary": {
+      "$value": { "colorSpace": "oklch", "components": [0.7, 0.2, 120] }
+    }
+  }
+}"""
+                let originalFile =
+                    match Api.Primitives.parse originalJson with
+                    | Ok f -> f | Error e -> failtestf "initial parse: %A" e
+                let fakeShim : ShimResult = {
+                    Sets     = Map.empty
+                    Themes   = []
+                    Metadata = { TokenSetOrder = ["tokens"]; ActiveThemes = []; ActiveSets = [] }
+                    Warnings = []
+                }
+                let tsJson, _ = TokensStudio.exportToTokensStudio fakeShim (Map [ "tokens", originalFile ])
+                // Strip both $extensions and $description.
+                let stripped = stripLeafKeys [ "$extensions"; "$description" ] tsJson
+                Expect.isFalse (stripped.Contains "$extensions")  "extensions removed"
+                Expect.isFalse (stripped.Contains "$description") "description removed"
+                let sr =
+                    match TokensStudio.shim stripped with
+                    | Ok sr -> sr | Error e -> failtestf "shim of stripped: %s" e
+                let setJson = sr.Sets |> Map.toList |> List.head |> snd
+                let degradedFile =
+                    match Api.Primitives.parse setJson with
+                    | Ok f -> f | Error e -> failtestf "degraded parse: %A" e
+                let degradedColor =
+                    match (firstColorLeaf degradedFile).Value with
+                    | TokenValue.Color c -> c
+                    | _ -> failwith "expected color"
+                // Lossy degradation: original colorSpace is unrecoverable; the parsed value
+                // is the sRGB approximation that survived in $value.
+                Expect.equal degradedColor.ColorSpace SRGB "falls back to sRGB"
+                Expect.notEqual degradedColor.Components (let (c1,c2,c3) =
+                                                            (Channel 0.7, Channel 0.2, Channel 120.0)
+                                                          in (c1,c2,c3))
+                                "components are NOT the wide-gamut originals (degraded)"
+
+            testCase "import priority: $extensions wins over $description when both are present" <| fun () ->
+                // Hand-craft TS JSON with conflicting carriers — extension says oklch,
+                // description says display-p3. Verify the extension's data is used.
+                let conflictingJson = """
+{
+  "brand": {
+    "$type": "color",
+    "primary": {
+      "$value": "#aa3344",
+      "$description": "source: color(display-p3 0.5 0.5 0.5) — converted to sRGB hex for Tokens Studio compatibility",
+      "$extensions": {
+        "com.fntools.designtokens": {
+          "originalColor": {
+            "colorSpace": "oklch",
+            "components": [0.7, 0.2, 120]
+          }
+        }
+      }
+    }
+  },
+  "$metadata": { "tokenSetOrder": ["tokens"] }
+}"""
+                let sr =
+                    match TokensStudio.shim conflictingJson with
+                    | Ok sr -> sr | Error e -> failtestf "shim: %s" e
+                let setJson = sr.Sets |> Map.toList |> List.head |> snd
+                let parsed =
+                    match Api.Primitives.parse setJson with
+                    | Ok f -> f | Error e -> failtestf "parse: %A" e
+                let color =
+                    match (firstColorLeaf parsed).Value with
+                    | TokenValue.Color c -> c
+                    | _ -> failwith "expected color"
+                Expect.equal color.ColorSpace OKLCH
+                    "extension's oklch wins over description's display-p3"
+
+            testCase "extensions passthrough: user-authored vendor extensions survive round-trip" <| fun () ->
+                // A user-authored extension under a different vendor namespace must be
+                // preserved on both the export and the import side per the DTCG spec.
+                let json = """
+{
+  "$schema": "https://design-tokens.org/schemas/2025.10/tokens.json",
+  "swatch": {
+    "$type": "color",
+    "$value": { "colorSpace": "srgb", "components": [0.1, 0.2, 0.3] },
+    "$extensions": {
+      "com.example.vendor": { "review": "approved" }
+    }
+  }
+}"""
+                let file =
+                    match Api.Primitives.parse json with
+                    | Ok f -> f | Error e -> failtestf "parse: %A" e
+                let fakeShim : ShimResult = {
+                    Sets     = Map.empty
+                    Themes   = []
+                    Metadata = { TokenSetOrder = ["tokens"]; ActiveThemes = []; ActiveSets = [] }
+                    Warnings = []
+                }
+                let tsJson, _ = TokensStudio.exportToTokensStudio fakeShim (Map [ "tokens", file ])
+                Expect.stringContains tsJson "com.example.vendor" "user vendor key emitted"
+                Expect.stringContains tsJson "approved"          "user data emitted"
+
+                let sr =
+                    match TokensStudio.shim tsJson with
+                    | Ok sr -> sr | Error e -> failtestf "shim: %s" e
+                let setJson = sr.Sets |> Map.toList |> List.head |> snd
+                Expect.stringContains setJson "com.example.vendor" "user vendor key survives shim"
+                Expect.stringContains setJson "approved"          "user data survives shim"
         ]
     ]

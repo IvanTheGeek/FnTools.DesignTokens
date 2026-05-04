@@ -79,7 +79,10 @@ type TokensStudioImportResult = {
 /// Warning produced during Tokens Studio export.
 type ExportWarning =
     /// A color value was converted from wide-gamut to an approximate sRGB hex string.
-    /// The original DTCG color description is included in the token's $description field.
+    /// The structured original is preserved in the token's <c>$extensions</c> under
+    /// <c>com.fntools.designtokens.originalColor</c> for lossless DTCG round-trip
+    /// (ADR-023). Penpot strips extensions on import — the warning still flags the
+    /// loss for any pipeline stage that does not preserve <c>$extensions</c>.
     | LossyColorConversion of path: string * original: string
 
 /// One theme's fully-resolved tokens (base sets + the theme's own sets merged).
@@ -135,6 +138,10 @@ module TokensStudio =
 
 
     // ── Helpers ───────────────────────────────────────────────────────────────
+
+    /// Vendor namespace for our $extensions payload (ADR-023).
+    let private extVendorKey = "com.fntools.designtokens"
+    let private extOriginalColorKey = "originalColor"
 
     let private tryGetNode (key: string) (obj: JsonObject) : JsonNode option =
         let mutable node : JsonNode | null = null
@@ -657,23 +664,133 @@ module TokensStudio =
             Some (dtcgType, value)
 
 
+    // ── Import: $extensions originalColor reconstruction (ADR-023) ──────────
+    //
+    // On import, when a color token's $extensions carries the structured
+    // originalColor payload we wrote on export, replace the $value (which is
+    // the lossy sRGB hex approximation) with a reconstructed DTCG color object.
+    // The Tokens-Studio-side hex remains as the `hex` fallback inside the
+    // structured value, so downstream tools that don't understand wide-gamut
+    // colorSpaces still have a usable approximation.
+    //
+    // Extensions outside our vendor namespace are passed through verbatim so
+    // unknown vendor extensions survive a round-trip per the DTCG spec.
+
+    /// Read the originalColor payload from a token's $extensions, if present
+    /// and structurally valid. Returns the inner JsonObject (colorSpace +
+    /// components mandatory; alpha + hex optional) for use as a $value.
+    let private tryReadOriginalColor (child: JsonObject) : JsonObject option =
+        match tryGetNode "$extensions" child with
+        | Some (:? JsonObject as ext) ->
+            match tryGetNode extVendorKey ext with
+            | Some (:? JsonObject as vendor) ->
+                match tryGetNode extOriginalColorKey vendor with
+                | Some (:? JsonObject as oc)
+                    when oc.ContainsKey("colorSpace") && oc.ContainsKey("components") ->
+                    Some oc
+                | _ -> None
+            | _ -> None
+        | _ -> None
+
+    /// Pattern that <c>lossyAnnotation</c> emits into <c>$description</c>.
+    /// Reverse-engineered to recover the original wide-gamut color when
+    /// <c>$extensions</c> have been stripped (e.g. by Penpot). Lower fidelity
+    /// than the structured extension — components are parsed by string and
+    /// "none" markers are honoured, but no <c>hex</c> field is recovered.
+    let private lossyAnnotationRx =
+        Regex(@"source:\s*color\(\s*([a-z0-9-]+)\s+([^)]+?)\s*\)\s*—\s*converted to sRGB hex for Tokens Studio compatibility",
+              RegexOptions.Compiled ||| RegexOptions.IgnoreCase)
+
+    /// Best-effort parser for a description annotation produced by our exporter.
+    /// Returns a DTCG color JsonObject when the pattern matches and at least
+    /// 3 components parse cleanly. Returns None otherwise; the caller should
+    /// fall through to using the literal $value hex.
+    let private tryParseColorFromDescription (desc: string) : JsonObject option =
+        let m = lossyAnnotationRx.Match(desc)
+        if not m.Success then None
+        else
+            let csStr = m.Groups.[1].Value
+            let body  = m.Groups.[2].Value
+            // Split on " / " to separate alpha (if any) from the components.
+            let mainStr, alphaStr =
+                let idx = body.IndexOf('/')
+                if idx >= 0 then body.Substring(0, idx).Trim(), Some (body.Substring(idx + 1).Trim())
+                else body.Trim(), None
+            let parseComp (s: string) : JsonNode option =
+                let t = s.Trim()
+                if t = "none" then Some null
+                else
+                    match Double.TryParse(t, Globalization.NumberStyles.Float, Globalization.CultureInfo.InvariantCulture) with
+                    | true, f -> Some (JsonValue.Create(f) :> JsonNode)
+                    | _       -> None
+            let parts = mainStr.Split([|' '|], StringSplitOptions.RemoveEmptyEntries)
+            if parts.Length < 3 then None
+            else
+                let comps = parts |> Array.take 3 |> Array.map parseComp
+                if comps |> Array.exists Option.isNone then None
+                else
+                    let oc = JsonObject()
+                    oc.Add("colorSpace", JsonValue.Create(csStr))
+                    let arr = JsonArray()
+                    for c in comps do arr.Add(c.Value)
+                    oc.Add("components", arr)
+                    match alphaStr |> Option.bind (fun s ->
+                            match Double.TryParse(s, Globalization.NumberStyles.Float, Globalization.CultureInfo.InvariantCulture) with
+                            | true, a -> Some a
+                            | _       -> None) with
+                    | Some a -> oc.Add("alpha", JsonValue.Create(a))
+                    | None   -> ()
+                    Some oc
+
+    let private tryRecoverWideGamutColor (child: JsonObject) : JsonObject option =
+        match tryReadOriginalColor child with
+        | Some _ as some -> some
+        | None ->
+            match tryGetString "$description" child with
+            | Some d when d.Length > 0 -> tryParseColorFromDescription d
+            | _ -> None
+
+    /// Clone the source $extensions for emission, removing our reconstruction
+    /// marker (which is a transport artifact, not part of canonical DTCG).
+    /// If our vendor namespace becomes empty after removal, the namespace key
+    /// itself is removed. Returns None when no extensions remain.
+    let private cloneExtensionsForOutput (child: JsonObject) : JsonObject option =
+        match tryGetNode "$extensions" child with
+        | Some (:? JsonObject as ext) ->
+            let cloned = ext.DeepClone() :?> JsonObject
+            match tryGetNode extVendorKey cloned with
+            | Some (:? JsonObject as vendor) ->
+                if vendor.ContainsKey extOriginalColorKey then
+                    vendor.Remove extOriginalColorKey |> ignore
+                if vendor.Count = 0 then cloned.Remove extVendorKey |> ignore
+            | _ -> ()
+            if cloned.Count = 0 then None else Some cloned
+        | _ -> None
+
+
     // ── Recursive set-tree walker ─────────────────────────────────────────────
 
     let rec private walkObj
         (config: ShimConfig)
         (index: Map<string, string>)
         (warnings: ResizeArray<ShimWarning>)
+        (inheritedType: string option)
         (path: string)
         (obj: JsonObject)
         : JsonObject =
 
         let result = JsonObject()
 
-        // Preserve group-level $type if present without $value (inherited type hint)
-        if obj.ContainsKey("$type") && not (obj.ContainsKey("$value")) then
-            let groupType = obj["$type"].ToString().Trim('"')
-            let dtcgType  = match Map.tryFind groupType typeRenames with Some t -> t | None -> groupType
-            result.Add("$type", JsonValue.Create(dtcgType))
+        // Group-level $type: preserve in output AND propagate to descendants
+        // per DTCG §7.4 type inheritance (Tokens Studio uses this pattern heavily).
+        let scopeType =
+            if obj.ContainsKey("$type") && not (obj.ContainsKey("$value")) then
+                let groupType = obj["$type"].ToString().Trim('"')
+                let dtcgType  = match Map.tryFind groupType typeRenames with Some t -> t | None -> groupType
+                result.Add("$type", JsonValue.Create(dtcgType))
+                Some groupType
+            else
+                inheritedType
 
         for kvp in obj do
             if not (kvp.Key.StartsWith("$")) then
@@ -681,22 +798,45 @@ module TokensStudio =
                 | null -> ()
                 | :? JsonObject as child ->
                     let childPath = if path = "" then kvp.Key else path + "." + kvp.Key
-                    if child.ContainsKey("$type") && child.ContainsKey("$value") then
-                        // Token leaf
-                        let tsType = child["$type"].ToString().Trim('"')
+                    let childHasOwnType = child.ContainsKey("$type")
+                    let isLeaf =
+                        child.ContainsKey("$value")
+                        && (childHasOwnType || scopeType.IsSome)
+                    if isLeaf then
+                        // Token leaf — use own $type if present, else inherited.
+                        let tsType =
+                            if childHasOwnType then child["$type"].ToString().Trim('"')
+                            else scopeType.Value
                         match transformToken config index warnings childPath tsType child["$value"] with
                         | None -> ()
                         | Some (dtcgType, newValue) ->
                             let leaf = JsonObject()
                             leaf.Add("$type", JsonValue.Create(dtcgType))
-                            leaf.Add("$value", newValue.DeepClone())
+                            // For colors, prefer the structured originalColor payload from
+                            // $extensions over the lossy hex in $value (ADR-023). If absent,
+                            // try parsing the lossy annotation out of $description as a
+                            // graceful-degradation path for pipelines that strip extensions
+                            // (e.g. Penpot). Fall through to the hex when neither matches.
+                            let valueNode =
+                                if dtcgType = "color" then
+                                    match tryRecoverWideGamutColor child with
+                                    | Some oc -> oc.DeepClone()
+                                    | None    -> newValue.DeepClone()
+                                else
+                                    newValue.DeepClone()
+                            leaf.Add("$value", valueNode)
                             match tryGetString "$description" child with
                             | Some d when d.Length > 0 -> leaf.Add("$description", JsonValue.Create(d))
                             | _ -> ()
+                            // Pass through any non-marker $extensions so unknown vendor
+                            // extensions survive the round-trip per the DTCG spec.
+                            match cloneExtensionsForOutput child with
+                            | Some ext -> leaf.Add("$extensions", ext)
+                            | None     -> ()
                             result.Add(kvp.Key, leaf)
                     else
-                        // Group — recurse
-                        let childResult = walkObj config index warnings childPath child
+                        // Group — recurse, threading the inherited type scope.
+                        let childResult = walkObj config index warnings scopeType childPath child
                         if childResult.Count > 0 then
                             result.Add(kvp.Key, childResult)
                 | _ -> ()
@@ -776,7 +916,7 @@ module TokensStudio =
                 let transformedSets =
                     sets
                     |> Array.map (fun (setName, setObj) ->
-                        let transformed = walkObj config index warnings "" setObj
+                        let transformed = walkObj config index warnings None "" setObj
                         setName, transformed.ToJsonString(opts))
                     |> Map.ofArray
 
@@ -868,13 +1008,40 @@ module TokensStudio =
         sprintf "color(%s %s %s %s%s)"
             (colorSpaceStr c.ColorSpace) (fStr c1) (fStr c2) (fStr c3) alphaStr
 
-    /// Serialize a ColorValue to a hex string.
-    /// Returns (hex, Some annotation) if wide-gamut (lossy); (hex, None) if lossless.
+    let private compToNode (cc: ColorComponent) : JsonNode =
+        match cc with
+        | Channel f -> JsonValue.Create(f) :> JsonNode
+        | Missing   -> null   // JSON null preserves the "missing component" semantics
+
+    /// Build the structured originalColor payload for the $extensions vendor namespace.
+    /// Shape: { colorSpace, components: [3], alpha?, hex? }. Alpha and hex are
+    /// included only if present on the source ColorValue, so round-trip is exact.
+    let private buildOriginalColorPayload (c: ColorValue) : JsonObject =
+        let oc = JsonObject()
+        oc.Add("colorSpace", JsonValue.Create(colorSpaceStr c.ColorSpace))
+        let (c1, c2, c3) = c.Components
+        let comps = JsonArray()
+        comps.Add(compToNode c1)
+        comps.Add(compToNode c2)
+        comps.Add(compToNode c3)
+        oc.Add("components", comps)
+        match c.Alpha with
+        | Some a -> oc.Add("alpha", JsonValue.Create(a))
+        | None   -> ()
+        match c.Hex with
+        | Some h -> oc.Add("hex", JsonValue.Create(h))
+        | None   -> ()
+        oc
+
+    /// Serialize a ColorValue to a hex string for the $value slot.
+    /// Returns (hex, Some originalColorPayload) when conversion is lossy (wide-gamut
+    /// without an explicit Hex fallback) so the caller can emit a $extensions
+    /// reconstructor; (hex, None) when the conversion is lossless.
     let private exportColorHex
         (path    : string)
         (c       : ColorValue)
         (warnings: ResizeArray<ExportWarning>)
-        : string * string option =
+        : string * JsonObject option =
         match c.Hex with
         | Some hex -> hex, None
         | None ->
@@ -883,11 +1050,8 @@ module TokensStudio =
                 colorToHex c, None
             | _ ->
                 let hex = colorToHex c
-                let ann =
-                    sprintf "source: %s — converted to sRGB hex for Tokens Studio compatibility"
-                        (colorDtcgStr c)
-                warnings.Add(LossyColorConversion (path, ann))
-                hex, Some ann
+                warnings.Add(LossyColorConversion (path, colorDtcgStr c))
+                hex, Some (buildOriginalColorPayload c)
 
 
     // ── Export: value helpers ─────────────────────────────────────────────────
@@ -940,18 +1104,33 @@ module TokensStudio =
 
     // ── Export: token value serializer ────────────────────────────────────────
 
+    /// Human-readable annotation describing a lossy conversion. Appended to
+    /// $description as a Penpot-survival fallback (ADR-023): Penpot strips
+    /// $extensions, so the structured originalColor payload is lost there,
+    /// but $description survives — the text gives a human (or a custom parser)
+    /// a last-resort record of the source value.
+    let private lossyAnnotation (c: ColorValue) : string =
+        sprintf "source: %s — converted to sRGB hex for Tokens Studio compatibility"
+            (colorDtcgStr c)
+
     /// Serialize a TokenValue to a JsonNode for Tokens Studio output.
-    /// Returns Some (valueNode, optAnnotation) or None to skip this token.
+    /// Returns Some (valueNode, optOriginalColorPayload, optDescriptionAnnotation)
+    /// or None to skip this token. The originalColor payload + description
+    /// annotation are emitted only for top-level Color tokens whose conversion
+    /// is lossy (ADR-023). Composite token types that contain nested colors
+    /// (Border, Shadow, Gradient) currently discard per-component payloads —
+    /// see ADR-023 §Future work.
     let private exportValue
         (path    : string)
         (v       : TokenValue)
         (warnings: ResizeArray<ExportWarning>)
-        : (JsonNode * string option) option =
+        : (JsonNode * JsonObject option * string option) option =
         let dimN (d: DimensionValue) : JsonNode = JsonValue.Create(dimStr d) :> JsonNode
         let durN (d: DurationValue)  : JsonNode = JsonValue.Create(durStr d)  :> JsonNode
-        let colorHexN (p: string) (c: ColorValue) : JsonNode * string option =
-            let hex, ann = exportColorHex p c warnings
-            JsonValue.Create(hex) :> JsonNode, ann
+        let colorHexN (p: string) (c: ColorValue) : JsonNode * JsonObject option * string option =
+            let hex, oc = exportColorHex p c warnings
+            let ann = oc |> Option.map (fun _ -> lossyAnnotation c)
+            JsonValue.Create(hex) :> JsonNode, oc, ann
         let shadowObjN (p: string) (so: ShadowObject) : JsonNode =
             let o = JsonObject()
             let cHex =
@@ -969,55 +1148,55 @@ module TokensStudio =
             o :> JsonNode
         match v with
         | TokenValue.Alias r ->
-            Some (JsonValue.Create(refStr r) :> JsonNode, None)
+            Some (JsonValue.Create(refStr r) :> JsonNode, None, None)
         | TokenValue.Color c ->
-            let n, ann = colorHexN path c
-            Some (n, ann)
+            let n, oc, ann = colorHexN path c
+            Some (n, oc, ann)
         | TokenValue.Dimension d ->
-            Some (dimN d, None)
+            Some (dimN d, None, None)
         | TokenValue.FontFamily f ->
             match f with
             | Single s ->
-                Some (JsonValue.Create(s) :> JsonNode, None)
+                Some (JsonValue.Create(s) :> JsonNode, None, None)
             | Stack ss ->
                 let arr = JsonArray()
                 for s in ss do arr.Add(JsonValue.Create(s))
-                Some (arr :> JsonNode, None)
+                Some (arr :> JsonNode, None, None)
         | TokenValue.FontWeight fw ->
-            Some (fwNode fw, None)
+            Some (fwNode fw, None, None)
         | TokenValue.Duration d ->
-            Some (durN d, None)
+            Some (durN d, None, None)
         | TokenValue.CubicBezier cb ->
             let arr = JsonArray()
             arr.Add(JsonValue.Create(cb.P1x))
             arr.Add(JsonValue.Create(cb.P1y))
             arr.Add(JsonValue.Create(cb.P2x))
             arr.Add(JsonValue.Create(cb.P2y))
-            Some (arr :> JsonNode, None)
+            Some (arr :> JsonNode, None, None)
         | TokenValue.Number n ->
-            Some (JsonValue.Create(n) :> JsonNode, None)
+            Some (JsonValue.Create(n) :> JsonNode, None, None)
         | TokenValue.StrokeStyle s ->
             match s with
             | StrokeKeyword k ->
-                Some (JsonValue.Create(strokeKwStr k) :> JsonNode, None)
+                Some (JsonValue.Create(strokeKwStr k) :> JsonNode, None, None)
             | StrokeCustom obj ->
                 let o = JsonObject()
                 let dashArr = JsonArray()
                 for d in obj.DashArray do dashArr.Add(vorToNode dimN d)
                 o.Add("dashArray", dashArr)
                 o.Add("lineCap",   JsonValue.Create(lineCapStr obj.LineCap))
-                Some (o :> JsonNode, None)
+                Some (o :> JsonNode, None, None)
         | TokenValue.Shadow sv ->
             match sv with
             | ShadowSingle obj ->
-                Some (shadowObjN path obj, None)
+                Some (shadowObjN path obj, None, None)
             | ShadowMultiple xs ->
                 let arr = JsonArray()
                 for x in xs do
                     match x with
                     | ShadowLiteral obj -> arr.Add(shadowObjN path obj)
                     | ShadowReference r -> arr.Add(JsonValue.Create(refStr r) :> JsonNode)
-                Some (arr :> JsonNode, None)
+                Some (arr :> JsonNode, None, None)
         | TokenValue.Border b ->
             let o = JsonObject()
             let cHex =
@@ -1032,7 +1211,7 @@ module TokensStudio =
                 | Literal (StrokeCustom _)  -> JsonValue.Create("solid")        :> JsonNode
                 | Reference r               -> JsonValue.Create(refStr r)       :> JsonNode
             o.Add("style", styleN)
-            Some (o :> JsonNode, None)
+            Some (o :> JsonNode, None, None)
         | TokenValue.Transition t ->
             let o = JsonObject()
             o.Add("duration",       vorToNode durN t.Duration)
@@ -1048,7 +1227,7 @@ module TokensStudio =
                     arr :> JsonNode
                 | Reference r -> JsonValue.Create(refStr r) :> JsonNode
             o.Add("timingFunction", tfN)
-            Some (o :> JsonNode, None)
+            Some (o :> JsonNode, None, None)
         | TokenValue.Gradient g ->
             let arr = JsonArray()
             for stop in g do
@@ -1064,7 +1243,7 @@ module TokensStudio =
                     | Reference r -> JsonValue.Create(refStr r) :> JsonNode
                 o.Add("position", posN)
                 arr.Add(o :> JsonNode)
-            Some (arr :> JsonNode, None)
+            Some (arr :> JsonNode, None, None)
         | TokenValue.Typography t ->
             let o = JsonObject()
             let ffN (f: FontFamilyValue) : JsonNode =
@@ -1084,10 +1263,42 @@ module TokensStudio =
                 | Literal f   -> JsonValue.Create(f) :> JsonNode
                 | Reference r -> JsonValue.Create(refStr r) :> JsonNode
             o.Add("lineHeight", lhN)
-            Some (o :> JsonNode, None)
+            Some (o :> JsonNode, None, None)
 
 
     // ── Export: tree walker ───────────────────────────────────────────────────
+
+    /// Build a token's $extensions object combining user-authored extensions
+    /// (Token.Metadata.Extensions) with our optional originalColor payload (ADR-023).
+    /// Returns None if neither is present.
+    let private buildExtensionsObject
+        (userExt   : Extensions)
+        (origColor : JsonObject option)
+        : JsonObject option =
+        let outer = JsonObject()
+        // 1. Pass through any user-authored extensions first (preserve insertion order).
+        for (k, v) in userExt do
+            if not (isNull v) then
+                outer.Add(k, v.DeepClone())
+        // 2. Attach our originalColor payload under the vendor namespace.
+        match origColor with
+        | None -> ()
+        | Some oc ->
+            let vendor =
+                match tryGetNode extVendorKey outer with
+                | Some (:? JsonObject as existing) ->
+                    // User had something under our namespace already — extend it.
+                    existing
+                | _ ->
+                    let v = JsonObject()
+                    // If user had a non-object value under our key, replace it.
+                    if outer.ContainsKey extVendorKey then outer.Remove extVendorKey |> ignore
+                    outer.Add(extVendorKey, v)
+                    v
+            // Only set originalColor if not already present (don't clobber user data).
+            if not (vendor.ContainsKey extOriginalColorKey) then
+                vendor.Add(extOriginalColorKey, oc)
+        if outer.Count = 0 then None else Some outer
 
     let rec private addTokensToObj
         (warnings : ResizeArray<ExportWarning>)
@@ -1106,10 +1317,10 @@ module TokensStudio =
                 | None    -> ()
                 match exportValue cPath t.Value warnings with
                 | None -> ()
-                | Some (vn, annOpt) ->
+                | Some (vn, origColor, descAnn) ->
                     leaf.Add("$value", vn)
                     let desc =
-                        match t.Metadata.Description, annOpt with
+                        match t.Metadata.Description, descAnn with
                         | Some d, Some a -> Some (d + "\n" + a)
                         | Some d, None   -> Some d
                         | None,   Some a -> Some a
@@ -1117,6 +1328,9 @@ module TokensStudio =
                     match desc with
                     | Some d -> leaf.Add("$description", JsonValue.Create(d))
                     | None   -> ()
+                    match buildExtensionsObject t.Metadata.Extensions origColor with
+                    | Some ext -> leaf.Add("$extensions", ext)
+                    | None     -> ()
                     target.Add(key, leaf)
             | Group g ->
                 let grp = JsonObject()

@@ -1,9 +1,14 @@
 ---
 id: 022
 title: Tokens Studio export uses preserve-aliases path; $description carries lossy metadata
-status: accepted
+status: superseded by 023
 date: 2026-05-04
 ---
+
+> **Status update (2026-05-04):** the lossy-metadata carrier choice is superseded by
+> [ADR-023](023-tokens-studio-export-extensions-carrier.md), which adds a structured
+> `$extensions` payload as the primary carrier and keeps `$description` as a
+> Penpot-survival companion. The preserve-aliases decision in this ADR still stands.
 
 ## Context
 

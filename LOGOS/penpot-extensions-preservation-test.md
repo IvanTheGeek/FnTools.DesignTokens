@@ -2,6 +2,8 @@
 area: Penpot interop
 status: complete — 2026-05-04
 question: Does Penpot preserve DTCG `$extensions` through import → store → export?
+informs: ADR-023 (Tokens Studio export uses $extensions as primary lossy-metadata carrier)
+upstream: https://github.com/penpot/penpot/issues/9307
 ---
 
 # Penpot `$extensions` preservation test
@@ -106,16 +108,14 @@ Given the findings:
 
 ## Decision update
 
-ADR-022 (preserve-aliases + `$description` annotation for lossy color) is retained
-as the Penpot-compatible export path.
-
-ADR-023 (`$extensions` as round-trip carrier) is **deferred**, not adopted. If we
-later add a non-Penpot export target (pure DTCG output for Style Dictionary or
-similar), revisit then. For Penpot interop the `$description` annotation is correct.
-
-A possible compromise — write **both** `$description` annotation (for Penpot) and
-`$extensions` payload (for non-Penpot consumers) — adds complexity for a use case
-we don't yet have. Not pursued.
+ADR-022's preserve-aliases choice still stands. The lossy-metadata carrier choice
+is **superseded by [ADR-023](decisions/023-tokens-studio-export-extensions-carrier.md)**:
+the exporter emits **both** carriers — `$extensions[com.fntools.designtokens][originalColor]`
+as the structured payload and the `$description` annotation as the Penpot-survival
+companion. The importer favours `$extensions` when present, falls back to parsing
+the `$description` annotation, and finally to the lossy sRGB hex when neither
+survives. Pipelines that don't pass through Penpot get an exact round-trip;
+pipelines that do still recover the wide-gamut original via the description.
 
 ## Test method
 
