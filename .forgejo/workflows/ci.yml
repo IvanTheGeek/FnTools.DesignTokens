@@ -1,0 +1,24 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.x'
+
+      - name: Build
+        run: dotnet build FnTools.DesignTokens.slnx -c Release --nologo
+
+      - name: Test
+        run: dotnet test FnTools.DesignTokens.slnx -c Release --nologo --no-build

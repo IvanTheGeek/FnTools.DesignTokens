@@ -1,14 +1,23 @@
 #!/usr/bin/env bash
-# Pack all five layers and push to the Forgejo NuGet feed.
+# Pack all layers and push to the Forgejo NuGet feed.
 #
 # Usage:
-#   ./publish.sh              # uses ~/.config/forgejo-claude.token
-#   FORGEJO_TOKEN=xxx ./publish.sh
+#   ./publish.sh              # stable — version from .fsproj
+#   ./publish.sh --dev        # pre-release — version suffix: dev.<shortsha>
+#   FORGEJO_TOKEN=xxx ./publish.sh [--dev]
 
 set -euo pipefail
 
 FEED="https://forgejo.ivanthegeek.com/api/packages/FnTools/nuget/index.json"
 TOKEN="${FORGEJO_TOKEN:-$(cat ~/.config/forgejo-claude.token 2>/dev/null)}"
+DEV=false
+
+for arg in "$@"; do
+    case "$arg" in
+        --dev) DEV=true ;;
+        *) echo "error: unknown argument: $arg" >&2; exit 1 ;;
+    esac
+done
 
 if [ -z "$TOKEN" ]; then
     echo "error: set FORGEJO_TOKEN or create ~/.config/forgejo-claude.token" >&2
@@ -23,9 +32,19 @@ dotnet build FnTools.DesignTokens.slnx -c Release --nologo -v quiet
 
 echo "--- packing ---"
 rm -rf artifacts/
-dotnet pack FnTools.DesignTokens.slnx -c Release --nologo -v quiet \
-    --no-build \
-    -o artifacts/
+
+if [ "$DEV" = true ]; then
+    SHORT_SHA="$(git rev-parse --short HEAD)"
+    echo "    dev pre-release: suffix=dev.${SHORT_SHA}"
+    dotnet pack FnTools.DesignTokens.slnx -c Release --nologo -v quiet \
+        --no-build \
+        -o artifacts/ \
+        -p:VersionSuffix="dev.${SHORT_SHA}"
+else
+    dotnet pack FnTools.DesignTokens.slnx -c Release --nologo -v quiet \
+        --no-build \
+        -o artifacts/
+fi
 
 PACKAGES=(artifacts/*.nupkg)
 if [ ${#PACKAGES[@]} -eq 0 ]; then

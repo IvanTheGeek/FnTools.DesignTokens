@@ -1,0 +1,40 @@
+name: Publish stable package
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.x'
+
+      - name: Build
+        run: dotnet build FnTools.DesignTokens.slnx -c Release --nologo
+
+      - name: Test
+        run: dotnet test FnTools.DesignTokens.slnx -c Release --nologo --no-build
+
+      - name: Pack (stable — version from tag)
+        run: |
+          # Strip leading 'v' from tag: v0.2.0 → 0.2.0
+          VERSION="${GITHUB_REF_NAME#v}"
+          dotnet pack FnTools.DesignTokens.slnx -c Release --nologo --no-build \
+            -o artifacts/ \
+            -p:Version="${VERSION}"
+
+      - name: Push to Forgejo NuGet feed
+        run: |
+          for pkg in artifacts/*.nupkg; do
+            dotnet nuget push "$pkg" \
+              --source https://forgejo.ivanthegeek.com/api/packages/FnTools/nuget/index.json \
+              --api-key "${{ secrets.FORGEJO_NUGET_TOKEN }}" \
+              --skip-duplicate
+          done
