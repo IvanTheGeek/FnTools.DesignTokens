@@ -51,6 +51,26 @@ let private mediaFixture = """
 }
 """
 
+// CssNative: relative units and CSS math functions — valid CSS but not DTCG-tokenisable.
+// Note: fr is a grid unit and only appears in grid-template-* properties which are not
+// in designProperties, so fr is unreachable through the public audit API.
+let private cssNativeFixture = """
+.text {
+  font-size: 1.2em;
+  letter-spacing: 0.05em;
+  line-height: 150%;
+}
+.layout {
+  width: 80vw;
+  height: 100vh;
+  gap: 2ch;
+}
+.responsive {
+  padding: clamp(8px, 2vw, 24px);
+  font-size: calc(1rem + 0.5vw);
+}
+"""
+
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -201,5 +221,77 @@ let allTests =
             match findEntry "#eef5ed" result with
             | None   -> failtest "missing #eef5ed"
             | Some e -> Expect.isNone e.MatchedToken "#eef5ed has no token match"
+
+
+        // ─── CssNative ───────────────────────────────────────────────────────
+
+        testList "CssNative: relative units and CSS math functions" [
+
+            testCase "em unit classified as CssNative" <| fun () ->
+                let result = CssAudit.audit cssNativeFixture
+                match findEntry "1.2em" result with
+                | None   -> failtest "missing 1.2em"
+                | Some e -> Expect.equal e.ValueType CssAudit.CssNative "CssNative"
+
+            testCase "percentage unit classified as CssNative" <| fun () ->
+                let result = CssAudit.audit cssNativeFixture
+                match findEntry "150%" result with
+                | None   -> failtest "missing 150%"
+                | Some e -> Expect.equal e.ValueType CssAudit.CssNative "CssNative"
+
+            testCase "vw unit classified as CssNative" <| fun () ->
+                let result = CssAudit.audit cssNativeFixture
+                match findEntry "80vw" result with
+                | None   -> failtest "missing 80vw"
+                | Some e -> Expect.equal e.ValueType CssAudit.CssNative "CssNative"
+
+            testCase "vh unit classified as CssNative" <| fun () ->
+                let result = CssAudit.audit cssNativeFixture
+                match findEntry "100vh" result with
+                | None   -> failtest "missing 100vh"
+                | Some e -> Expect.equal e.ValueType CssAudit.CssNative "CssNative"
+
+            testCase "ch unit classified as CssNative" <| fun () ->
+                let result = CssAudit.audit cssNativeFixture
+                match findEntry "2ch" result with
+                | None   -> failtest "missing 2ch"
+                | Some e -> Expect.equal e.ValueType CssAudit.CssNative "CssNative"
+
+            testCase "clamp() expression classified as CssNative" <| fun () ->
+                let result = CssAudit.audit cssNativeFixture
+                match findEntry "clamp(8px, 2vw, 24px)" result with
+                | None   -> failtest "missing clamp() entry"
+                | Some e -> Expect.equal e.ValueType CssAudit.CssNative "CssNative"
+
+            testCase "calc() expression classified as CssNative" <| fun () ->
+                let result = CssAudit.audit cssNativeFixture
+                match findEntry "calc(1rem + 0.5vw)" result with
+                | None   -> failtest "missing calc() entry"
+                | Some e -> Expect.equal e.ValueType CssAudit.CssNative "CssNative"
+
+            testCase "CssNative entries are included in audit results (not filtered like Unknown)" <| fun () ->
+                let result = CssAudit.audit cssNativeFixture
+                let nativeEntries = result.Entries |> List.filter (fun e -> e.ValueType = CssAudit.CssNative)
+                Expect.isGreaterThan (List.length nativeEntries) 0 "CssNative entries present"
+
+            testCase "CssNative entries have MatchedToken = None in auditAgainst" <| fun () ->
+                let file = Format.parse CssAuditMatch.tokensJson |> Result.defaultWith (fun e -> failwithf "%A" e)
+                let result = CssAudit.auditAgainst cssNativeFixture file
+                let nativeEntries = result.Entries |> List.filter (fun e -> e.ValueType = CssAudit.CssNative)
+                Expect.isGreaterThan (List.length nativeEntries) 0 "has CssNative entries"
+                nativeEntries |> List.iter (fun e ->
+                    Expect.isNone e.MatchedToken
+                        (sprintf "%s: CssNative values have no token match" e.RawValue))
+
+            testCase "px and rem still classified as Dimension (not CssNative)" <| fun () ->
+                let result = CssAudit.audit fixture
+                match findEntry "8px" result with
+                | None   -> failtest "missing 8px"
+                | Some e -> Expect.equal e.ValueType CssAudit.Dimension "8px is Dimension"
+                match findEntry "0.875rem" result with
+                | None   -> failtest "missing 0.875rem"
+                | Some e -> Expect.equal e.ValueType CssAudit.Dimension "0.875rem is Dimension"
+
+        ]
 
     ]

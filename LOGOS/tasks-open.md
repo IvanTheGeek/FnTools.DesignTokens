@@ -109,7 +109,11 @@ import/export. See `penpot-api.md` for the three-surface comparison.
 ### CSS ingestion — non-standard unit handling
 
 - [x] `CssIngest`: values with non-DTCG units (`em`, `%`, `vw`, `vh`, etc.) now emit an explicit `Skipped` warning instead of silently stripping the unit and emitting a bare `number` token. Fix: remove `em`-stripping from `tryParseNumber`; updated test. 2026-05-04.
-- [ ] `CssAudit`: add a future `CssNative` value type for values that are valid CSS but not DTCG-tokenisable (`em`/`%`/`vw`/`vh`/`ch`/`fr` dimensions, CSS `clamp()`/`calc()` expressions). Currently they are `Unknown` and excluded; surfacing them as a named category lets the bootstrap workflow direct them to the component layer explicitly.
+- [x] `CssAudit`: `CssNative` value type for values that are valid CSS but not DTCG-tokenisable
+  (`em`/`%`/`vw`/`vh`/`ch` relative units and `clamp()`/`calc()` expressions). Previously `Unknown`
+  and silently excluded; now surface as a named category so the bootstrap workflow can route them to
+  the component layer explicitly. `fr` noted unreachable via `designProperties` (grid-specific).
+  10 new tests. 243/243 pass. 2026-05-04.
 
 ### FnHCI non-visual targets
 

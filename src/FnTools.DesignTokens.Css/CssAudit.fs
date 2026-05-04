@@ -19,6 +19,11 @@ type AuditValueType =
     | FontFamily
     | FontWeight
     | Shadow
+    /// Valid CSS but not DTCG-tokenisable: relative units (em, %, vw, vh, ch, ex,
+    /// fr, lh, svh, dvh, vmin, vmax) and CSS math functions (clamp(), calc()).
+    /// Included in audit results so the bootstrap workflow can route them to the
+    /// component layer explicitly, rather than silently discarding them as Unknown.
+    | CssNative
     | Unknown
 
 type AuditOccurrence = {
@@ -190,13 +195,25 @@ let private isDimensionValue (v: string) : bool =
 let private isDurationValue (v: string) : bool =
     Regex.IsMatch(v, @"^\d+(?:\.\d+)?(ms|s)$")
 
+/// Relative or viewport-relative dimension units that are valid CSS but cannot be
+/// represented as a DTCG dimension token (which requires px or rem).
+let private isCssNativeDimension (v: string) : bool =
+    Regex.IsMatch(v, @"^-?\d+(?:\.\d+)?(em|%|vw|vh|ch|ex|fr|lh|svh|dvh|svw|dvw|vmin|vmax)$")
+
+/// CSS math functions that are valid as property values but cannot be reduced to a
+/// single DTCG token value without runtime evaluation.
+let private isCssNativeExpression (v: string) : bool =
+    v.StartsWith "clamp(" || v.StartsWith "calc("
+
 let private classifyValue (prop: string) (v: string) : AuditValueType =
     if prop = "font-family" then FontFamily
     elif prop = "font-weight" then FontWeight
     elif prop = "box-shadow" || prop = "text-shadow" then Shadow
-    elif isColorValue v    then Color
-    elif isDurationValue v then Duration
-    elif isDimensionValue v then Dimension
+    elif isColorValue v          then Color
+    elif isDurationValue v       then Duration
+    elif isDimensionValue v      then Dimension
+    elif isCssNativeDimension v  then CssNative
+    elif isCssNativeExpression v then CssNative
     else Unknown
 
 
@@ -205,6 +222,8 @@ let private classifyValue (prop: string) (v: string) : AuditValueType =
 /// Audit a CSS or HTML string for hardcoded design values in regular rules.
 ///
 /// Returns one AuditEntry per unique raw value, sorted by Count descending.
+/// Includes <see cref="AuditValueType.CssNative"/> values (relative units, clamp/calc)
+/// so the bootstrap workflow can route them to the component layer explicitly.
 /// Excludes:
 ///   - :root custom-property declarations (use CssIngest for those)
 ///   - var() references (already resolved through the token system)
