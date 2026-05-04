@@ -67,6 +67,13 @@ Result: `/tmp/pattern-card.svg` (saved 2026-05-04)
 - Component boundaries — children are flattened into SVG groups
 - Variant metadata — no component name, no props
 
+### Design tab Export → SVG
+
+Verified identical to `export_shape`. The Design tab Export → SVG goes through the same
+render pipeline — same `@font-face` URLs, same `fill: rgb(...)` values, same image media
+IDs. The only difference is a session-scoped UUID in one clip-path ID, which is cosmetic.
+There is no separate token-aware SVG format in Penpot.
+
 ### When to use
 
 Visual snapshot only. Valid for thumbnails, documentation screenshots, or pixel-comparison
