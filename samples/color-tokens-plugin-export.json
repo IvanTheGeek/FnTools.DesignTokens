@@ -1,0 +1,74 @@
+{
+  "primary.pale.100": {
+    "$type": "color",
+    "$value": "#c4d5e6"
+  },
+  "primary.pale.200": {
+    "$type": "color",
+    "$value": "#b2c8df"
+  },
+  "primary.pale.300": {
+    "$type": "color",
+    "$value": "#9fbbd8"
+  },
+  "primary.pale.400": {
+    "$type": "color",
+    "$value": "#8caed0"
+  },
+  "primary.pale.500": {
+    "$type": "color",
+    "$value": "#78a0c9"
+  },
+  "primary.pale.600": {
+    "$type": "color",
+    "$value": "#6391c0"
+  },
+  "primary.pale.700": {
+    "$type": "color",
+    "$value": "#4d82b8"
+  },
+  "primary.pale.800": {
+    "$type": "color",
+    "$value": "#3470ae"
+  },
+  "primary.pale.900": {
+    "$type": "color",
+    "$value": "#1259a1"
+  },
+  "primary.shade.100": {
+    "$type": "color",
+    "$value": "#1259a1"
+  },
+  "primary.shade.200": {
+    "$type": "color",
+    "$value": "#105090"
+  },
+  "primary.shade.300": {
+    "$type": "color",
+    "$value": "#0f4882"
+  },
+  "primary.shade.400": {
+    "$type": "color",
+    "$value": "#0d4074"
+  },
+  "primary.shade.500": {
+    "$type": "color",
+    "$value": "#0b3967"
+  },
+  "primary.shade.600": {
+    "$type": "color",
+    "$value": "#0a325a"
+  },
+  "primary.shade.700": {
+    "$type": "color",
+    "$value": "#092b4d"
+  },
+  "primary.shade.800": {
+    "$type": "color",
+    "$value": "#072441"
+  },
+  "primary.shade.900": {
+    "$type": "color",
+    "$value": "#061d34"
+  }
+}

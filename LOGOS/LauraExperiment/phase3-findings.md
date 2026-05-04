@@ -205,15 +205,90 @@ correct resolution. Put in `$extensions.tokensStudio.metadata` or a parallel fil
 
 ---
 
+## Gap 5 — HSL expression palette colors (mechanical fix + design decision)
+
+`Color/Palettes and Scales` — the entire palette set — uses Tokens Studio's HSL
+expression syntax rather than hex literals:
+
+```
+palette.blue.100: hsla({hue.blue},{saturation.colors},{lightness.100},1)
+palette.blue.200: hsla({hue.blue},{saturation.colors},{lightness.200},1)
+...
+```
+
+Where the alias targets are `number` tokens:
+```
+hue.blue        = 203
+saturation.colors = "70%"   (Tokens Studio stores as string with %)
+lightness.100   = 95
+lightness.200   = 88
+...
+```
+
+**110 tokens (36%)** use this pattern — the entire palette. DTCG 2025.10 `color` type
+requires hex, named color, or `{alias}` references. HSL expressions are not valid.
+
+**Shim policy options** (same structure as math expressions):
+- **A — Preserve as-is**: emit as string with type `color`. Downstream must evaluate.
+- **B — Evaluate at import time**: resolve alias chain, compute `hsl()`, convert to hex.
+  Straightforward: saturation value needs `%` strip from string; `hsl(h, s%, l%)` → hex.
+- **C — Skip with warning**: emit `Skipped` entries. 110 tokens → most palette unusable.
+
+Recommended: **B** — evaluate at import time. The math is deterministic (no theme
+dependence; `hue.*`, `saturation.*`, `lightness.*` are in the always-on
+`Foundations/Base` set). Unlike the `scale.*` tokens, HSL palette tokens have a
+single concrete resolved value. Convert to 6-digit hex in the shim.
+
+---
+
+## Gap 6 — `"transparent"` as color value (design decision)
+
+Two tokens use the CSS keyword `"transparent"` as their `color` value:
+```
+Color/Dark Component.color.button.primary.border  = "transparent"
+Color/Light Component.color.button.primary.border = "transparent"
+```
+
+DTCG 2025.10 does not list `transparent` as a valid `color` value (requires hex or alias).
+
+**Options:**
+- Map `"transparent"` → `"#00000000"` (transparent black, 8-digit hex DTCG form) — lossless
+- Map `"transparent"` → `"#ffffff00"` (transparent white) — equally valid, different intent
+- Keep as `"transparent"` with type coerced to `string` — but loses type semantics
+- Emit `Skipped` — safest but breaks two real tokens
+
+Recommended: **map to `#00000000`** in the shim. The intent is zero opacity; the
+specific RGB channels are irrelevant since alpha = 0.
+
+---
+
 ## What parses cleanly today (no shim needed)
 
-Against `FnTools.DesignTokens` `Format.parse` (DTCG 2025.10):
-- All 174 `color` tokens with hex literals and alias references ✓
-- All 12 `dimension` tokens with unit-bearing values ✓
-- All `number` tokens with literal numeric values (not math expressions) ✓
+Against `FnTools.DesignTokens` `Api.import` (DTCG 2025.10):
 
-**47 of 57 `number` tokens** pass as-is. The 10 math expressions would fail or require
-special handling.
+The full single-file export (`laura-system-library.tokens.json`) was run through
+`Api.import` after extracting each set's token map from the top-level set keys.
+Results by category:
+
+| Category | Count | Result |
+|---|---|---|
+| `color` — hex literals | 64 | ✓ parse OK |
+| `color` — alias references | ~10 | ✓ parse OK |
+| `color` — HSL expressions | 110 | ✗ Gap 5 |
+| `color` — `"transparent"` | 2 | ✗ Gap 6 |
+| `dimension` — unit values | 12 | ✓ parse OK |
+| `number` — literals | 47 | ✓ parse OK |
+| `number` — math expressions | 10 | ✗ Gap 2 |
+| `typography` composite | 18 | ✗ Gap 3 (field names) |
+| `spacing`, `borderRadius`, etc. | 44 | ✗ Gap 1 (type names) |
+
+**Clean without a shim: ~133 of 305 tokens (44%).** The remaining 172 require at
+least one shim transform. The largest single category is the HSL palette (110 tokens).
+
+Note: `Api.import` is the correct entry point — not `Format.parse` directly.
+The wrapper handles the top-level document structure (`$type`, `$value` at root,
+group nesting). When set content is passed directly, the set-key wrapper must be
+stripped first (single-file format wraps token maps under their set name key).
 
 ---
 
@@ -232,10 +307,13 @@ Required transforms:
 4. **Dimension unit injection** — add `px` suffix to bare-number dimension values
    (only for literal values; alias references pass through unchanged)
 5. **Math expression policy** — configurable: preserve / evaluate / skip
-6. **`$themes` extraction** — separate from token output; preserve as resolver config
-7. **`$metadata` extraction** — preserve `tokenSetOrder` as resolver `resolutionOrder`
+6. **HSL expression evaluation** — resolve alias chain, compute HSL, emit hex
+   (deterministic; no theme dependence for the palette set)
+7. **`"transparent"` normalization** — map to `"#00000000"` (zero-alpha hex)
+8. **`$themes` extraction** — separate from token output; preserve as resolver config
+9. **`$metadata` extraction** — preserve `tokenSetOrder` as resolver `resolutionOrder`
 
-Items 1–4 and 6–7 are mechanical transforms with no design ambiguity.
+Items 1–4, 6–7, 8–9 are mechanical transforms with no design ambiguity.
 Item 5 requires a policy decision and potentially a math expression evaluator.
 
 ---
@@ -341,6 +419,41 @@ tokens, and superseded by the native Tokens panel for everything else. The compa
 view and alias resolution UI are the only features not in the native panel, but they
 don't add value to our pipeline.
 
+### Color Tokens Plugin (colorTokens)
+Reads and writes colors only. Lets you paste a color palette in JSON and push it into
+the Tokens panel. Export produces a flat JSON file.
+
+**Export structure** (`samples/color-tokens-plugin-export.json`, 18 tokens):
+```json
+{
+  "primary.pale.100": { "$type": "color", "$value": "#c4d5e6" },
+  "primary.pale.200": { "$type": "color", "$value": "#b2c8df" },
+  ...
+}
+```
+
+The keys use dot-notation as flat strings — NOT nested objects. This is **incompatible**
+with FnTools.DesignTokens (and DTCG): token names cannot contain `.` and the parser
+expects nested JSON where the dot-path is expressed as object nesting:
+```json
+{
+  "primary": {
+    "pale": {
+      "100": { "$type": "color", "$value": "#c4d5e6" }
+    }
+  }
+}
+```
+
+`Api.import` rejects all 18 tokens immediately (invalid token name `"primary.pale.100"`).
+
+**Use case**: quick palette injection into an empty Tokens panel. Not useful for
+extracting tokens back out — wrong structure for DTCG consumers.
+
+### UI Color Palette (Tokens Studio-compatible)
+Paywalled. Requires account. Not tested. Manifest:
+`https://ui-color-palette.com/penpot/manifest.json`
+
 ---
 
 ## Open questions
@@ -352,3 +465,8 @@ don't add value to our pipeline.
   only `round(a * pow(b, n))` and `a * b` patterns appear.
 - Is `fontFamily` value always a single-element array in Tokens Studio, or can it be
   multi-element? If multi-element, join with comma (CSS font-family stack convention).
+- HSL evaluator: `saturation.colors` in Laura's file is stored as `"70%"` (string with
+  `%`). Is that always the case, or does Tokens Studio store it as a bare number?
+  Determines whether the shim strips the `%` or converts from a 0–1 float.
+- `"transparent"` → `"#00000000"` mapping: confirm that no information is lost given
+  the actual usage (button border at zero opacity where channel values are irrelevant).
