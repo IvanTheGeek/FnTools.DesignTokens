@@ -262,6 +262,35 @@ fetching from a local server.
 
 ---
 
+## Penpot Hub plugins — token-related
+
+Install via: Plugins menu → `+` → paste manifest URL (or browse Hub and click Install).
+
+**Token export / DTCG output:**
+
+| Plugin | Author | What it does | Manifest URL |
+|---|---|---|---|
+| UI Color Palette | Aurélien Grimaud | WCAG color palette manager; exports as W3C DTCG tokens, Tailwind | `https://penpot.ui-color-palette.com/manifest.json` |
+| Color styles to JSON | Juanfran | Exports color styles as JSON in Penpot Design Tokens format | `https://colors-to-tokens.plugins.penpot.app/assets/manifest.json` |
+| Color Tokens Plugin | Vicente Lyrio | Color palettes with tints/shades; export to Color Library or Design Tokens JSON | `https://penpot-color-tokens.netlify.app/manifest.json` |
+| 72F Design System Generator | Parth Kulkarni | Design system foundations (colors, typography, tokens); export to JSON or CSS | `https://72f-studio.github.io/72f-design-system-generator/manifest.json` |
+
+**Token management / inspection:**
+
+| Plugin | Author | What it does | Manifest URL |
+|---|---|---|---|
+| Design Token Manager | Elhombretecla | Full token manager inside Penpot — create, organise, maintain token sets | `https://design-token-manager.pages.dev/manifest.json` |
+| Design MD Skills | TypeUI | Generates design.md skill files for AI tools from colors, typography, spacing | `https://penpot-design-skills-plugin.vercel.app/manifest.json` |
+
+**Notes:**
+- Tokens Studio is **not** a separate plugin — it is built into Penpot natively as the Tokens panel.
+- The Penpot Plugin API for tokens (`penpot.library.local.tokens`) is functional in 2.14.4 but
+  officially marked "coming soon" — no `export` method exists yet on the API object.
+- Stable UI export path: Tokens panel → **Tools → Export** → produces JSON (Penpot claims DTCG
+  compliance; verify against FnTools before trusting).
+
+---
+
 ## Tokens Studio theme model
 
 A **theme** is a named preset that specifies which token sets are active — nothing more.
