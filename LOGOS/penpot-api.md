@@ -459,8 +459,10 @@ Pass `"~:attrs", null` to delete the token. Token `~:type` values match Penpot's
 rejected by Penpot's internal `token?` predicate — root cause unknown. Use individual
 `set-token` changes instead.
 
-**Dimension unit stripping**: values pushed as `"16px"` are resolved by the Plugin API
-as `16` (numeric, unit dropped). Both string and numeric forms are accepted on push.
+**Dimension `value` vs `resolvedValue`**: Penpot stores dimension values as strings
+including the unit (`"16px"` stays `"16px"` in `token.value`). `token.resolvedValue`
+is what Penpot applies to shapes — it parses the px string and returns a bare number
+(`16`). Both string (`"16px"`) and numeric (`16`) forms are accepted on push.
 
 **`~:modified-at`** in `set-token.attrs` is optional.
 

@@ -380,7 +380,7 @@ being available in Penpot's font registry.
 | `token?` predicate blocks inline `attrs.tokens` embed | Embedding tokens directly in `set-token-set.attrs.tokens` fails the custom `token_QMARK_` predicate — root cause unknown; individual `set-token` changes work |
 | Math-evaluator theme-bleed | Shim evaluates math at full-index time; spacing/radius values are wrong per-theme when multiple zoom sets exist |
 | Typography font availability | Typography tokens push correctly but Penpot only applies them visually if the font is loaded in its font registry |
-| Dimension unit stripping | Values pushed as `"16px"` are resolved as `16` (numeric, unit dropped). This is expected Penpot behavior but means our push values and resolved values differ in format |
+| Dimension `value` vs `resolvedValue` | `token.value` stores the string as-is (`"16px"` stays `"16px"`). `token.resolvedValue` is what Penpot applies to shapes — it parses the px string to a bare number (`16`). Both formats accepted on push. |
 | Set position is append-only | No `position` field on `set-token-set` — new sets are always appended; cannot control insertion position |
 | Local vs Library precedence | Local sets always win over connected Library sets when placed later in order. This could cause unintended overrides if a local set is accidentally active |
 
