@@ -247,16 +247,16 @@ let allTests =
                 | Error es -> failtestf "import failed: %A" es
                 | Ok r -> r
 
-            testCase "produces 232 resolved tokens (includes Foundations/Base with EvaluateMath)" <| fun () ->
-                Expect.equal (List.length result.Tokens) 232 "token count"
+            testCase "produces 250 resolved tokens (Foundations/Base + typography fontSize resolved)" <| fun () ->
+                Expect.equal (List.length result.Tokens) 250 "token count"
 
             testCase "no sets skipped (Foundations/Base math expressions now evaluate)" <| fun () ->
                 let skipped = result.Warnings |> List.choose (function SetSkipped n -> Some n | _ -> None)
                 Expect.isEmpty skipped "no sets skipped"
 
-            testCase "18 tokens unresolved (cross-type alias limitations)" <| fun () ->
+            testCase "0 tokens unresolved (typography fontSize aliases resolved at shim time)" <| fun () ->
                 let unresolved = result.Warnings |> List.choose (function TokenUnresolved _ -> Some () | _ -> None)
-                Expect.equal (List.length unresolved) 18 "unresolved count"
+                Expect.isEmpty unresolved "no unresolved tokens"
 
             testCase "palette color tokens resolve to hex color values" <| fun () ->
                 let paletteTokens =

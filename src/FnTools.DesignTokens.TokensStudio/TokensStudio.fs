@@ -163,7 +163,7 @@ module TokensStudio =
 
     let private mathRx =
         Regex(
-            @"round\s*\(|pow\s*\(|ceil\s*\(|floor\s*\(|abs\s*\(|sqrt\s*\(|min\s*\(|max\s*\(|\*|/",
+            @"round\s*\(|pow\s*\(|ceil\s*\(|floor\s*\(|abs\s*\(|sqrt\s*\(|min\s*\(|max\s*\(|sin\s*\(|cos\s*\(|tan\s*\(|log\s*\(|exp\s*\(|\*|/|\^",
             RegexOptions.Compiled)
 
     let private isMathExpression (s: string) =
@@ -171,15 +171,18 @@ module TokensStudio =
 
     // ── Math expression evaluator ─────────────────────────────────────────────
     // Recursive-descent evaluator for Tokens Studio number math expressions.
-    // Grammar: expr = add; add = mul ((+|-) mul)*; mul = unary ((*|/|%) unary)*;
-    //          unary = -unary | primary; primary = num | alias | (expr) | fn(args)
+    // Grammar: expr = add; add = mul ((+|-) mul)*; mul = pow ((*|/|%) pow)*;
+    //          pow = unary ('^' pow)*; unary = -unary | primary;
+    //          primary = num | alias | (expr) | fn(args)
+    // Any unrecognised character produces TUnknown, which propagates to None.
 
     module private MathEval =
 
         type Tok =
             | TNum of float | TAlias of string | TIdent of string
             | TLParen | TRParen | TComma
-            | TPlus | TMinus | TStar | TSlash | TPercent | TEOF
+            | TPlus | TMinus | TStar | TSlash | TPercent | TCaret
+            | TUnknown of char | TEOF
 
         let private tokenize (s: string) : Tok array =
             let result = ResizeArray<Tok>()
@@ -191,7 +194,7 @@ module TokensStudio =
                 | '{' ->
                     let j = s.IndexOf('}', i + 1)
                     if j > i then result.Add(TAlias s.[i+1..j-1]); i <- j + 1
-                    else i <- i + 1
+                    else result.Add(TUnknown '{'); i <- i + 1   // unclosed alias — explicit failure
                 | '(' -> result.Add TLParen;  i <- i + 1
                 | ')' -> result.Add TRParen;  i <- i + 1
                 | ',' -> result.Add TComma;   i <- i + 1
@@ -200,19 +203,20 @@ module TokensStudio =
                 | '*' -> result.Add TStar;    i <- i + 1
                 | '/' -> result.Add TSlash;   i <- i + 1
                 | '%' -> result.Add TPercent; i <- i + 1
+                | '^' -> result.Add TCaret;   i <- i + 1
                 | c when Char.IsDigit c || (c = '.' && i + 1 < len && Char.IsDigit s.[i+1]) ->
                     let mutable j = i
                     while j < len && (Char.IsDigit s.[j] || s.[j] = '.') do j <- j + 1
                     match Double.TryParse(s.[i..j-1], Globalization.NumberStyles.Float, Globalization.CultureInfo.InvariantCulture) with
                     | true, f -> result.Add(TNum f)
-                    | _ -> ()
+                    | _       -> result.Add(TUnknown s.[i])   // malformed number literal — explicit failure
                     i <- j
                 | c when Char.IsLetter c || c = '_' ->
                     let mutable j = i
                     while j < len && (Char.IsLetterOrDigit s.[j] || s.[j] = '_') do j <- j + 1
                     result.Add(TIdent s.[i..j-1])
                     i <- j
-                | _ -> i <- i + 1
+                | c -> result.Add(TUnknown c); i <- i + 1   // unrecognised character — explicit failure
             result.Add TEOF
             result.ToArray()
 
@@ -242,7 +246,18 @@ module TokensStudio =
                 | "pow",   [x; y] -> Some (Math.Pow(x, y))
                 | "min",   [x; y] -> Some (Math.Min(x, y))
                 | "max",   [x; y] -> Some (Math.Max(x, y))
-                | _ -> None
+                | "sin",   [x]    -> Some (Math.Sin x)
+                | "cos",   [x]    -> Some (Math.Cos x)
+                | "tan",   [x]    -> Some (Math.Tan x)
+                | "asin",  [x]    -> Some (Math.Asin x)
+                | "acos",  [x]    -> Some (Math.Acos x)
+                | "atan",  [x]    -> Some (Math.Atan x)
+                | "atan2", [x; y] -> Some (Math.Atan2(x, y))
+                | "log",   [x]    -> Some (Math.Log x)
+                | "log2",  [x]    -> Some (Math.Log2 x)
+                | "log10", [x]    -> Some (Math.Log10 x)
+                | "exp",   [x]    -> Some (Math.Exp x)
+                | _ -> None   // unrecognised function or wrong arity → explicit failure
 
             let rec evalExpr () = evalAdd ()
 
@@ -265,29 +280,42 @@ module TokensStudio =
                 result
 
             and evalMul () =
-                let mutable result : float option = evalUnary ()
+                let mutable result : float option = evalPow ()
                 let mutable cont = result.IsSome
                 while cont do
                     match peek () with
                     | TStar ->
                         consume ()
-                        match evalUnary () with
+                        match evalPow () with
                         | None   -> result <- None; cont <- false
                         | Some r -> result <- result |> Option.map (fun lhs -> lhs * r)
                     | TSlash ->
                         consume ()
-                        match evalUnary () with
+                        match evalPow () with
                         | None   -> result <- None; cont <- false
                         | Some r ->
                             if r = 0.0 then result <- None; cont <- false
                             else result <- result |> Option.map (fun lhs -> lhs / r)
                     | TPercent ->
                         consume ()
-                        match evalUnary () with
+                        match evalPow () with
                         | None   -> result <- None; cont <- false
                         | Some r -> result <- result |> Option.map (fun lhs -> lhs % r)
                     | _ -> cont <- false
                 result
+
+            // Right-associative: a^b^c = a^(b^c). Higher precedence than *.
+            and evalPow () =
+                match evalUnary () with
+                | None -> None
+                | Some lhs ->
+                    match peek () with
+                    | TCaret ->
+                        consume ()
+                        match evalPow () with   // right-recursive for right-associativity
+                        | None     -> None
+                        | Some rhs -> Some (Math.Pow(lhs, rhs))
+                    | _ -> Some lhs
 
             and evalUnary () =
                 match peek () with
@@ -316,6 +344,7 @@ module TokensStudio =
                             if peek () = TRParen then consume ()
                             applyFn name args
                     else None
+                | TUnknown _ -> None   // unrecognised character — explicit failure, not silent skip
                 | _ -> None
 
             and evalArgList () : float list option =
@@ -434,7 +463,7 @@ module TokensStudio =
                 else None
 
 
-    let private transformTypographyValue (v: JsonNode) : JsonNode =
+    let private transformTypographyValue (index: Map<string, string>) (v: JsonNode) : JsonNode =
         match v with
         | :? JsonObject as obj ->
             let result = JsonObject()
@@ -455,10 +484,15 @@ module TokensStudio =
                         | _ -> if kvp.Value <> null then kvp.Value.DeepClone()
                                else JsonValue.Create(null: string) :> JsonNode
                     | "fontSizes" ->
-                        // Dimension: alias ref stays as string; literals → {value, unit}
+                        // Dimension: literals → {value, unit}; alias refs resolved eagerly
+                        // via the flat index so cross-type number→dimension aliases resolve
+                        // at shim time rather than failing in the type-strict resolver.
                         if isAlias rawStr then
-                            if kvp.Value <> null then kvp.Value.DeepClone()
-                            else JsonValue.Create(null: string) :> JsonNode
+                            match MathEval.tryEval index Set.empty rawStr with
+                            | Some f -> dimensionObj f "px"
+                            | None   ->
+                                if kvp.Value <> null then kvp.Value.DeepClone()
+                                else JsonValue.Create(null: string) :> JsonNode
                         else
                             toDimensionNode rawStr
                             |> Option.defaultWith (fun () ->
@@ -610,7 +644,7 @@ module TokensStudio =
 
         // ── typography: rename composite field names ──────────────────────────
         | "typography" ->
-            Some (dtcgType, transformTypographyValue value)
+            Some (dtcgType, transformTypographyValue index value)
 
         // ── everything else: pass through with type rename ────────────────────
         | _ ->
