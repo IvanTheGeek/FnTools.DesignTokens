@@ -447,6 +447,62 @@ Navigate directly to the TOKENS panel by appending `&layout=tokens` to any works
 
 ---
 
+## Plugin API — token coverage query
+
+Query which shapes reference a given token path (requires plugin connected):
+
+```javascript
+// Single token lookup
+function findShapesUsingToken(tokenPath) {
+  return penpot.currentPage.findShapes()
+    .filter(s => s.tokens && Object.values(s.tokens).includes(tokenPath))
+    .map(s => ({
+      id:       s.id,
+      name:     s.name,
+      type:     s.type,
+      property: Object.entries(s.tokens).find(([, v]) => v === tokenPath)?.[0]
+    }));
+}
+
+// Full coverage map: token path → [{ shape, property }]
+const allWithTokens = penpot.currentPage.findShapes()
+  .filter(s => s.tokens && Object.keys(s.tokens).length > 0);
+const coverageMap = {};
+for (const shape of allWithTokens) {
+  for (const [prop, tokenPath] of Object.entries(shape.tokens)) {
+    if (!coverageMap[tokenPath]) coverageMap[tokenPath] = [];
+    coverageMap[tokenPath].push({ shape: shape.name, property: prop });
+  }
+}
+```
+
+`shape.tokens` is a plain object: `{ "fill": "color.accent.default", "borderRadius": "spacing.sm" }`.
+
+## Plugin API — token write (what works and what doesn't)
+
+**`token.applyToShapes(property, [shapes])`** — exists on token objects but is a silent
+no-op. Runs without error; `shape.tokens` and fill color remain unchanged. Do not use.
+
+**`token.applyToSelected(property)`** — same: no-op despite running cleanly.
+
+**`shape.applyToken(property, value)`** — throws "check error". Not usable.
+
+**Working write path**: REST `mod-obj` (see REST token change types section above).
+
+## Plugin API — token set management
+
+`penpot.library.local.tokens` exposes:
+- `sets` — iterable of token sets
+- `addSet(name)` — creates a new empty set
+- `addTheme(...)` — creates a new theme
+
+Each set exposes: `id`, `name`, `active` (boolean), `toggleActive()`, `tokens` (iterable),
+`addToken(...)`, `duplicate()`, `remove()`.
+
+Each token exposes: `id`, `name`, `type`, `value`, `resolvedValue`, `resolvedValueString`,
+`description`, `duplicate()`, `remove()`, `applyToShapes(prop, shapes)` (no-op),
+`applyToSelected(prop)` (no-op).
+
 ## Notes for AI agents
 
 - The TOKENS tab is in the left sidebar: LAYERS | ASSETS | TOKENS

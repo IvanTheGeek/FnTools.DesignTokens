@@ -25,9 +25,10 @@ import/export. See `penpot-api.md` for the three-surface comparison.
   read back via both `get-file` and MCP Plugin API — exact match. Type name corrections
   documented in `penpot-api.md`. MCP Plugin API is read-only (no write surface in 2.14.4).
   Findings → `phase2-findings.md`. 2026-05-04.
-- [ ] **MCP coverage query** — use the MCP to query which shapes in a test frame have
-  `appliedTokens` referencing a given token path; validate coverage. (Token push done;
-  coverage query still open — requires shapes with `appliedTokens` set.)
+- [x] **MCP coverage query** — MCP Plugin API coverage query verified: `findShapesUsingToken`
+  and full `coverageMap` pattern documented. Key finding: `applyToShapes`/`applyToSelected`
+  are silent no-ops; REST `mod-obj` with `~:applied-tokens` set op is the correct write path.
+  Shapes created + bound via REST; read back via `shape.tokens` confirmed. 2026-05-04.
 - [x] **Theme-aware CSS emitter** — `Api.importTokensStudioThemed (config) (themeNames) (json)`
   resolves base (global) sets and per-theme sets separately; `CssEmitter.emitThemed`
   emits `:root` + `[data-theme="X"]` override blocks for each named theme's diffs.

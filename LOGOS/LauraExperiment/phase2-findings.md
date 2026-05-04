@@ -145,6 +145,73 @@ The set appears alongside the pre-existing `lltokens-hex` set with no conflicts.
 
 ---
 
+## MCP coverage query
+
+After applying `appliedTokens` to shapes via REST `mod-obj`, the Plugin API can query
+which shapes reference a given token path:
+
+```javascript
+function findShapesUsingToken(tokenPath) {
+  return penpot.currentPage.findShapes()
+    .filter(s => s.tokens && Object.values(s.tokens).includes(tokenPath))
+    .map(s => ({
+      id:       s.id,
+      name:     s.name,
+      type:     s.type,
+      property: Object.entries(s.tokens).find(([, v]) => v === tokenPath)?.[0]
+    }));
+}
+```
+
+To build a full coverage map (token path → shapes using it):
+
+```javascript
+const allWithTokens = penpot.currentPage.findShapes()
+  .filter(s => s.tokens && Object.keys(s.tokens).length > 0);
+const coverageMap = {};
+for (const shape of allWithTokens) {
+  for (const [prop, tokenPath] of Object.entries(shape.tokens)) {
+    if (!coverageMap[tokenPath]) coverageMap[tokenPath] = [];
+    coverageMap[tokenPath].push({ shape: shape.name, property: prop });
+  }
+}
+```
+
+Both patterns verified on the test shapes in TokenExperiments. The Plugin API reads
+`appliedTokens` as `shape.tokens` — a plain object with CSS property → token-path entries.
+
+### Plugin API write path for appliedTokens — applyToShapes is a no-op
+
+`token.applyToShapes('fill', [shape])` and `token.applyToSelected('fill')` both execute
+without error but make no persistent change. `shape.tokens` remains `{}` and fills stay
+unchanged. The function dispatches internally but nothing reaches the server.
+
+**Working write path**: REST `mod-obj` with `~:applied-tokens` set operation:
+
+```json
+["^ ",
+  "~:type",    "~:mod-obj",
+  "~:id",      "~u<shape-uuid>",
+  "~:page-id", "~u<page-uuid>",
+  "~:operations", [["^ ",
+    "~:type", "~:set",
+    "~:attr", "~:applied-tokens",
+    "~:val",  ["^ ", "fill", "color.accent.default", "borderRadius", "spacing.sm"]
+  ]]
+]
+```
+
+`appliedTokens` value is a transit map with **plain string keys** (not keywords) and token
+path strings as values.
+
+**Caveat**: setting `appliedTokens` via REST does not update the shape's rendered fill color.
+The shape retains its existing fill data (`#B1B2B5` default). Penpot resolves token values
+into shape properties when you interact with the shape in the UI (or when the Tokens panel
+re-applies). For headless coverage tracking, the `appliedTokens` binding is sufficient; for
+visual correctness, the fill must be updated separately to match the token's resolved value.
+
+---
+
 ## Open questions from Phase 2
 
 - Can REST push tokens into a specific position in the set order (affecting resolution
