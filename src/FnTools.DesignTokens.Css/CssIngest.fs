@@ -211,11 +211,12 @@ let private tryParseFontFamily (s: string) : JsonNode option =
             for f in families do arr.Add(JsonValue.Create(f))
             Some (tokenLeaf "fontFamily" (arr :> JsonNode))
 
-/// Handles bare numbers (line-height, letter-spacing) and numbers with em (stripped).
+/// Handles bare numbers (e.g. line-height 1.5, font-weight 600).
+/// Returns None for any value with a unit suffix — non-DTCG units such as em, %,
+/// vw, vh, etc. fall through to the Skipped warning path in inferToken.
 /// nameParts used to detect fontWeight context.
 let private tryParseNumber (nameParts: string list) (s: string) : JsonNode option =
-    let stripped = if s.EndsWith "em" then s.[..s.Length - 3] else s
-    match tryParseF stripped with
+    match tryParseF s with
     | None -> None
     | Some v ->
         let t =

@@ -169,17 +169,17 @@ let allTests =
                         Expect.equal n 600 "weight.semibold = 600"
                     | other -> failtestf "expected Numeric FontWeight, got %A" other
 
-        testCase "cb: letter-spacing em parsed as Number" <| fun () ->
-            let _, parsed = ingestAndParse cbSample "cb"
+        testCase "cb: letter-spacing em emits Skipped warning, no token" <| fun () ->
+            let result, parsed = ingestAndParse cbSample "cb"
             match parsed with
             | Error es -> failtestf "%A" es
             | Ok file ->
-                match findLeaf "tracking" "tight" file with
-                | None -> failtest "missing tracking.tight"
-                | Some t ->
-                    match t.Value with
-                    | TokenValue.Number n -> Expect.floatClose Accuracy.high n -0.02 "-0.02"
-                    | other -> failtestf "expected Number, got %A" other
+                // -0.02em is a non-DTCG unit — must produce a warning, not a bare number token
+                let skipped =
+                    result.Warnings
+                    |> List.choose (function CssIngest.Skipped (n, _) -> Some n | _ -> None)
+                Expect.contains skipped "--cb-tracking-tight" "Skipped warning for tracking-tight"
+                Expect.isNone (findLeaf "tracking" "tight" file) "tracking.tight not in token file"
 
         testCase "cb: single-layer shadow parses" <| fun () ->
             let _, parsed = ingestAndParse cbSample "cb"
