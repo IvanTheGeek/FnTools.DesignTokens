@@ -144,9 +144,27 @@ module TokensStudio =
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    /// Vendor namespace for our $extensions payload (ADR-023).
-    let private extVendorKey = "com.fntools.designtokens"
-    let private extOriginalColorKey = "originalColor"
+    /// Vendor namespace for our $extensions payload (ADR-023, ADR-026).
+    let private extVendorKey             = "com.fntools.designtokens"
+    let private extOriginalColorKey      = "originalColor"      // export → TS (wide-gamut recovery)
+    let private extOriginalHslKey        = "originalHsl"        // shim → DTCG (HSL expression)
+    let private extTsTypeKey             = "tsType"             // shim → DTCG (TS type name)
+    let private extOriginalFontWeightKey = "originalFontWeight" // shim → DTCG (combined weight+style)
+
+    /// Keys written by the shim into DTCG $extensions. Stripped from TS input on
+    /// re-import (cloneExtensionsForOutput) and from DTCG output on export
+    /// (buildExtensionsObject) so they never appear in either artefact by accident.
+    /// extOriginalColorKey is listed here (shim strips it after using it for
+    /// value recovery) but is NOT in shimExportStripKeys (the export intentionally
+    /// writes it as a TS-side recovery payload — ADR-023).
+    let private shimAllInternalKeys =
+        Set.ofList [ extOriginalColorKey; extOriginalHslKey
+                     extTsTypeKey; extOriginalFontWeightKey ]
+
+    /// Keys stripped from DTCG Metadata.Extensions when writing TS output.
+    /// extOriginalColorKey is excluded: the export adds it as an ADR-023 payload.
+    let private shimExportStripKeys =
+        Set.ofList [ extOriginalHslKey; extTsTypeKey; extOriginalFontWeightKey ]
 
     let private tryGetNode (key: string) (obj: JsonObject) : JsonNode option =
         let mutable node : JsonNode | null = null
@@ -768,23 +786,48 @@ module TokensStudio =
             | Some d when d.Length > 0 -> tryParseColorFromDescription d
             | _ -> None
 
-    /// Clone the source $extensions for emission, removing our reconstruction
-    /// marker (which is a transport artifact, not part of canonical DTCG).
-    /// If our vendor namespace becomes empty after removal, the namespace key
-    /// itself is removed. Returns None when no extensions remain.
+    /// Clone the source $extensions for emission, removing all shim-internal
+    /// keys from our vendor namespace (ADR-023, ADR-026). These keys are
+    /// transport artefacts added by either the shim (originalHsl, tsType,
+    /// originalFontWeight) or the exporter (originalColor after it has been used
+    /// to recover the color value). If our vendor namespace becomes empty the
+    /// namespace key itself is removed. Returns None when no extensions remain.
     let private cloneExtensionsForOutput (child: JsonObject) : JsonObject option =
         match tryGetNode "$extensions" child with
         | Some (:? JsonObject as ext) ->
             let cloned = ext.DeepClone() :?> JsonObject
             match tryGetNode extVendorKey cloned with
             | Some (:? JsonObject as vendor) ->
-                if vendor.ContainsKey extOriginalColorKey then
-                    vendor.Remove extOriginalColorKey |> ignore
+                for key in shimAllInternalKeys do
+                    if vendor.ContainsKey key then vendor.Remove key |> ignore
                 if vendor.Count = 0 then cloned.Remove extVendorKey |> ignore
             | _ -> ()
             if cloned.Count = 0 then None else Some cloned
         | _ -> None
 
+
+    /// Add <c>key = value</c> under our vendor namespace in <c>leaf</c>'s $extensions.
+    /// Creates the $extensions object and/or vendor namespace as needed.
+    /// No-op if the key already exists (preserves any earlier-written value).
+    let private addVendorExtension (leaf: JsonObject) (key: string) (value: JsonNode) : unit =
+        let ext =
+            match tryGetNode "$extensions" leaf with
+            | Some (:? JsonObject as e) -> e
+            | _ ->
+                let e = JsonObject()
+                if leaf.ContainsKey "$extensions" then leaf.Remove "$extensions" |> ignore
+                leaf.Add("$extensions", e)
+                e
+        let vendor =
+            match tryGetNode extVendorKey ext with
+            | Some (:? JsonObject as v) -> v
+            | _ ->
+                let v = JsonObject()
+                if ext.ContainsKey extVendorKey then ext.Remove extVendorKey |> ignore
+                ext.Add(extVendorKey, v)
+                v
+        if not (vendor.ContainsKey key) then
+            vendor.Add(key, value)
 
     // ── Recursive set-tree walker ─────────────────────────────────────────────
 
@@ -846,8 +889,9 @@ module TokensStudio =
                             else scopeType.Value
                         match Option.ofObj child["$value"] with
                         | None -> ()
-                        | Some valueNode ->
-                        match transformToken config index mathIndex warnings isVariantFiltered childPath tsType valueNode with
+                        | Some origValueNode ->
+                        let origRawValue = origValueNode.ToString().Trim('"')
+                        match transformToken config index mathIndex warnings isVariantFiltered childPath tsType origValueNode with
                         | None -> ()
                         | Some (dtcgType, newValue) ->
                             let leaf = JsonObject()
@@ -873,6 +917,20 @@ module TokensStudio =
                             match cloneExtensionsForOutput child with
                             | Some ext -> leaf.Add("$extensions", ext)
                             | None     -> ()
+                            // ADR-026: annotate shim-time data losses so export can restore them.
+                            // (1) TS type rename — record the original TS type when it differs
+                            //     from the emitted DTCG type (e.g. "spacing" → "dimension").
+                            let tsTypeRenamed = (typeRenames |> Map.tryFind tsType |> Option.defaultValue tsType) <> tsType
+                            if tsTypeRenamed then
+                                addVendorExtension leaf extTsTypeKey (JsonValue.Create(tsType))
+                            // (2) HSL color expression — record the original hsl(...) string
+                            //     before it was collapsed to a hex value.
+                            if dtcgType = "color" && not (isAlias origRawValue) && hslRx.IsMatch(origRawValue) then
+                                addVendorExtension leaf extOriginalHslKey (JsonValue.Create(origRawValue))
+                            // (3) FontWeight combined value — record "400 Italic" style strings
+                            //     before the numeric part was extracted.
+                            if tsType = "fontWeights" && not (isAlias origRawValue) && origRawValue.Contains(" ") then
+                                addVendorExtension leaf extOriginalFontWeightKey (JsonValue.Create(origRawValue))
                             result.Add(kvp.Key, leaf)
                     elif isTypelessAlias then
                         // Typeless alias leaf — emit $value only; $type is inferred later
@@ -1435,17 +1493,45 @@ module TokensStudio =
 
     // ── Export: tree walker ───────────────────────────────────────────────────
 
+    /// Read a string value from our vendor namespace in a token's Extensions list.
+    /// Returns None if the key is absent or the value is not a string.
+    let private tryReadVendorString (key: string) (ext: Extensions) : string option =
+        ext
+        |> List.tryPick (fun (k, v) ->
+            if k = extVendorKey then
+                match v with
+                | :? JsonObject as vendor ->
+                    match tryGetString key vendor with
+                    | Some s when s.Length > 0 -> Some s
+                    | _ -> None
+                | _ -> None
+            else None)
+
     /// Build a token's $extensions object combining user-authored extensions
     /// (Token.Metadata.Extensions) with our optional originalColor payload (ADR-023).
-    /// Returns None if neither is present.
+    /// Shim-internal keys in shimExportStripKeys are stripped from the vendor
+    /// namespace so they never appear in TS output (ADR-026).
+    /// Returns None if neither user extensions nor origColor are present.
     let private buildExtensionsObject
         (userExt   : Extensions)
         (origColor : JsonObject option)
         : JsonObject option =
         let outer = JsonObject()
-        // 1. Pass through any user-authored extensions first (preserve insertion order).
+        // 1. Pass through user-authored extensions, stripping shim-internal keys
+        //    from our vendor namespace so they don't pollute TS output.
         for (k, v) in userExt do
-            outer.Add(k, v.DeepClone())
+            if k = extVendorKey then
+                match v with
+                | :? JsonObject as vendor ->
+                    let stripped = JsonObject()
+                    for kv in vendor do
+                        if not (shimExportStripKeys.Contains kv.Key) then
+                            stripped.Add(kv.Key, kv.Value.DeepClone())
+                    if stripped.Count > 0 then
+                        outer.Add(k, stripped)
+                | _ -> outer.Add(k, v.DeepClone())
+            else
+                outer.Add(k, v.DeepClone())
         // 2. Attach our originalColor payload under the vendor namespace.
         match origColor with
         | None -> ()
@@ -1478,13 +1564,30 @@ module TokensStudio =
             match node with
             | TokenLeaf t ->
                 let leaf = JsonObject()
-                match t.Type with
-                | Some tt -> leaf.Add("$type", JsonValue.Create(typeNameStr tt))
-                | None    -> ()
+                // ADR-026: if the shim recorded the original TS type (e.g. "spacing"),
+                // use it as $type; otherwise fall back to the DTCG type name.
+                let origTsType = tryReadVendorString extTsTypeKey t.Metadata.Extensions
+                let typeStr =
+                    match origTsType with
+                    | Some ts -> ts
+                    | None    ->
+                        match t.Type with
+                        | Some tt -> typeNameStr tt
+                        | None    -> ""
+                if typeStr <> "" then leaf.Add("$type", JsonValue.Create(typeStr))
                 match exportValue cPath t.Value warnings with
                 | None -> ()
                 | Some (vn, origColor, descAnn) ->
-                    leaf.Add("$value", vn)
+                    // ADR-026: prefer the original HSL expression or fontWeight combined
+                    // value over the lossy output from exportValue.
+                    let recoveredValue : JsonNode =
+                        match tryReadVendorString extOriginalHslKey t.Metadata.Extensions with
+                        | Some hsl -> JsonValue.Create(hsl)
+                        | None ->
+                            match tryReadVendorString extOriginalFontWeightKey t.Metadata.Extensions with
+                            | Some fw -> JsonValue.Create(fw)
+                            | None    -> vn
+                    leaf.Add("$value", recoveredValue)
                     let desc =
                         match t.Metadata.Description, descAnn with
                         | Some d, Some a -> Some (d + "\n" + a)

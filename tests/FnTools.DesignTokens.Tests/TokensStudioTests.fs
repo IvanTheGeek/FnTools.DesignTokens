@@ -833,7 +833,10 @@ let allTests =
                 let outJson, _ = TokensStudio.exportToTokensStudio sr sets
                 Expect.stringContains outJson "\"8px\"" "dimension emitted as string"
 
-            testCase "exportToTokensStudio: type names are DTCG names, not TS legacy names" <| fun () ->
+            testCase "exportToTokensStudio: original TS type names are recovered on export (ADR-026)" <| fun () ->
+                // When the shim renames a TS type (spacing→dimension, fontSizes→dimension),
+                // it records the original TS name in $extensions so exportToTokensStudio can
+                // restore it. A pure DTCG round-trip still emits "dimension".
                 let json = """
 {
   "s": {
@@ -844,9 +847,9 @@ let allTests =
 }"""
                 let sr, sets = shimAndParse json
                 let outJson, _ = TokensStudio.exportToTokensStudio sr sets
-                Expect.stringContains outJson "\"dimension\""     "DTCG 'dimension' type in output"
-                Expect.isFalse (outJson.Contains("\"spacing\""))   "no TS legacy 'spacing' type"
-                Expect.isFalse (outJson.Contains("\"fontSizes\"")) "no TS legacy 'fontSizes' type"
+                Expect.stringContains outJson "\"spacing\""   "original 'spacing' type recovered"
+                Expect.stringContains outJson "\"fontSizes\"" "original 'fontSizes' type recovered"
+                Expect.isFalse (outJson.Contains("\"dimension\"")) "DTCG 'dimension' not emitted for renamed types"
 
             // ─── Round-trip via $extensions (ADR-023) ─────────────────────────
 
@@ -1097,5 +1100,74 @@ let allTests =
                 let setJson = sr.Sets |> Map.toList |> List.head |> snd
                 Expect.stringContains setJson "com.example.vendor" "user vendor key survives shim"
                 Expect.stringContains setJson "approved"          "user data survives shim"
+
+            // ─── ADR-026: shim-annotation recovery ────────────────────────────
+
+            testCase "ADR-026: tsType round-trip — spacing/fontSizes restored on TS export" <| fun () ->
+                // Shim renames "spacing"→"dimension" and "fontSizes"→"dimension"; the
+                // original TS type names are stored in $extensions so export can restore them.
+                let json = """
+{
+  "tokens": {
+    "gap":  { "$type": "spacing",   "$value": "16" },
+    "text": { "$type": "fontSizes", "$value": "14" }
+  },
+  "$metadata": { "tokenSetOrder": ["tokens"] }
+}"""
+                let sr, sets = shimAndParse json
+                let outJson, _ = TokensStudio.exportToTokensStudio sr sets
+                Expect.stringContains outJson "\"spacing\""   "spacing type restored"
+                Expect.stringContains outJson "\"fontSizes\"" "fontSizes type restored"
+                Expect.isFalse (outJson.Contains "\"dimension\"") "DTCG dimension not emitted for renamed types"
+
+            testCase "ADR-026: tsType not added for non-renamed types" <| fun () ->
+                // A pure-DTCG "dimension" token (not renamed from a TS legacy type) must
+                // export as "dimension" — the extension should not be set.
+                let json = """
+{
+  "tokens": {
+    "size": { "$type": "dimension", "$value": "16px" }
+  },
+  "$metadata": { "tokenSetOrder": ["tokens"] }
+}"""
+                let sr, sets = shimAndParse json
+                let outJson, _ = TokensStudio.exportToTokensStudio sr sets
+                Expect.stringContains outJson "\"dimension\"" "DTCG dimension emitted as-is"
+                Expect.isFalse (outJson.Contains "tsType")    "tsType extension absent for non-renamed type"
+
+            testCase "ADR-026: originalHsl round-trip — hsl expression restored on TS export" <| fun () ->
+                // Shim evaluates hsl(240, 50, 60) → hex; the original expression is
+                // stored in $extensions so export restores it exactly.
+                // hslRx matches bare-number arguments (no % signs); literal values are
+                // used so the resolution succeeds and the hex is actually stored in $value.
+                let json = """
+{
+  "tokens": {
+    "fill": { "$type": "color", "$value": "hsl(240, 50, 60)" }
+  },
+  "$metadata": { "tokenSetOrder": ["tokens"] }
+}"""
+                let sr, sets = shimAndParse json
+                let outJson, _ = TokensStudio.exportToTokensStudio sr sets
+                Expect.stringContains outJson "hsl(240, 50, 60)" "original HSL expression restored"
+                Expect.isFalse (outJson.Contains "originalHsl") "originalHsl extension stripped from TS output"
+
+            testCase "ADR-026: shim-internal keys stripped from TS export" <| fun () ->
+                // After shimming, originalHsl and tsType annotations live in DTCG $extensions.
+                // They must not appear in Tokens Studio output — they are DTCG-only carriers.
+                // originalColor IS kept (ADR-023 TS-side recovery carrier).
+                let json = """
+{
+  "tokens": {
+    "gap":   { "$type": "spacing", "$value": "8"  },
+    "fill":  { "$type": "color",   "$value": "hsl(120, 40, 50)" }
+  },
+  "$metadata": { "tokenSetOrder": ["tokens"] }
+}"""
+                let sr, sets = shimAndParse json
+                let outJson, _ = TokensStudio.exportToTokensStudio sr sets
+                Expect.isFalse (outJson.Contains "originalHsl")        "originalHsl absent from TS output"
+                Expect.isFalse (outJson.Contains "originalFontWeight") "originalFontWeight absent from TS output"
+                Expect.isFalse (outJson.Contains "tsType")             "tsType absent from TS output"
         ]
     ]

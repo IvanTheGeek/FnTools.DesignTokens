@@ -125,6 +125,17 @@ import/export. See `penpot-api.md` for the three-surface comparison.
   themes (not just active) for `allThemeSets` computation, so sets from non-requested groups
   are never mistaken for base sets. Returns flat `TokensStudioImportResult`. 5 new tests.
   254/254 pass. 2026-05-04.
+- [x] **Alias type coercion + typeless alias shim fix** — `spacing.*`/`radius.*` that alias
+  a `number` token are now resolved to `ResolvedDimension` with `px` unit; type precedence
+  in `partialFlattenResolvedFile` flipped so `t.Type` wins; typeless alias leaves shimmed
+  through. 3 new tests. `@media (max-width: 1020px)` Tablet block added to phase4-verify.fsx.
+  254/254 pass. 2026-05-04.
+- [x] **Shim-annotation recovery (ADR-026)** — extends ADR-023 vendor namespace with three
+  new keys: `tsType` (TS type rename), `originalHsl` (HSL→hex), `originalFontWeight`
+  (combined fontWeight string). `walkObj` annotates losses; `addTokensToObj` recovers on
+  export; `buildExtensionsObject` strips `shimExportStripKeys` from TS output.
+  `tryReadVendorString` helper. 4 new tests + 1 test assertion updated. 258/258 pass.
+  2026-05-04. Typography-composite fontWeight deferred (ADR-026 §Consequences).
 - [ ] **PATHS state mapping (Phase 7)** — read prototype connections on all mock pages;
   map each screen to a PATHS state and each connection to a transition; document what
   information Penpot carries vs what PATHS needs.
