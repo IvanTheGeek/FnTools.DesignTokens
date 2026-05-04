@@ -18,7 +18,7 @@ token import/export format, internal storage structure, and setup notes.
 | **Needs browser open** | No | Yes (plugin must be loaded) | Yes |
 | **Needs Penpot file open** | No | Yes | Yes |
 | **Scope** | Any file in the instance | Currently open file only | Currently open file only |
-| **Token read/write** | Yes — `get-file` returns full token data; `update-file` with `set-token` / `set-token-set` / `set-token-theme` change types (verified 2.14.4) | Yes (via Plugin API) | Yes (direct DOM/JS access) |
+| **Token read/write** | Yes — `get-file` returns full token data; `update-file` with `set-token` / `set-token-set` / `set-token-theme` change types (verified 2.14.4) | **Read only** — `penpot.library.local.tokens.sets` (no write surface in Plugin API as of 2.14.4) | Yes (direct DOM/JS access) |
 | **Shape create/modify** | Yes via `update-file` change ops | Full | Full |
 | **Export shape as image** | Via exporter service | Yes (`export_shape` tool) | Yes (screenshot) |
 | **File management** | Yes (create/rename/delete files, projects) | No | No |
@@ -348,6 +348,25 @@ Penpot GitHub issue tracking this gap: https://github.com/penpot/penpot/issues/9
 already reads `components` for CSS output. A Penpot adapter reads `$value.hex` to produce
 the Penpot-compatible format. `Format.parse` validates the full color object (both are
 present and correct per schema).
+
+---
+
+## Token type name map
+
+Three distinct type name spaces exist across the three surfaces:
+
+| DTCG `$type`  | REST transit keyword | Plugin API `.type` | Penpot UI label |
+|---|---|---|---|
+| `color`       | `~:color`            | `color`            | Color           |
+| `dimension`   | `~:dimensions`       | `dimension`        | Dimensions      |
+| `fontFamily`  | `~:font-family`      | `fontFamilies`     | Font Family     |
+| `shadow`      | `~:shadow`           | `shadow`           | Shadow          |
+| `fontWeight`  | `~:font-weight`      | `fontWeight`       | Font Weight     |
+| `number`      | `~:number`           | `number`           | Number          |
+| `typography`  | `~:typography`       | `typography`       | Typography      |
+
+**Critical**: using DTCG type names directly in REST transit produces `400 params-validation`.
+Use the `~:dimensions` and `~:font-family` forms shown above.
 
 ---
 

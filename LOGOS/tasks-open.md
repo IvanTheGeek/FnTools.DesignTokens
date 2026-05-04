@@ -20,12 +20,14 @@ import/export. See `penpot-api.md` for the three-surface comparison.
   `TokensStudioImportResult` with resolved tokens + `SetSkipped`/`TokenUnresolved` warnings.
   Laura's file: 179 resolved tokens, 1 skipped set (`Foundations/Base` — math expressions),
   57 unresolved (spacing/sizing/typography/stroke refs into skipped set). 191 tests pass. 2026-05-03.
-- [ ] **Token round-trip** — push `ivanthegeek.tokens.json` into Penpot and read it back.
-  Two paths to compare: (a) MCP `execute_code` with `penpot.tokens` Plugin API, (b) REST
-  `update-file` with `set-token-set` + `set-token` change ops. Both verified working in
-  2.14.4 — REST uses transit+json, MCP uses JS. See `penpot-api.md` REST token change types.
-- [ ] **MCP coverage query** — after pushing tokens, use the MCP to query which shapes in a
-  test frame have `appliedTokens` referencing a given token path; validate coverage.
+- [x] **Token round-trip** — push `ivanthegeek.tokens.json` into Penpot and read it back.
+  REST path (b) complete: 27/27 tokens pushed via `set-token-set` + `set-token` change ops;
+  read back via both `get-file` and MCP Plugin API — exact match. Type name corrections
+  documented in `penpot-api.md`. MCP Plugin API is read-only (no write surface in 2.14.4).
+  Findings → `phase2-findings.md`. 2026-05-04.
+- [ ] **MCP coverage query** — use the MCP to query which shapes in a test frame have
+  `appliedTokens` referencing a given token path; validate coverage. (Token push done;
+  coverage query still open — requires shapes with `appliedTokens` set.)
 - [x] **Theme-aware CSS emitter** — `Api.importTokensStudioThemed (config) (themeNames) (json)`
   resolves base (global) sets and per-theme sets separately; `CssEmitter.emitThemed`
   emits `:root` + `[data-theme="X"]` override blocks for each named theme's diffs.

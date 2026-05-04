@@ -34,12 +34,11 @@ Findings → `phase1-findings.md`
 
 **Goal**: Push a DTCG 2025.10 token set into Penpot and verify it applies to shapes.
 
-- [ ] Define a minimal DTCG 2025.10 token file mirroring Laura's semantic structure for the
-      Dashboard screen — concrete values, no math expressions, Light + Desktop theme only
-- [ ] Use `serializePenpot` adapter to produce the Penpot-compatible format
-- [ ] Push via REST `set-token-set` + `set-token` change ops
-- [ ] Verify via MCP that shapes on the Dashboard page have `appliedTokens` resolving to the
-      new values
+- [x] Push `ivanthegeek.tokens.json` (DTCG 2025.10) via REST `set-token-set` + `set-token`.
+      27/27 tokens pushed and read back (REST + MCP Plugin API). Type name map documented.
+      Plugin API is read-only — no write surface in 2.14.4. 2026-05-04.
+- [ ] Define a DTCG token file mirroring Laura's semantic structure for the Dashboard screen
+      and push it; verify via MCP that shapes have `appliedTokens` resolving to the new values
 - [ ] Document what broke: missing paths, format mismatches, schema gaps
 
 Findings → `phase2-findings.md`
@@ -64,11 +63,11 @@ Findings → `phase3-findings.md`
 **Goal**: Produce the CSS custom property declarations a Fun.Blazor component needs for the
 Dashboard screen.
 
-- [ ] Implement theme-aware CSS emitter (open task in `tasks-open.md`): given active theme
-      names, resolve multi-set merge and emit `:root` + `@media` override blocks
-- [ ] Target: Light mode + Desktop breakpoint as the baseline `:root`; Dark mode as an
-      override; Mobile as a `@media (max-width: 360px)` override; Tablet as
-      `@media (max-width: 1020px)` — breakpoint values verified live (360/1020/1200)
+- [x] Implement theme-aware CSS emitter: `importTokensStudioThemed` + `CssEmitter.emitThemed`.
+      Base/theme partition by set membership in any active theme's `selectedTokenSets`.
+      Emits `:root` + caller-supplied selector override blocks (diff-only). 2026-05-04.
+- [ ] Target: breakpoint variants as `@media` overrides (Mobile 360px, Tablet 1020px) —
+      Phase 5 component concern; the emitter architecture supports it via `selectorForTheme`.
 - [ ] Verify emitted CSS matches Penpot's resolved values for those themes (read via REST)
 
 Findings → `phase4-findings.md`
