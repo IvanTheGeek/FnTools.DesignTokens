@@ -431,6 +431,102 @@ let importWithResolver
                     | Error es -> Error [ValidationFailed es]
                     | Ok seq -> Ok seq
 
+/// Like flattenResolvedFile but partial-success: returns resolved tokens alongside any
+/// unresolved-alias or type-inference errors rather than failing the whole batch.
+let private partialFlattenResolvedFile
+    (file: TokenFile)
+    : (string list * ResolvedToken) list * (string * string) list =
+    let oks  = ResizeArray<string list * ResolvedToken>()
+    let errs = ResizeArray<string * string>()
+    flattenFile file
+    |> Seq.iter (fun (path, t) ->
+        let pathStr = String.concat "." path
+        let finalToken =
+            match t.Value with
+            | TokenValue.Alias r ->
+                match tryResolveAliasIn r file with
+                | Some target -> Ok { target with Type = target.Type |> Option.orElse t.Type }
+                | None ->
+                    let refStr =
+                        match r with
+                        | CurlyBrace p -> "{" + String.concat "." p + "}"
+                        | JsonPointer p -> p
+                    Error (pathStr, refStr)
+            | _ -> Ok t
+        match finalToken with
+        | Error e -> errs.Add e
+        | Ok ft ->
+            let inferred = inferType ft.Value
+            match ft.Type |> Option.orElse inferred with
+            | None -> errs.Add (pathStr, "cannot determine $type")
+            | Some tt ->
+                match toResolvedValue pathStr file ft.Value with
+                | Error es ->
+                    for e in es do
+                        match e with
+                        | UnresolvedReference (p, r) -> errs.Add (p, r)
+                        | other -> errs.Add (pathStr, ValidationError.format other)
+                | Ok rv -> oks.Add (path, { Value = rv; Type = tt; Metadata = ft.Metadata }))
+    List.ofSeq oks, List.ofSeq errs
+
+
+/// Shim a Tokens Studio multi-set JSON export, merge all sets in tokenSetOrder, and resolve
+/// cross-set aliases. Returns a partial-success result: resolved tokens plus warnings for
+/// sets that could not parse (e.g. math expressions with PreserveMath) and tokens whose
+/// alias references could not be resolved.
+let importTokensStudio
+    (config: ShimConfig)
+    (jsonText: string)
+    : Result<TokensStudioImportResult, ImportError list> =
+    match TokensStudio.shimSingleFile config jsonText with
+    | Error msg -> Error [ParseFailed [InvalidJson msg]]
+    | Ok shimResult ->
+        let warnings = ResizeArray<TokensStudioImportWarning>()
+
+        // Parse each shimmed set; record a warning for any that fail
+        let parsedSets =
+            shimResult.Sets
+            |> Map.toList
+            |> List.choose (fun (name, setJson) ->
+                match Format.parse setJson with
+                | Ok file -> Some (name, file)
+                | Error _ ->
+                    warnings.Add (SetSkipped name)
+                    None)
+            |> Map.ofList
+
+        // Respect tokenSetOrder: first = lowest priority, last = highest
+        let orderedSets =
+            shimResult.Metadata.TokenSetOrder
+            |> List.choose (fun name ->
+                parsedSets |> Map.tryFind name |> Option.map (fun f -> name, f))
+
+        if orderedSets.IsEmpty then
+            Ok { Tokens = []; Warnings = List.ofSeq warnings }
+        else
+            let setDefs =
+                orderedSets
+                |> List.map (fun (name, file) ->
+                    name, { Sources = [Inline file]; Description = None; Extensions = [] })
+            let resolutionOrder =
+                orderedSets |> List.map (fun (name, _) -> SetRef name)
+            let doc = {
+                Name            = None
+                Version         = V2025_10
+                Description     = None
+                Sets            = setDefs
+                Modifiers       = []
+                ResolutionOrder = resolutionOrder
+            }
+            match Resolver.resolve (fun _ -> Error "inline-only") Map.empty doc with
+            | Error es -> Error [ResolveFailed es]
+            | Ok merged ->
+                let tokens, unresolved = partialFlattenResolvedFile merged
+                for (path, ref) in unresolved do
+                    warnings.Add (TokenUnresolved (path, ref))
+                Ok { Tokens = tokens; Warnings = List.ofSeq warnings }
+
+
 /// Round-trip a resolved-token sequence back to JSON.
 /// Builds a flat TokenFile (no groups beyond what dot-paths require) and serializes.
 let export (tokens: (string list * ResolvedToken) seq) : string =
@@ -581,6 +677,11 @@ module Primitives =
     let resolve      = Resolver.resolve
     let resolveAll   = Resolver.resolveAll
     let flattenResolved = flattenResolvedFile
+
+    let shimTokensStudio       = TokensStudio.shim
+    let shimWithConfig         = TokensStudio.shimSingleFile
+    let formatShimWarning      = TokensStudio.formatWarning
+    let formatImportWarning    = TokensStudio.formatImportWarning
 
     let load (jsonText: string) : Result<TokenFile, LoadError list> =
         match Format.parse jsonText with

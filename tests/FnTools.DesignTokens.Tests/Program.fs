@@ -19,5 +19,6 @@ let main args =
             BindingsEmitterTests.allTests
             CssIngestTests.allTests
             CssAuditTests.allTests
+            TokensStudioTests.allTests
         ]
     runTestsWithCLIArgs [] args all

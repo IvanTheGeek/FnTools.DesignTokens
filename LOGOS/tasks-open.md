@@ -15,6 +15,11 @@ import/export. See `penpot-api.md` for the three-surface comparison.
   extraction). Verified against Laura's 305-token file: 148 tokens parse clean in
   single-set mode; remaining sets fail only on expected cross-set refs or preserved math
   expressions. 179/179 tests pass. Merged 2026-05-03.
+- [x] **Multi-set resolution** — `Api.importTokensStudio (config: ShimConfig) (jsonText: string)` merges all
+  sets in `tokenSetOrder` via `Resolver.resolve` with `Inline` sources; partial-success: returns
+  `TokensStudioImportResult` with resolved tokens + `SetSkipped`/`TokenUnresolved` warnings.
+  Laura's file: 179 resolved tokens, 1 skipped set (`Foundations/Base` — math expressions),
+  57 unresolved (spacing/sizing/typography/stroke refs into skipped set). 191 tests pass. 2026-05-03.
 - [ ] **Token round-trip** — push `ivanthegeek.tokens.json` into Penpot and read it back.
   Two paths to compare: (a) MCP `execute_code` with `penpot.tokens` Plugin API, (b) REST
   `update-file` with `set-token-set` + `set-token` change ops. Both verified working in

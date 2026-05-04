@@ -22,6 +22,7 @@
     <Compile Include="BindingsEmitterTests.fs" />
     <Compile Include="CssIngestTests.fs" />
     <Compile Include="CssAuditTests.fs" />
+    <Compile Include="TokensStudioTests.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
   <ItemGroup>

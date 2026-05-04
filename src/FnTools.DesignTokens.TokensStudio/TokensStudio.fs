@@ -51,6 +51,22 @@ type ShimResult = {
     Warnings : ShimWarning list
 }
 
+/// Warning produced during multi-set resolution of a Tokens Studio export.
+type TokensStudioImportWarning =
+    /// A set could not be parsed after shimming (typically: math expressions left as strings
+    /// with PreserveMath, or other unsupported syntax) and was excluded from the merge.
+    | SetSkipped      of setName: string
+    /// A token's alias could not be resolved in the merged file — usually because the set
+    /// that contained the referenced token was excluded via SetSkipped.
+    | TokenUnresolved of path: string * ref: string
+
+/// Result of a Tokens Studio multi-set import. Partial-success: tokens that resolved are
+/// returned alongside warnings for sets that could not parse and tokens that could not resolve.
+type TokensStudioImportResult = {
+    Tokens   : (string list * ResolvedToken) list
+    Warnings : TokensStudioImportWarning list
+}
+
 
 // ─── Implementation ──────────────────────────────────────────────────────────
 
@@ -527,3 +543,11 @@ module TokensStudio =
             sprintf "SKIP  %s — math expression: %s" path expr
         | UnresolvedHslAlias (path, alias) ->
             sprintf "WARN  %s — unresolved HSL alias: %s" path alias
+
+    /// Format a TokensStudioImportWarning as a human-readable string.
+    let formatImportWarning (w: TokensStudioImportWarning) : string =
+        match w with
+        | SetSkipped name ->
+            sprintf "SKIP  set '%s' — parse failed (contains math expressions or unsupported syntax)" name
+        | TokenUnresolved (path, ref) ->
+            sprintf "UNRESOLVED  %s → %s" path ref
