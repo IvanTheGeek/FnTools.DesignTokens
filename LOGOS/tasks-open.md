@@ -22,13 +22,13 @@ import/export. See `penpot-api.md` for the three-surface comparison.
   57 unresolved (spacing/sizing/typography/stroke refs into skipped set). 191 tests pass. 2026-05-03.
 - [x] **Math expression evaluator** — `MathPolicy.EvaluateMath` (new default): recursive-descent
   evaluator inside the shim resolves `round({base} * pow({multiplier}, N))` and `16 * {zoom}`
-  forms to concrete floats at shim time. Supports `round/pow/ceil/floor/abs/sqrt/min/max` and
-  `+/-/*/` operators; alias resolution with cycle detection via flat index. `isAlias` tightened
-  to match pure `{path}` only (not compound expressions). Laura results with EvaluateMath:
-  232 resolved tokens (was 179), 0 skipped sets (was 1), 18 unresolved (was 57). Remaining 18
-  are cross-type alias limitations (dimension tokens aliasing number-type scale tokens).
-  Known limitation: flat index uses last-wins for multi-variant tokens (multiplier, zoom) — theme-
-  accurate scale values require per-theme flat index (future work). 208 tests pass. 2026-05-04.
+  forms to concrete floats at shim time. Supports `round/pow/ceil/floor/abs/sqrt/min/max/sin/cos/tan/
+  asin/acos/atan/atan2/log/log2/log10/exp` and `+/-/*/^` operators; alias resolution with cycle
+  detection via flat index. `isAlias` tightened to match pure `{path}` only (not compound
+  expressions). `TUnknown` token for explicit failure on unrecognised characters (no silent skips).
+  Laura results after ADR-020 shim fix: 250 resolved tokens (was 232), 0 skipped sets, 0 unresolved
+  (was 18). Penpot TokenScript operator audit confirmed `^` = `Math.pow` and trig/log functions
+  are all natively supported — our shim is a superset. 208 tests pass. 2026-05-04.
 - [x] **Token round-trip** — push `ivanthegeek.tokens.json` into Penpot and read it back.
   REST path (b) complete: 27/27 tokens pushed via `set-token-set` + `set-token` change ops;
   read back via both `get-file` and MCP Plugin API — exact match. Type name corrections

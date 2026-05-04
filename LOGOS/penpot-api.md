@@ -267,6 +267,50 @@ the extra set-name wrapper is not valid DTCG top-level structure.
 
 ---
 
+## TokenScript math expression language
+
+Penpot evaluates token values using the **TokenScript** language (from `@tokens-studio/sd-transforms`).
+Math expressions in token values (e.g. `round({base} * pow({multiplier}, -1))`) are evaluated
+by this engine before the token value is used. Verified by reading the Penpot frontend bundle
+(`libs.js`) on 2026-05-04.
+
+### Operators
+
+| Operator | Meaning | Example |
+|----------|---------|---------|
+| `+` `-` `*` `/` `%` | Arithmetic | `{base} * 2` |
+| `^` | Power (`Math.pow`) | `{base}^2` |
+| `==` `!=` `>` `<` `>=` `<=` | Comparison | `{x} > 0` |
+| `&&` / `and` | Logical AND | `{a} && {b}` |
+| `\|\|` / `or` | Logical OR | `{a} \|\| {b}` |
+
+### Functions (call with parentheses)
+
+`pow(a, b)`, `min(a, b)`, `max(a, b)`, `atan2(y, x)`, `hypot(...)` / `pyt(...)`,
+`random()`, `fac(n)`, `gamma(n)`, `roundTo(n, decimals)`,
+`sum(arr)`, `map(arr, fn)`, `fold(arr, fn, init)`, `filter(arr, fn)`,
+`indexOf(arr, val)`, `join(arr, sep)`
+
+### Unary functions (call with parentheses)
+
+**Trig**: `sin cos tan asin acos atan sinh cosh tanh asinh acosh atanh`  
+**Math**: `sqrt cbrt abs ceil floor round trunc exp expm1 log log2 log10 ln lg log1p sign`
+
+### Constants
+
+`E`, `PI`, `true`, `false`
+
+### Notes
+
+- `^` and `pow(a,b)` are equivalent: `2^3` = `pow(2,3)` = 8.
+- Trig and log functions work — they are in the `unaryOps` table, not a separate plugin.
+- Token references use `{dot.path}` syntax: `{scale.base}`, `{color.brand.primary}`.
+- Our F# `MathEval` shim covers the same operators: `+/-/*/`, `^`, `round/pow/ceil/floor/abs/sqrt/min/max`
+  plus `sin/cos/tan/asin/acos/atan/atan2/log/log2/log10/exp`. The shim is a strict superset
+  of what Penpot natively evaluates.
+
+---
+
 ## Internal token storage
 
 Tokens are stored in `file.data.options.tokens-lib` as transit+json:
