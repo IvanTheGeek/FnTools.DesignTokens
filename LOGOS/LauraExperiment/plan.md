@@ -77,9 +77,16 @@ Dashboard screen.
 - [x] Implement theme-aware CSS emitter: `importTokensStudioThemed` + `CssEmitter.emitThemed`.
       Base/theme partition by set membership in any active theme's `selectedTokenSets`.
       Emits `:root` + caller-supplied selector override blocks (diff-only). 2026-05-04.
-- [ ] Target: breakpoint variants as `@media` overrides (Mobile 360px, Tablet 1020px) —
-      Phase 5 component concern; the emitter architecture supports it via `selectorForTheme`.
-- [ ] Verify emitted CSS matches Penpot's resolved values for those themes (read via REST)
+- [x] Target: breakpoint variants as `@media` overrides — `emitBlock` updated to detect
+      `@`-prefixed selectors and wrap declarations in inner `:root { }`. `emitThemed` works
+      correctly with `@media (max-width: 360px)` as `selectorForTheme` return. 4 new tests.
+      2026-05-04.
+- [x] Verify emitted CSS matches Penpot's resolved values — `importTokensStudioCombined
+      ["Always-on"; "Light"; "Desktop"; "100%"; "Core"]` compared against phase2 push data.
+      Scale tokens verified (8/10/13/16/20/25/31/39/49 ✓). Colors ~ (HSL brand-bleed: shim
+      uses Eco Tools hue globally). Bug found and fixed: `buildFlatIndex` used JSON property
+      order instead of tokenSetOrder — all scale tokens resolved to 16 before fix. Findings
+      → `phase4b-verification-findings.md`. 2026-05-04.
 
 Findings → `phase4-findings.md`
 

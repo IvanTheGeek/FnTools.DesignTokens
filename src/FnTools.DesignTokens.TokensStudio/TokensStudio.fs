@@ -943,7 +943,11 @@ module TokensStudio =
                 let themes   = tryGetNode "$themes"   root |> Option.map parseThemes   |> Option.defaultValue []
                 let metadata = tryGetNode "$metadata" root |> Option.map parseMetadata |> Option.defaultValue { TokenSetOrder = []; ActiveThemes = []; ActiveSets = [] }
 
-                let sets =
+                // Extract sets in JSON property order first, then sort by tokenSetOrder.
+                // JSON property order is not guaranteed to match tokenSetOrder (and in
+                // practice Tokens Studio exports may differ significantly). All flat
+                // index builds use tokenSetOrder so that last-set-wins is deterministic.
+                let setsByJsonOrder =
                     root
                     |> Seq.choose (fun kvp ->
                         if kvp.Key.StartsWith("$") then None
@@ -953,8 +957,18 @@ module TokensStudio =
                             | _ -> None)
                     |> Array.ofSeq
 
-                // Global index: all sets. Used for HSL alias resolution and typography
-                // fontSizes alias resolution — these don't suffer from theme-bleed.
+                let orderMap =
+                    metadata.TokenSetOrder
+                    |> List.mapi (fun i name -> name, i)
+                    |> Map.ofList
+
+                let sets =
+                    setsByJsonOrder
+                    |> Array.sortBy (fun (name, _) ->
+                        orderMap |> Map.tryFind name |> Option.defaultValue System.Int32.MaxValue)
+
+                // Global index: all sets in tokenSetOrder. Used for HSL alias resolution
+                // and typography fontSizes alias resolution.
                 let globalIndex = buildFlatIndex sets
 
                 // Variant-set detection (only when no explicit filter provided).

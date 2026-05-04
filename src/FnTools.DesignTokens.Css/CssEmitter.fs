@@ -212,15 +212,39 @@ module CssEmitter =
     /// <summary>
     /// Emits all resolved tokens as a CSS block under the given selector.
     /// </summary>
-    /// <param name="selector">CSS selector for the block, e.g. <c>":root"</c> or <c>"[data-theme=\"dark\"]"</c>.</param>
+    /// <remarks>
+    /// When <paramref name="selector"/> starts with <c>@</c> (an at-rule such as
+    /// <c>@media (max-width: 600px)</c>), the custom property declarations are wrapped
+    /// in an inner <c>:root { }</c> rule, producing valid CSS:
+    /// <code>
+    /// @media (max-width: 600px) {
+    ///   :root {
+    ///     --breakpoint: 600px;
+    ///   }
+    /// }
+    /// </code>
+    /// For ordinary selectors (<c>":root"</c>, <c>"[data-theme=\"dark\"]"</c>, etc.)
+    /// declarations are emitted directly inside the selector block.
+    /// </remarks>
+    /// <param name="selector">CSS selector or at-rule for the block.</param>
     /// <param name="tokens">Flat sequence of <c>(path, token)</c> pairs.</param>
     let emitBlock (selector: string) (tokens: (string list * ResolvedToken) seq) : string =
         let sb = StringBuilder()
-        sb.AppendLine (selector + " {") |> ignore
-        for (path, token) in tokens do
-            for (name, value) in tokenToCssDecls path token do
-                sb.AppendLine (sprintf "  %s: %s;" name value) |> ignore
-        sb.AppendLine "}" |> ignore
+        let isAtRule = selector.TrimStart().StartsWith "@"
+        if isAtRule then
+            sb.AppendLine (selector + " {") |> ignore
+            sb.AppendLine "  :root {" |> ignore
+            for (path, token) in tokens do
+                for (name, value) in tokenToCssDecls path token do
+                    sb.AppendLine (sprintf "    %s: %s;" name value) |> ignore
+            sb.AppendLine "  }" |> ignore
+            sb.AppendLine "}" |> ignore
+        else
+            sb.AppendLine (selector + " {") |> ignore
+            for (path, token) in tokens do
+                for (name, value) in tokenToCssDecls path token do
+                    sb.AppendLine (sprintf "  %s: %s;" name value) |> ignore
+            sb.AppendLine "}" |> ignore
         sb.ToString()
 
     /// <summary>

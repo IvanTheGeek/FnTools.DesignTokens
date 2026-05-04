@@ -102,6 +102,16 @@ import/export. See `penpot-api.md` for the three-surface comparison.
   recoverable via `toResolverDocument` / `exportToTokensStudio`. Key finding: combined zoom +
   breakpoint per-theme call needed for correct scale spread. See `LauraExperiment/phase3-findings.md`.
   2026-05-04.
+- [x] **Phase 4 CSS verification + `@media` breakpoints** — `emitBlock` updated to detect
+  `@`-prefixed selectors and nest declarations in inner `:root { }` (valid CSS for media
+  queries). 4 new tests. Bug found + fixed: `buildFlatIndex` used JSON property order instead
+  of `tokenSetOrder` — `Foundations/Base` was last in Laura's JSON (position 21/22), causing
+  `multiplier=1` to overwrite Desktop's `1.25` → all scale tokens were 16. Fix: sort `sets`
+  by tokenSetOrder in `shimCore` before any index build. Scale tokens now verify correctly
+  (8/10/13/16/20/25/31/39/49). Color discrepancy documented: HSL uses globalIndex (Eco Tools
+  hue wins), phase2 push used Core hue manually. Responsive CSS written to
+  `scripts/phase4-output.css`. Findings → `phase4b-verification-findings.md`. 251/251 pass.
+  2026-05-04.
 - [x] **`importTokensStudioCombined` (ADR-025)** — new API for combining themes from different
   modifier groups into a single resolution context. Fixes cross-group math bleed: uses ALL
   themes (not just active) for `allThemeSets` computation, so sets from non-requested groups

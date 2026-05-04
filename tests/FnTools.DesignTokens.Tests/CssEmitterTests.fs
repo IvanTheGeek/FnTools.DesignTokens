@@ -240,6 +240,23 @@ let multiModeTests = testList "emitMultiMode" [
         let tokens = [ ["color"; "bg"], resolvedColor SRGB 0.1 0.1 0.1 None ]
         Expect.equal (emit (List.toSeq tokens)) (CssEmitter.emitBlock ":root" (List.toSeq tokens)) "identical output"
 
+    testCase "emitBlock @media: wraps declarations in inner :root block" <| fun () ->
+        let tokens = seq { yield ["breakpoint"], resolvedDim 360.0 Px }
+        let css = CssEmitter.emitBlock "@media (max-width: 360px)" tokens
+        Expect.stringStarts css "@media (max-width: 360px) {" "@media outer block"
+        Expect.stringContains css "  :root {" "inner :root block"
+        Expect.stringContains css "    --breakpoint: 360px;" "declaration indented inside :root"
+        Expect.isFalse (css.Contains ":root {" |> not) ":root present"
+
+    testCase "emitBlock @media: closing braces correct (outer and inner)" <| fun () ->
+        let tokens = seq { yield ["bp"], resolvedDim 1020.0 Px }
+        let css = CssEmitter.emitBlock "@media (max-width: 1020px)" tokens
+        // Should close :root then @media
+        let rootClose  = css.IndexOf("  }")
+        let mediaClose = css.LastIndexOf("}")
+        Expect.isTrue (rootClose >= 0)  "inner } present"
+        Expect.isTrue (mediaClose > rootClose) "outer } after inner }"
+
     testCase "emitMultiMode: no override block when all tokens identical" <| fun () ->
         let tokens = [ ["color"; "bg"], resolvedColor SRGB 0.9 0.9 0.9 None ]
         let css = CssEmitter.emitMultiMode (List.toSeq tokens) (List.toSeq tokens) "[data-theme=\"dark\"]"
@@ -344,6 +361,29 @@ let private themedTests =
                     (List.toSeq base_)
                     (seq { yield "Same", List.toSeq same })
             Expect.isFalse (css.Contains "[data-theme") "no override block when no diffs"
+
+        testCase "emitThemed with @media selector produces nested :root inside @media" <| fun () ->
+            // Simulates breakpoint theme override:
+            // base has breakpoint=1200px; Mobile override has breakpoint=360px
+            let base_   = [ ["breakpoint"], resolvedDim 1200.0 Px
+                            ["color"; "bg"], resolvedColor SRGB 1.0 1.0 1.0 None ]
+            let mobile  = [ ["breakpoint"], resolvedDim 360.0 Px
+                            ["color"; "bg"], resolvedColor SRGB 1.0 1.0 1.0 None ]
+            let css =
+                CssEmitter.emitThemed
+                    (fun _ -> "@media (max-width: 360px)")
+                    (List.toSeq base_)
+                    (seq { yield "Mobile", List.toSeq mobile })
+            // :root block with desktop breakpoint
+            Expect.stringContains css "--breakpoint: 1200px;" "base breakpoint in :root"
+            // @media block with mobile breakpoint, nested in :root
+            Expect.stringContains css "@media (max-width: 360px) {" "@media outer block"
+            Expect.stringContains css "  :root {" "inner :root in @media"
+            Expect.stringContains css "    --breakpoint: 360px;" "mobile breakpoint nested"
+            // color unchanged → must NOT appear in @media block
+            let mediaStart = css.IndexOf "@media"
+            let mediaBlock = if mediaStart >= 0 then css.[mediaStart..] else ""
+            Expect.isFalse (mediaBlock.Contains "--color-bg") "unchanged color not in @media override"
     ]
 
 
