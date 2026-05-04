@@ -177,7 +177,7 @@ let allTests =
                 // -0.02em is a non-DTCG unit — must produce a warning, not a bare number token
                 let skipped =
                     result.Warnings
-                    |> List.choose (function CssIngest.Skipped (n, _) -> Some n | _ -> None)
+                    |> List.map (function CssIngest.Skipped (n, _) -> n)
                 Expect.contains skipped "--cb-tracking-tight" "Skipped warning for tracking-tight"
                 Expect.isNone (findLeaf "tracking" "tight" file) "tracking.tight not in token file"
 
