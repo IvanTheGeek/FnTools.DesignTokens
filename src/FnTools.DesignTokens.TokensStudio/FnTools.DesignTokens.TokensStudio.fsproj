@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>FnTools.DesignTokens</RootNamespace>
+    <AssemblyName>FnTools.DesignTokens.TokensStudio</AssemblyName>
+    <PackageId>FnTools.DesignTokens.TokensStudio</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>FnTools</Authors>
+    <Description>Tokens Studio → DTCG 2025.10 shim: type renames, unit injection, HSL evaluation, transparent normalisation, $themes/$metadata extraction</Description>
+    <PackageLicenseExpression>AGPL-3.0-or-later</PackageLicenseExpression>
+    <RepositoryUrl>https://forgejo.ivanthegeek.com/FnTools/FnTools.DesignTokens</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>FS3261</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="TokensStudio.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\FnTools.DesignTokens.Foundation\FnTools.DesignTokens.Foundation.fsproj" />
+  </ItemGroup>
+</Project>

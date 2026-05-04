@@ -25,5 +25,6 @@
     <ProjectReference Include="..\FnTools.DesignTokens.Resolver\FnTools.DesignTokens.Resolver.fsproj" />
     <ProjectReference Include="..\FnTools.DesignTokens.Css\FnTools.DesignTokens.Css.fsproj" />
     <ProjectReference Include="..\FnTools.DesignTokens.Bindings\FnTools.DesignTokens.Bindings.fsproj" />
+    <ProjectReference Include="..\FnTools.DesignTokens.TokensStudio\FnTools.DesignTokens.TokensStudio.fsproj" />
   </ItemGroup>
 </Project>
