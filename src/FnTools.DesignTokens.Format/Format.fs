@@ -213,7 +213,10 @@ let private parseColorValue (path: string) (n: JsonNode) : Result<ColorValue, Pa
                 match asArray node with
                 | Some arr when arr.Count = 3 ->
                     let parsed =
-                        [ for i in 0 .. 2 -> parseComponent i arr.[i] ]
+                        [ for i in 0 .. 2 ->
+                            match Option.ofObj arr.[i] with
+                            | Some item -> parseComponent i item
+                            | None -> Error (InvalidValue (sprintf "%s.components[%d]" path i, "expected number or 'none'")) ]
                     collectResults parsed
                     |> Result.map (fun xs -> (xs.[0], xs.[1], xs.[2]))
                 | Some arr ->
@@ -282,7 +285,7 @@ let private parseFontFamilyValue (path: string) (n: JsonNode) : Result<FontFamil
         | Some arr ->
             let strings =
                 [ for i in 0 .. arr.Count - 1 ->
-                    match tryGetString arr.[i] with
+                    match Option.ofObj arr.[i] |> Option.bind tryGetString with
                     | Some s -> Ok s
                     | None -> Error (InvalidValue (sprintf "%s[%d]" path i, "expected string in fontFamily stack")) ]
             collectResults strings |> Result.map Stack
@@ -302,8 +305,10 @@ let private parseFontWeightValue (path: string) (n: JsonNode) : Result<FontWeigh
 let private parseCubicBezierValue (path: string) (n: JsonNode) : Result<CubicBezierValue, ParseError list> =
     match asArray n with
     | Some arr when arr.Count = 4 ->
-        let parseFloat i =
-            requireFloat (sprintf "%s[%d]" path i) "cubicBezier component" arr.[i]
+        let parseFloat (i: int) =
+            match Option.ofObj arr.[i] with
+            | Some item -> requireFloat (sprintf "%s[%d]" path i) "cubicBezier component" item
+            | None -> Error (InvalidValue (sprintf "%s[%d]" path i, "expected number for 'cubicBezier component'"))
         match parseFloat 0, parseFloat 1, parseFloat 2, parseFloat 3 with
         | Ok a, Ok b, Ok c, Ok d ->
             Ok { P1x = a; P1y = b; P2x = c; P2y = d }
@@ -340,8 +345,8 @@ let private parseStrokeStyleValue (path: string) (n: JsonNode) : Result<StrokeSt
                     match asArray node with
                     | Some arr ->
                         let items =
-                            [ for i in 0 .. arr.Count - 1 ->
-                                parseValueOrRef parseDimensionValue (sprintf "%s.dashArray[%d]" path i) arr.[i] ]
+                            [ for i, item in elements arr ->
+                                parseValueOrRef parseDimensionValue (sprintf "%s.dashArray[%d]" path i) item ]
                         let oks = ResizeArray()
                         let errs = ResizeArray()
                         for x in items do
@@ -413,12 +418,12 @@ let private parseShadowValue (path: string) (n: JsonNode) : Result<ShadowValue, 
     match asArray n with
     | Some arr ->
         let items =
-            [ for i in 0 .. arr.Count - 1 ->
+            [ for i, item in elements arr ->
                 let itemPath = sprintf "%s[%d]" path i
-                if isRefShape arr.[i] then
-                    readRef itemPath arr.[i] |> liftSingle |> Result.map ShadowReference
+                if isRefShape item then
+                    readRef itemPath item |> liftSingle |> Result.map ShadowReference
                 else
-                    parseShadowObject itemPath arr.[i] |> Result.map ShadowLiteral ]
+                    parseShadowObject itemPath item |> Result.map ShadowLiteral ]
         let oks = ResizeArray()
         let errs = ResizeArray()
         for x in items do
@@ -470,8 +475,8 @@ let private parseGradientValue (path: string) (n: JsonNode) : Result<GradientVal
     match asArray n with
     | Some arr ->
         let items =
-            [ for i in 0 .. arr.Count - 1 ->
-                parseGradientStop (sprintf "%s[%d]" path i) arr.[i] ]
+            [ for i, item in elements arr ->
+                parseGradientStop (sprintf "%s[%d]" path i) item ]
         let oks = ResizeArray()
         let errs = ResizeArray()
         for x in items do
@@ -696,7 +701,7 @@ let private detectVersionStructurally (root: JsonObject) : SpecVersion =
                 | :? JsonObject as inner when (tryGetProperty "colorSpace" inner |> Option.isSome) ->
                     foundColorObj.Value <- true
                 | :? JsonValue ->
-                    match tryGetString kv.Value with
+                    match Option.ofObj kv.Value |> Option.bind tryGetString with
                     | Some s when s.StartsWith "#" -> foundColorHex.Value <- true
                     | _ -> ()
                 | _ -> ()
@@ -735,15 +740,19 @@ let rec private upgradeFirstED (node: JsonNode) : unit =
         for (oldK, newK) in renames do
             let v = o.[oldK]
             o.Remove oldK |> ignore
-            if not (isNull v) then
-                let detached = v.DeepClone()
-                o.[newK] <- detached
+            match Option.ofObj v with
+            | Some nonNul -> o.[newK] <- nonNul.DeepClone()
+            | None -> ()
         // Recurse
         for kv in o do
-            if not (isNull kv.Value) then upgradeFirstED kv.Value
+            match Option.ofObj kv.Value with
+            | Some v -> upgradeFirstED v
+            | None -> ()
     | :? JsonArray as a ->
         for i in 0 .. a.Count - 1 do
-            if not (isNull a.[i]) then upgradeFirstED a.[i]
+            match Option.ofObj a.[i] with
+            | Some item -> upgradeFirstED item
+            | None -> ()
     | _ -> ()
 
 /// Second/Third ED upgrades: if a $value is a string in dimension/duration/color form, rewrite to object.
@@ -806,10 +815,14 @@ let rec private upgradeStringValues (inheritedType: string option) (node: JsonNo
         | _ -> ()
 
         for kv in o do
-            if not (isNull kv.Value) then upgradeStringValues nodeType kv.Value
+            match Option.ofObj kv.Value with
+            | Some v -> upgradeStringValues nodeType v
+            | None -> ()
     | :? JsonArray as a ->
         for i in 0 .. a.Count - 1 do
-            if not (isNull a.[i]) then upgradeStringValues inheritedType a.[i]
+            match Option.ofObj a.[i] with
+            | Some item -> upgradeStringValues inheritedType item
+            | None -> ()
     | _ -> ()
 
 
