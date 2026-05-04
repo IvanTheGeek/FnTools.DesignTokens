@@ -329,6 +329,50 @@ Build a new Fun.Blazor component → the mocks file told you exactly what it nee
 
 ---
 
+## The scale is not a number — it is a function
+
+A common assumption: a spacing token like `spacing.md` has a value. `16px`. Done.
+
+Laura's system does not work that way. The spacing scale is computed:
+
+```
+zoom        = 1  (100%) | 1.5 (150%) | 2 (200%)    ← Text zoom set
+base        = 16 × zoom
+multiplier  = 1.1 (Mobile) | 1.125 (Tablet) | 1.25 (Desktop)   ← Breakpoint set
+spacing.md  = round(base × multiplier¹)
+```
+
+`spacing.md` is not `16px`. It is a function of two theme axes. There are **9 distinct
+resolved values** for that one token — one for each combination of breakpoint and zoom:
+
+| | Mobile (×1.1) | Tablet (×1.125) | Desktop (×1.25) |
+|---|---|---|---|
+| 100% zoom (base=16) | 18px | 18px | 20px |
+| 150% zoom (base=24) | 26px | 27px | 30px |
+| 200% zoom (base=32) | 35px | 36px | 40px |
+
+This is the mechanism behind **responsive + accessible typography and spacing**. The
+same semantic token name (`spacing.md`) produces the right value for every combination
+of screen size and user text zoom preference — not by having 9 separate tokens, but by
+having a scale that is mathematically derived from two active-set inputs.
+
+**What this means for CSS emission:**
+
+You cannot emit a single `:root { --spacing-md: 18px }`. You need a matrix:
+
+```css
+:root                          { --spacing-md: 20px; }  /* Desktop, 100% */
+@media (max-width: 1020px)     { --spacing-md: 18px; }  /* Tablet, 100% */
+@media (max-width: 360px)      { --spacing-md: 18px; }  /* Mobile, 100% */
+/* repeat for each zoom level — or use CSS clamp() */
+```
+
+The token system encodes the design intent mathematically. The CSS emitter's job is
+to evaluate that math across all relevant theme combinations and emit the right
+override structure. This is not a limitation of the token system — it is the feature.
+
+---
+
 ## Things still to figure out
 
 - Does the CSS emitter need to know about sets and themes, or just token values and
