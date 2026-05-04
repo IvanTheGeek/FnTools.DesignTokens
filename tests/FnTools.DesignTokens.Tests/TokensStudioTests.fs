@@ -108,6 +108,39 @@ let private evalMathAliasJson = """
 """
 
 
+/// Two mutually-exclusive zoom sets and a base set with a math expression.
+/// tokenSetOrder: zoom/small, zoom/large, base  (zoom/large is LAST).
+/// With the old global index: base.size = round(10 * {zoom}) → {zoom} = 2 → size=20 for all.
+/// With per-theme fix: each theme uses its own zoom set → size=10 or 20.
+/// With shimSingleFile auto-detection: zoom/* are variant → math fails with MathEvalFailedVariantAlias.
+let private mathBleedJson = """
+{
+  "zoom/small": {
+    "zoom": { "$type": "number", "$value": "1" }
+  },
+  "zoom/large": {
+    "zoom": { "$type": "number", "$value": "2" }
+  },
+  "base": {
+    "size": { "$type": "number", "$value": "round(10 * {zoom})" }
+  },
+  "$themes": [
+    {
+      "id": "1", "name": "Small", "group": "Scale",
+      "selectedTokenSets": { "zoom/small": "enabled", "base": "source" }
+    },
+    {
+      "id": "2", "name": "Large", "group": "Scale",
+      "selectedTokenSets": { "zoom/large": "enabled", "base": "source" }
+    }
+  ],
+  "$metadata": {
+    "tokenSetOrder": ["zoom/small", "zoom/large", "base"]
+  }
+}
+"""
+
+
 let allTests =
     testList "TokensStudio" [
 
@@ -247,16 +280,25 @@ let allTests =
                 | Error es -> failtestf "import failed: %A" es
                 | Ok r -> r
 
-            testCase "produces 250 resolved tokens (Foundations/Base + typography fontSize resolved)" <| fun () ->
-                Expect.equal (List.length result.Tokens) 250 "token count"
+            testCase "produces 204 resolved tokens (variant math filtering prevents Foundations/Base scale tokens from resolving without zoom context)" <| fun () ->
+                // Variant sets (zoom/*, breakpoints/*, brand/*, color-mode/*) are excluded
+                // from the math index in shimSingleFile. Foundations/Base scale tokens that
+                // reference {zoom} fail with MathEvalFailedVariantAlias. Their dependents
+                // (spacing/radius/sizing tokens referencing {scale.*}) become unresolved.
+                // Use Api.importTokensStudioThemed for correct per-theme resolution.
+                Expect.equal (List.length result.Tokens) 204 "token count"
 
-            testCase "no sets skipped (Foundations/Base math expressions now evaluate)" <| fun () ->
+            testCase "no sets skipped (all 22 sets shim to valid DTCG)" <| fun () ->
                 let skipped = result.Warnings |> List.choose (function SetSkipped n -> Some n | _ -> None)
                 Expect.isEmpty skipped "no sets skipped"
 
-            testCase "0 tokens unresolved (typography fontSize aliases resolved at shim time)" <| fun () ->
+            testCase "36 tokens unresolved: spacing/sizing/radius reference Foundations/Base scale tokens that failed variant math" <| fun () ->
+                // Foundations/Spacing, Foundations/Radius, Foundations/Sizing tokens
+                // reference {scale.*} paths. scale.* tokens were dropped from the shim
+                // output because they depend on {zoom} (a theme-variant alias). The
+                // resolver can't find them → TokenUnresolved warnings.
                 let unresolved = result.Warnings |> List.choose (function TokenUnresolved _ -> Some () | _ -> None)
-                Expect.isEmpty unresolved "no unresolved tokens"
+                Expect.equal (List.length unresolved) 36 "36 unresolved (spacing/radius/sizing depend on failed scale tokens)"
 
             testCase "palette color tokens resolve to hex color values" <| fun () ->
                 let paletteTokens =
@@ -410,38 +452,6 @@ let allTests =
             // into zoom/small, making size=20 instead of 10).
             testList "math-bleed fix: per-theme math index" [
 
-                /// Two mutually-exclusive zoom sets and a base set with a math expression.
-                /// tokenSetOrder: zoom/small, zoom/large, base  (zoom/large is LAST).
-                /// With the bug: base.size = round(10 * {zoom}) uses global index →
-                ///   {zoom} = 2 (zoom/large wins) → size = 20 for BOTH themes.
-                /// With the fix: each theme uses its own zoom set → size = 10 or 20.
-                let mathBleedJson = """
-{
-  "zoom/small": {
-    "zoom": { "$type": "number", "$value": "1" }
-  },
-  "zoom/large": {
-    "zoom": { "$type": "number", "$value": "2" }
-  },
-  "base": {
-    "size": { "$type": "number", "$value": "round(10 * {zoom})" }
-  },
-  "$themes": [
-    {
-      "id": "1", "name": "Small", "group": "Scale",
-      "selectedTokenSets": { "zoom/small": "enabled", "base": "source" }
-    },
-    {
-      "id": "2", "name": "Large", "group": "Scale",
-      "selectedTokenSets": { "zoom/large": "enabled", "base": "source" }
-    }
-  ],
-  "$metadata": {
-    "tokenSetOrder": ["zoom/small", "zoom/large", "base"]
-  }
-}
-"""
-
                 testCase "Small theme: size = round(10 * zoom=1) = 10" <| fun () ->
                     match Api.importTokensStudioThemed ShimConfig.defaults ["Small"; "Large"] mathBleedJson with
                     | Error es -> failtestf "import failed: %A" es
@@ -488,6 +498,62 @@ let allTests =
                             Expect.equal small 10.0 "Small size = 10"
                             Expect.equal large 20.0 "Large size = 20"
                         | _ -> failtest "could not find size token in both themes"
+            ]
+
+            // ─── MathEvalFailedVariantAlias auto-detection ───────────────────────
+            // shimSingleFile auto-detects theme-variant sets from $themes and excludes
+            // them from the math index. Math expressions that reference variant aliases
+            // fail with MathEvalFailedVariantAlias (not MathEvalFailed), which includes
+            // a hint to use importTokensStudioThemed. Files without $themes keep the
+            // old MathEvalFailed behavior.
+            testList "MathEvalFailedVariantAlias: auto-detect variant math aliases" [
+
+                testCase "shimSingleFile emits MathEvalFailedVariantAlias when math references a theme-variant alias" <| fun () ->
+                    // mathBleedJson has zoom/small and zoom/large as variant sets (each
+                    // enabled in exactly one Scale-group theme). base.size = round(10 * {zoom})
+                    // references {zoom}, which lives in a variant set → excluded from math
+                    // index → evaluation fails → MathEvalFailedVariantAlias.
+                    match TokensStudio.shimSingleFile ShimConfig.defaults mathBleedJson with
+                    | Error e -> failtestf "shim failed: %s" e
+                    | Ok sr ->
+                        let variantFailed =
+                            sr.Warnings |> List.choose (function
+                                | MathEvalFailedVariantAlias (p, _) -> Some p | _ -> None)
+                        Expect.contains variantFailed "size" "size token failed with variant alias warning"
+
+                testCase "MathEvalFailedVariantAlias formatted message includes importTokensStudioThemed hint" <| fun () ->
+                    match TokensStudio.shimSingleFile ShimConfig.defaults mathBleedJson with
+                    | Error e -> failtestf "shim failed: %s" e
+                    | Ok sr ->
+                        let w =
+                            sr.Warnings |> List.tryPick (function
+                                | MathEvalFailedVariantAlias _ as w -> Some w | _ -> None)
+                        match w with
+                        | None -> failtest "expected MathEvalFailedVariantAlias warning"
+                        | Some w ->
+                            let msg = TokensStudio.formatWarning w
+                            Expect.isTrue (msg.Contains "importTokensStudioThemed") "hint references importTokensStudioThemed"
+                            Expect.isTrue (msg.Contains "theme-variant alias") "mentions theme-variant alias"
+
+                testCase "file without $themes uses MathEvalFailed (not variant alias warning)" <| fun () ->
+                    // Without $themes there is no variant set detection — math failures
+                    // emit MathEvalFailed as before.
+                    let noThemesJson = """
+{
+  "zoom": { "$type": "number", "$value": "1" },
+  "base": { "size": { "$type": "number", "$value": "round(10 * {unknown})" } },
+  "$metadata": { "tokenSetOrder": ["zoom", "base"] }
+}
+"""
+                    match TokensStudio.shimSingleFile ShimConfig.defaults noThemesJson with
+                    | Error e -> failtestf "shim failed: %s" e
+                    | Ok sr ->
+                        let plain =
+                            sr.Warnings |> List.choose (function MathEvalFailed (p, _) -> Some p | _ -> None)
+                        let variant =
+                            sr.Warnings |> List.choose (function MathEvalFailedVariantAlias (p, _) -> Some p | _ -> None)
+                        Expect.isNonEmpty plain "MathEvalFailed emitted"
+                        Expect.isEmpty variant "no MathEvalFailedVariantAlias when no $themes"
             ]
         ]
 

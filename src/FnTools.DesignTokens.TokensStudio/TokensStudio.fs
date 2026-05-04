@@ -31,9 +31,14 @@ module ShimConfig =
     let defaults = { MathPolicy = EvaluateMath }
 
 type ShimWarning =
-    | SkippedMathExpression of path: string * expr: string
-    | MathEvalFailed        of path: string * expr: string
-    | UnresolvedHslAlias    of path: string * alias: string
+    | SkippedMathExpression      of path: string * expr: string
+    | MathEvalFailed             of path: string * expr: string
+    /// Math evaluation failed and the expression likely references a theme-variant alias
+    /// (a set that is enabled in some themes but not others). The flat index excludes
+    /// variant sets to avoid theme-bleed, so variant aliases cannot resolve here.
+    /// Use <c>Api.importTokensStudioThemed</c> for correct per-theme resolution.
+    | MathEvalFailedVariantAlias of path: string * expr: string
+    | UnresolvedHslAlias         of path: string * alias: string
 
 type TokensStudioTheme = {
     Id                : string
@@ -555,12 +560,14 @@ module TokensStudio =
     // ── Single token transform ────────────────────────────────────────────────
 
     let private transformToken
-        (config: ShimConfig)
-        (index: Map<string, string>)
-        (warnings: ResizeArray<ShimWarning>)
-        (path: string)
-        (tsType: string)
-        (value: JsonNode)
+        (config           : ShimConfig)
+        (index            : Map<string, string>)   // global flat index: HSL + typography alias resolution
+        (mathIndex        : Map<string, string>)   // variant-filtered index: math expression evaluation only
+        (warnings         : ResizeArray<ShimWarning>)
+        (isVariantFiltered: bool)
+        (path             : string)
+        (tsType           : string)
+        (value            : JsonNode)
         : (string * JsonNode) option =   // Some (dtcgType, newValue) or None to skip
 
         let dtcgType =
@@ -582,10 +589,13 @@ module TokensStudio =
                 | PreserveMath ->
                     Some (dtcgType, value)   // keep as string — resolver evaluates later
                 | EvaluateMath ->
-                    match MathEval.tryEval index Set.empty rawValue with
+                    match MathEval.tryEval mathIndex Set.empty rawValue with
                     | Some f -> Some (dtcgType, JsonValue.Create(f) :> JsonNode)
                     | None   ->
-                        warnings.Add(MathEvalFailed (path, rawValue))
+                        let w =
+                            if isVariantFiltered then MathEvalFailedVariantAlias (path, rawValue)
+                            else MathEvalFailed (path, rawValue)
+                        warnings.Add(w)
                         None
             elif not (isAlias rawValue) then
                 // Tokens Studio stores numbers as JSON strings — convert to JSON number
@@ -779,12 +789,14 @@ module TokensStudio =
     // ── Recursive set-tree walker ─────────────────────────────────────────────
 
     let rec private walkObj
-        (config: ShimConfig)
-        (index: Map<string, string>)
-        (warnings: ResizeArray<ShimWarning>)
-        (inheritedType: string option)
-        (path: string)
-        (obj: JsonObject)
+        (config           : ShimConfig)
+        (index            : Map<string, string>)   // global index: HSL + typography alias resolution
+        (mathIndex        : Map<string, string>)   // variant-filtered index: math evaluation only
+        (warnings         : ResizeArray<ShimWarning>)
+        (isVariantFiltered: bool)
+        (inheritedType    : string option)
+        (path             : string)
+        (obj              : JsonObject)
         : JsonObject =
 
         let result = JsonObject()
@@ -824,7 +836,7 @@ module TokensStudio =
                         match Option.ofObj child["$value"] with
                         | None -> ()
                         | Some valueNode ->
-                        match transformToken config index warnings childPath tsType valueNode with
+                        match transformToken config index mathIndex warnings isVariantFiltered childPath tsType valueNode with
                         | None -> ()
                         | Some (dtcgType, newValue) ->
                             let leaf = JsonObject()
@@ -853,7 +865,7 @@ module TokensStudio =
                             result.Add(kvp.Key, leaf)
                     else
                         // Group — recurse, threading the inherited type scope.
-                        let childResult = walkObj config index warnings scopeType childPath child
+                        let childResult = walkObj config index mathIndex warnings isVariantFiltered scopeType childPath child
                         if childResult.Count > 0 then
                             result.Add(kvp.Key, childResult)
                 | _ -> ()
@@ -941,19 +953,61 @@ module TokensStudio =
                             | _ -> None)
                     |> Array.ofSeq
 
-                let indexSets =
-                    match mathIndexFilter with
-                    | None       -> sets
-                    | Some names -> sets |> Array.filter (fun (name, _) -> names.Contains name)
+                // Global index: all sets. Used for HSL alias resolution and typography
+                // fontSizes alias resolution — these don't suffer from theme-bleed.
+                let globalIndex = buildFlatIndex sets
 
-                let index    = buildFlatIndex indexSets
+                // Variant-set detection (only when no explicit filter provided).
+                // A set is variant if, within any theme modifier group (non-empty group
+                // field), it is "enabled" in some themes of that group but not in others.
+                // Per-group detection avoids false positives from pseudo-themes that appear
+                // in only one group (e.g. an "Always-on" group with a single theme).
+                let variantSets =
+                    match mathIndexFilter with
+                    | Some _ -> Set.empty   // caller controls the math index — no auto-detection
+                    | None ->
+                        if themes.IsEmpty then Set.empty
+                        else
+                            themes
+                            |> List.filter (fun t -> t.Group <> "")
+                            |> List.groupBy (fun t -> t.Group)
+                            |> List.collect (fun (_, groupThemes) ->
+                                sets
+                                |> Array.choose (fun (name, _) ->
+                                    let statuses =
+                                        groupThemes |> List.map (fun t ->
+                                            t.SelectedTokenSets
+                                            |> Map.tryFind name
+                                            |> Option.defaultValue "disabled")
+                                    if statuses |> List.exists (fun s -> s = "enabled") &&
+                                       statuses |> List.exists (fun s -> s <> "enabled")
+                                    then Some name
+                                    else None)
+                                |> Array.toList)
+                            |> Set.ofList
+
+                let isVariantFiltered = not (Set.isEmpty variantSets)
+
+                // Math index: variant-filtered when auto-detected; caller-specified when
+                // an explicit filter is provided (shimSingleFileWithMathIndex); global
+                // when there are no variant sets.
+                // HSL and typography alias resolution always use globalIndex.
+                let mathIndex =
+                    match mathIndexFilter with
+                    | Some names ->
+                        buildFlatIndex (sets |> Array.filter (fun (name, _) -> names.Contains name))
+                    | None ->
+                        if isVariantFiltered then
+                            buildFlatIndex (sets |> Array.filter (fun (name, _) -> not (Set.contains name variantSets)))
+                        else globalIndex   // no variants — reuse global index
+
                 let warnings = ResizeArray<ShimWarning>()
                 let opts     = JsonSerializerOptions(WriteIndented = true)
 
                 let transformedSets =
                     sets
                     |> Array.map (fun (setName, setObj) ->
-                        let transformed = walkObj config index warnings None "" setObj
+                        let transformed = walkObj config globalIndex mathIndex warnings isVariantFiltered None "" setObj
                         setName, transformed.ToJsonString(opts))
                     |> Map.ofArray
 
@@ -1004,6 +1058,8 @@ module TokensStudio =
             sprintf "SKIP  %s — math expression: %s" path expr
         | MathEvalFailed (path, expr) ->
             sprintf "EVAL  %s — could not evaluate: %s" path expr
+        | MathEvalFailedVariantAlias (path, expr) ->
+            sprintf "EVAL  %s — could not evaluate: %s (references a theme-variant alias; use Api.importTokensStudioThemed for correct per-theme resolution)" path expr
         | UnresolvedHslAlias (path, alias) ->
             sprintf "WARN  %s — unresolved HSL alias: %s" path alias
 

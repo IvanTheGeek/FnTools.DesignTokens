@@ -50,8 +50,10 @@ any special handling or subset restriction.
 | Text zoom/200% | 1 | zoom = 2 |
 | **Total** | **305** | |
 
-After flat (non-themed) import with last-set-wins: **250 resolved tokens**.
-55 tokens are shadowed by later sets with the same path.
+After flat (non-themed) import with last-set-wins: **204 resolved tokens** (ADR-024
+variant-set math filtering; see below). 55 tokens are shadowed by later sets with the
+same path. Without variant filtering the old global index produced 250 tokens but with
+wrong (zoom=2 contaminated) scale values.
 
 ---
 
@@ -115,12 +117,15 @@ All scale steps collapse to 32 because:
 
 The only exceptions are literal values (`scale.hairline = 1`, `scale.micro = 2`).
 
-**This is the math-evaluator theme-bleed in `shimSingleFile`**. The fix in
-`importTokensStudioThemed` (`shimSingleFileWithMathIndex` with per-theme set list)
-gives correct values — zoom=1 for the 100% theme → base=16. But the scale spread
-also requires the correct breakpoint's `multiplier` to be in the same per-theme index;
-combining the zoom and breakpoint themes in a single `resolveNamesWithIndex` call is
-needed to get distinct scale steps (e.g. round(16 * pow(1.25, 3)) = 31 for `scale.xl`).
+**ADR-024 (2026-05-04)**: `shimSingleFile` now auto-detects Text zoom/* as variant sets
+(enabled in exactly one theme within the "Text zoom" modifier group) and excludes them
+from the math index. `{zoom}` is no longer found when evaluating `base = 16 * {zoom}`
+→ `MathEvalFailedVariantAlias` warning with hint to use `importTokensStudioThemed`.
+HSL resolution uses the global index (all sets), so palette colors are unaffected.
+
+For `importTokensStudioThemed`, the per-theme set list fix gives correct values —
+zoom=1 for the 100% theme → base=16. Combining zoom and breakpoint themes in a single
+call is needed to get the full scale spread (e.g. round(16 * pow(1.25, 3)) = 31).
 
 **The expression string is not preserved.** Re-export emits the concrete float as a
 literal; math expressions cannot be round-tripped through the shim.
@@ -230,8 +235,16 @@ requested list, those sets land in `baseSets` (correct behavior).
 
 ## Flat vs themed import
 
-**`importTokensStudio` (flat, global index):** 250 resolved tokens. Last-set-wins: Dark
-mode colors, Eco Tools fonts, Desktop breakpoint, zoom=2 scale (all collapsed to 32/64).
+**`importTokensStudio` (flat, variant-filtered math index, ADR-024):** 204 resolved tokens.
+- Color tokens: 143 (unchanged — HSL uses globalIndex; palette colors resolve)
+- Foundations/Base scale tokens: partially resolved (literals hairline=1, micro=2, etc.)
+  — scale tokens referencing `{zoom}` fail with `MathEvalFailedVariantAlias` (10 warnings)
+- Foundations/Spacing, Radius, Sizing: 36 tokens unresolved (reference failed scale.* tokens)
+- Font-family: 3 (Eco Tools wins, last-set-wins)
+- Breakpoint: 1 (Desktop wins)
+
+Old behavior (global flat index, pre-ADR-024): 250 tokens, 0 unresolved — but scale values
+were all zoom=2-contaminated (round(32 * pow(multiplier, N)) collapsed to 32 for all N).
 
 **`importTokensStudioThemed` (per-theme index):** Correct per-theme values. To get the
 intended Desktop + 100% zoom combined scale, the per-theme call's `mathIndexSets` needs

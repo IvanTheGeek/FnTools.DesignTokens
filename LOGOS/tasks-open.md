@@ -85,6 +85,15 @@ import/export. See `penpot-api.md` for the three-surface comparison.
   per theme (and once for base sets) with the per-theme set list. `shimCore` private helper
   factors the shared logic. 3 new tests (math-bleed fixture + Small=10/Large=20 assertions).
   230/230 tests pass. 2026-05-04.
+- [x] **Variant-set math index filtering + `MathEvalFailedVariantAlias` (ADR-024)** — `shimSingleFile`
+  auto-detects theme-variant sets from `$themes` (per-group detection matching `toResolverDocument`).
+  Two-index architecture: `globalIndex` (all sets, used for HSL/typography alias resolution) and
+  `mathIndex` (excludes variant sets, used for `MathEval.tryEval` only). Math evaluation failures
+  referencing variant aliases emit `MathEvalFailedVariantAlias` with hint:
+  "use `Api.importTokensStudioThemed` for correct per-theme resolution". Laura flat import:
+  204 resolved tokens (was 250, theme-bleed inflated), 36 unresolved (spacing/radius/sizing depend
+  on failed scale tokens), 0 sets skipped, 143 color tokens unchanged (HSL still uses globalIndex).
+  3 new tests. 233/233 tests pass. 2026-05-04.
 - [x] **Token flow inward (Phase 3)** — `shimSingleFile` + `Format.parse` on all 22 sets of
   Laura's file: 22/22 parse cleanly, 0 warnings. 305 tokens (250 after flat last-set-wins import).
   Type distribution: color 174, number 57, dimension 47, typography 18, fontFamily 9. Structural
