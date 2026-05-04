@@ -73,6 +73,15 @@ import/export. See `penpot-api.md` for the three-surface comparison.
   description regex → lossy sRGB hex. User-authored vendor extensions pass through verbatim.
   Incidental fix: shim now inherits `$type` from group level per DTCG §7.4. 5 new round-trip
   tests covering all four scenarios + extensions passthrough. 227/227 tests pass. 2026-05-04.
+- [x] **Laura Dashboard semantic token push (Phase 2 Part 2)** — `laura-light-desktop` set
+  (35 tokens: 15 colors, 13 dimensions, 6 typography + 1 stroke) pushed to Design mocks.
+  All 120 bound shapes verified. Local set last-in-order wins over System Library. 2026-05-04.
+  Key findings: new REST API format (`set-id`/`token-id` UUIDs required); math-evaluator
+  theme-bleed bug; dimension unit stripping. See `LauraExperiment/phase2-findings.md` Part 2.
+- [ ] **Math-evaluator theme-bleed fix** — `EvaluateMath` evaluates math at shim time using
+  the full multi-set token index; last set wins for each alias path. `Text zoom/200%`
+  (last in `tokenSetOrder`) makes `zoom=2 → base=32` for all themes instead of the theme's
+  own zoom. Fix: re-evaluate math per-theme using only the active-set index, not the full index.
 - [ ] **PATHS state mapping (Phase 7)** — read prototype connections on all mock pages;
   map each screen to a PATHS state and each connection to a transition; document what
   information Penpot carries vs what PATHS needs.

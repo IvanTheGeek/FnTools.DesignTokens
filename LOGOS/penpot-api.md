@@ -452,8 +452,17 @@ Pass `"~:attrs", null` to delete the set.
 ```
 
 Pass `"~:attrs", null` to delete the token. Token `~:type` values match Penpot's type set
-(not DTCG): `~:color`, `~:number`, `~:dimension`, `~:fontFamily`, `~:fontWeight`,
-`~:fontSizes`, `~:spacing`, `~:borderRadius`, etc.
+(not DTCG): `~:color`, `~:number`, `~:dimensions` (note the `s`), `~:font-family`,
+`~:font-weight`, `~:typography`, `~:spacing`, `~:border-radius`, `~:stroke-width`, etc.
+
+**Inline token embedding** (`set-token-set.attrs.tokens` map) is schema-valid but
+rejected by Penpot's internal `token?` predicate — root cause unknown. Use individual
+`set-token` changes instead.
+
+**Dimension unit stripping**: values pushed as `"16px"` are resolved by the Plugin API
+as `16` (numeric, unit dropped). Both string and numeric forms are accepted on push.
+
+**`~:modified-at`** in `set-token.attrs` is optional.
 
 ### Other token change types (from source)
 
