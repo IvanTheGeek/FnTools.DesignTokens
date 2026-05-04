@@ -1,0 +1,529 @@
+namespace FnTools.DesignTokens
+
+open System
+open System.Text.Json
+open System.Text.Json.Nodes
+open System.Text.RegularExpressions
+
+
+// ─── Public types ─────────────────────────────────────────────────────────────
+
+/// Policy for Tokens Studio math expressions (e.g. round({base} * pow({multiplier}, 1))).
+/// DTCG has no math syntax — choose how the shim handles them.
+type MathPolicy =
+    /// Keep the expression as a string $value with type "number".
+    /// Downstream tooling (resolver or CSS emitter) must evaluate.
+    | PreserveMath
+    /// Omit the token and record a ShimWarning.
+    | SkipMath
+
+type ShimConfig = {
+    MathPolicy : MathPolicy
+}
+
+module ShimConfig =
+    let defaults = { MathPolicy = PreserveMath }
+
+type ShimWarning =
+    | SkippedMathExpression of path: string * expr: string
+    | UnresolvedHslAlias    of path: string * alias: string
+
+type TokensStudioTheme = {
+    Id                : string
+    Name              : string
+    Group             : string
+    SelectedTokenSets : Map<string, string>   // setName -> "enabled"|"disabled"|"source"
+}
+
+type TokensStudioMetadata = {
+    TokenSetOrder : string list
+    ActiveThemes  : string list   // UI state at export time — most reliable active-state record
+    ActiveSets    : string list
+}
+
+/// Result of shimming a single-file Tokens Studio JSON export.
+type ShimResult = {
+    /// One DTCG-compatible JSON string per token set, keyed by set name.
+    /// Each value is ready to pass directly to Format.parse / Api.import.
+    Sets     : Map<string, string>
+    Themes   : TokensStudioTheme list
+    Metadata : TokensStudioMetadata
+    Warnings : ShimWarning list
+}
+
+
+// ─── Implementation ──────────────────────────────────────────────────────────
+
+module TokensStudio =
+
+    // ── Constant maps ─────────────────────────────────────────────────────────
+
+    /// Tokens Studio type names that are not valid DTCG types → DTCG equivalent.
+    let private typeRenames =
+        Map.ofList [
+            "fontFamilies", "fontFamily"
+            "spacing",      "dimension"
+            "borderRadius", "dimension"
+            "fontSizes",    "dimension"
+            "borderWidth",  "dimension"
+        ]
+
+    /// Tokens Studio types whose bare-number values need a "px" unit suffix.
+    let private unitlessTypes =
+        Set.ofList [ "spacing"; "borderRadius"; "fontSizes"; "borderWidth"; "dimension" ]
+
+    /// Field renames inside a typography composite $value.
+    let private typographyFieldRenames =
+        Map.ofList [
+            "fontFamilies", "fontFamily"
+            "fontSizes",    "fontSize"
+            "fontWeights",  "fontWeight"
+            "lineHeights",  "lineHeight"
+        ]
+
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    let private tryGetNode (key: string) (obj: JsonObject) : JsonNode option =
+        let mutable node : JsonNode | null = null
+        if obj.TryGetPropertyValue(key, &node) && not (isNull node) then Some node
+        else None
+
+    let private tryGetString (key: string) (obj: JsonObject) : string option =
+        tryGetNode key obj |> Option.map (fun n -> n.ToString().Trim('"'))
+
+    let private tryGetArray (key: string) (obj: JsonObject) : JsonArray option =
+        tryGetNode key obj |> Option.bind (function :? JsonArray as arr -> Some arr | _ -> None)
+
+    let private isAlias (s: string) =
+        let t = s.Trim()
+        t.StartsWith("{") && t.EndsWith("}")
+
+    let private isBareNumber (s: string) =
+        let t = s.Trim()
+        not (isAlias t) &&
+        not (t.Contains("px") || t.Contains("rem") || t.Contains("em")) &&
+        Double.TryParse(t, Globalization.NumberStyles.Float, Globalization.CultureInfo.InvariantCulture) |> fst
+
+    // ── Math expression detection ─────────────────────────────────────────────
+
+    let private mathRx = Regex(@"round\s*\(|pow\s*\(", RegexOptions.Compiled)
+
+    let private isMathExpression (s: string) = mathRx.IsMatch(s)
+
+    // ── HSL pattern and evaluation ────────────────────────────────────────────
+
+    // Matches: hsla({alias},{alias},{alias},N) or hsla(N,N,N,N)
+    // Also matches hsl(...) without alpha.
+    let private hslRx =
+        Regex(
+            @"^hsla?\(\s*(\{[^}]+\}|[\d.]+)\s*,\s*(\{[^}]+\}|[\d.]+)\s*,\s*(\{[^}]+\}|[\d.]+)\s*(?:,\s*([\d.]+)\s*)?\)$",
+            RegexOptions.Compiled ||| RegexOptions.IgnoreCase)
+
+    let private hslToHex (h: float) (s: float) (l: float) (alpha: float) : string =
+        let s' = s / 100.0
+        let l' = l / 100.0
+        let c  = (1.0 - abs (2.0 * l' - 1.0)) * s'
+        let x  = c * (1.0 - abs (h / 60.0 % 2.0 - 1.0))
+        let m  = l' - c / 2.0
+        let r', g', b' =
+            match int (h / 60.0) with
+            | 0 -> c, x, 0.0
+            | 1 -> x, c, 0.0
+            | 2 -> 0.0, c, x
+            | 3 -> 0.0, x, c
+            | 4 -> x, 0.0, c
+            | _ -> c, 0.0, x
+        let toByte v = int (Math.Round((v + m) * 255.0)) |> max 0 |> min 255
+        if alpha >= 1.0 then sprintf "#%02x%02x%02x" (toByte r') (toByte g') (toByte b')
+        else sprintf "#%02x%02x%02x%02x" (toByte r') (toByte g') (toByte b') (int (Math.Round(alpha * 255.0)))
+
+
+    // ── Flat token-value index (for HSL alias resolution) ────────────────────
+    // Maps dot-path → raw $value string across all sets.
+
+    let private buildFlatIndex (allSets: (string * JsonObject) seq) : Map<string, string> =
+        let acc = ResizeArray<string * string>()
+        let rec walk (prefix: string) (node: JsonNode) =
+            match node with
+            | :? JsonObject as obj ->
+                if obj.ContainsKey("$type") && obj.ContainsKey("$value") then
+                    match obj["$value"] with
+                    | null -> ()
+                    | v    -> acc.Add(prefix, v.ToString().Trim('"'))
+                else
+                    for kvp in obj do
+                        if not (kvp.Key.StartsWith("$")) && kvp.Value <> null then
+                            let childPrefix = if prefix = "" then kvp.Key else prefix + "." + kvp.Key
+                            walk childPrefix kvp.Value
+            | _ -> ()
+        for (_, setObj) in allSets do
+            walk "" setObj
+        Map.ofSeq acc
+
+    let private resolveToFloat (index: Map<string, string>) (raw: string) : float option =
+        let rec follow (seen: Set<string>) (s: string) =
+            let s = s.Trim()
+            if isAlias s then
+                let key = s.[1..s.Length-2]
+                if seen.Contains key then None
+                else
+                    match Map.tryFind key index with
+                    | None -> None
+                    | Some v -> follow (seen.Add key) v
+            else
+                // strip trailing % (saturation/lightness stored as bare numbers, no %)
+                let t = s.TrimEnd('%').Trim()
+                match Double.TryParse(t, Globalization.NumberStyles.Float, Globalization.CultureInfo.InvariantCulture) with
+                | true, f -> Some f
+                | _ -> None
+        follow Set.empty raw
+
+
+    // ── Typography value transform ────────────────────────────────────────────
+
+    // ── Dimension object builder (DTCG 2025.10 format) ───────────────────────
+    // DTCG 2025.10 dimension $value is {value: float, unit: string}, not "16px".
+    // upgradeStringValues is NOT called for V2025_10 so we must emit the object form.
+
+    let private dimensionObj (n: float) (unit: string) : JsonNode =
+        let o = JsonObject()
+        o.Add("value", JsonValue.Create(n))
+        o.Add("unit",  JsonValue.Create(unit))
+        o :> JsonNode
+
+    let private toDimensionNode (raw: string) : JsonNode option =
+        if isAlias raw then None   // caller keeps as alias string
+        else
+            match Double.TryParse(raw.Trim(), Globalization.NumberStyles.Float, Globalization.CultureInfo.InvariantCulture) with
+            | true, f -> Some (dimensionObj f "px")
+            | _ ->
+                // already has a unit suffix like "16px" or "1.5rem"
+                let m = Regex.Match(raw.Trim(), @"^(-?\d+(?:\.\d+)?)(px|rem)$")
+                if m.Success then
+                    let f2 = Double.Parse(m.Groups.[1].Value, Globalization.CultureInfo.InvariantCulture)
+                    Some (dimensionObj f2 m.Groups.[2].Value)
+                else None
+
+
+    let private transformTypographyValue (v: JsonNode) : JsonNode =
+        match v with
+        | :? JsonObject as obj ->
+            let result = JsonObject()
+            for kvp in obj do
+                let outKey =
+                    match Map.tryFind kvp.Key typographyFieldRenames with
+                    | Some k -> k
+                    | None   -> kvp.Key
+                let rawStr =
+                    if kvp.Value <> null then kvp.Value.ToString().Trim('"') else ""
+                let outVal =
+                    match kvp.Key with
+                    | "fontFamilies" ->
+                        // Unwrap single-element array: ["Figtree"] → "Figtree"
+                        match kvp.Value with
+                        | :? JsonArray as arr when arr.Count = 1 && arr.[0] <> null ->
+                            arr.[0].DeepClone()
+                        | _ -> if kvp.Value <> null then kvp.Value.DeepClone()
+                               else JsonValue.Create(null: string) :> JsonNode
+                    | "fontSizes" ->
+                        // Dimension: alias ref stays as string; literals → {value, unit}
+                        if isAlias rawStr then
+                            if kvp.Value <> null then kvp.Value.DeepClone()
+                            else JsonValue.Create(null: string) :> JsonNode
+                        else
+                            toDimensionNode rawStr
+                            |> Option.defaultWith (fun () ->
+                                if kvp.Value <> null then kvp.Value.DeepClone()
+                                else JsonValue.Create(null: string) :> JsonNode)
+                    | "lineHeights" ->
+                        // DTCG lineHeight in typography is a float (unitless ratio or percentage)
+                        if isAlias rawStr then
+                            if kvp.Value <> null then kvp.Value.DeepClone()
+                            else JsonValue.Create(null: string) :> JsonNode
+                        else
+                            match Double.TryParse(rawStr.TrimEnd('%').Trim(), Globalization.NumberStyles.Float, Globalization.CultureInfo.InvariantCulture) with
+                            | true, f -> JsonValue.Create(f) :> JsonNode
+                            | _ ->
+                                if kvp.Value <> null then kvp.Value.DeepClone()
+                                else JsonValue.Create(null: string) :> JsonNode
+                    | "fontWeights" ->
+                        // DTCG fontWeight: numeric → JSON int, keyword → JSON string.
+                        // Tokens Studio may store combined values like "400 Italic" — extract
+                        // the leading integer and discard the style suffix (italic is a separate
+                        // DTCG field; Tokens Studio doesn't have a separate fontStyle token type).
+                        if isAlias rawStr then
+                            if kvp.Value <> null then kvp.Value.DeepClone()
+                            else JsonValue.Create(null: string) :> JsonNode
+                        else
+                            let numericPart = rawStr.Split(' ').[0].Trim()
+                            match Double.TryParse(numericPart, Globalization.NumberStyles.Float, Globalization.CultureInfo.InvariantCulture) with
+                            | true, f when f = Math.Floor(f) ->
+                                JsonValue.Create(int f) :> JsonNode
+                            | _ ->
+                                if kvp.Value <> null then kvp.Value.DeepClone()
+                                else JsonValue.Create(null: string) :> JsonNode
+                    | _ ->
+                        if kvp.Value <> null then kvp.Value.DeepClone()
+                        else JsonValue.Create(null: string) :> JsonNode
+                result.Add(outKey, outVal)
+            result :> JsonNode
+        | _ -> if v <> null then v.DeepClone() else JsonValue.Create(null: string) :> JsonNode
+
+
+    // ── Single token transform ────────────────────────────────────────────────
+
+    let private transformToken
+        (config: ShimConfig)
+        (index: Map<string, string>)
+        (warnings: ResizeArray<ShimWarning>)
+        (path: string)
+        (tsType: string)
+        (value: JsonNode)
+        : (string * JsonNode) option =   // Some (dtcgType, newValue) or None to skip
+
+        let dtcgType =
+            match Map.tryFind tsType typeRenames with
+            | Some t -> t
+            | None   -> tsType
+
+        let rawValue =
+            match value with
+            | null -> ""
+            | _    -> value.ToString().Trim('"')
+
+        match tsType with
+
+        // ── number: check for math expressions; convert string literals to JSON numbers
+        | "number" ->
+            if isMathExpression rawValue then
+                match config.MathPolicy with
+                | SkipMath ->
+                    warnings.Add(SkippedMathExpression (path, rawValue))
+                    None
+                | PreserveMath ->
+                    Some (dtcgType, value)   // keep as string — resolver evaluates later
+            elif not (isAlias rawValue) then
+                // Tokens Studio stores numbers as JSON strings — convert to JSON number
+                match Double.TryParse(rawValue, Globalization.NumberStyles.Float, Globalization.CultureInfo.InvariantCulture) with
+                | true, f -> Some (dtcgType, JsonValue.Create(f) :> JsonNode)
+                | _ -> Some (dtcgType, value)
+            else
+                Some (dtcgType, value)
+
+        // ── color: HSL expressions and transparent keyword ───────────────────
+        | "color" ->
+            if rawValue = "transparent" then
+                // Emit DTCG structured color: sRGB black at alpha=0.
+                // Using the object form avoids 8-digit hex validation issues.
+                let obj = JsonObject()
+                obj.Add("colorSpace", JsonValue.Create("srgb"))
+                let comps = JsonArray()
+                comps.Add(JsonValue.Create(0.0))
+                comps.Add(JsonValue.Create(0.0))
+                comps.Add(JsonValue.Create(0.0))
+                obj.Add("components", comps)
+                obj.Add("alpha", JsonValue.Create(0.0))
+                Some (dtcgType, obj :> JsonNode)
+            else
+                let m = hslRx.Match(rawValue)
+                if m.Success then
+                    let resolve (token: string) =
+                        let t = token.Trim()
+                        match resolveToFloat index t with
+                        | Some f -> Ok f
+                        | None ->
+                            let alias = if isAlias t then t.[1..t.Length-2] else t
+                            warnings.Add(UnresolvedHslAlias (path, alias))
+                            Error alias
+                    let hR = resolve m.Groups.[1].Value
+                    let sR = resolve m.Groups.[2].Value
+                    let lR = resolve m.Groups.[3].Value
+                    let alpha =
+                        if m.Groups.[4].Success then
+                            match Double.TryParse(m.Groups.[4].Value, Globalization.NumberStyles.Float, Globalization.CultureInfo.InvariantCulture) with
+                            | true, a -> a
+                            | _ -> 1.0
+                        else 1.0
+                    match hR, sR, lR with
+                    | Ok h, Ok s, Ok l ->
+                        Some (dtcgType, JsonValue.Create(hslToHex h s l alpha) :> JsonNode)
+                    | _ ->
+                        Some (dtcgType, value)   // leave as-is; warnings already recorded
+                else
+                    Some (dtcgType, value)
+
+        // ── dimension-family types: emit DTCG 2025.10 {value, unit} object ────────
+        // upgradeStringValues is NOT called for V2025_10, so we must emit the object
+        // form directly. Alias refs stay as strings (isRefShape handles them upstream).
+        | t when Set.contains t unitlessTypes ->
+            if isAlias rawValue then
+                Some (dtcgType, value)   // alias ref — parser handles via isRefShape
+            else
+                match toDimensionNode rawValue with
+                | Some node -> Some (dtcgType, node)
+                | None      -> Some (dtcgType, value)   // unrecognised form — pass through
+
+        // ── fontFamilies: unwrap single-element array at token level ──────────
+        | "fontFamilies" ->
+            let newVal =
+                match value with
+                | :? JsonArray as arr when arr.Count = 1 && arr.[0] <> null ->
+                    arr.[0].DeepClone()
+                | _ -> if value <> null then value.DeepClone()
+                       else JsonValue.Create(null: string) :> JsonNode
+            Some ("fontFamily", newVal)
+
+        // ── typography: rename composite field names ──────────────────────────
+        | "typography" ->
+            Some (dtcgType, transformTypographyValue value)
+
+        // ── everything else: pass through with type rename ────────────────────
+        | _ ->
+            Some (dtcgType, value)
+
+
+    // ── Recursive set-tree walker ─────────────────────────────────────────────
+
+    let rec private walkObj
+        (config: ShimConfig)
+        (index: Map<string, string>)
+        (warnings: ResizeArray<ShimWarning>)
+        (path: string)
+        (obj: JsonObject)
+        : JsonObject =
+
+        let result = JsonObject()
+
+        // Preserve group-level $type if present without $value (inherited type hint)
+        if obj.ContainsKey("$type") && not (obj.ContainsKey("$value")) then
+            let groupType = obj["$type"].ToString().Trim('"')
+            let dtcgType  = match Map.tryFind groupType typeRenames with Some t -> t | None -> groupType
+            result.Add("$type", JsonValue.Create(dtcgType))
+
+        for kvp in obj do
+            if not (kvp.Key.StartsWith("$")) then
+                match kvp.Value with
+                | null -> ()
+                | :? JsonObject as child ->
+                    let childPath = if path = "" then kvp.Key else path + "." + kvp.Key
+                    if child.ContainsKey("$type") && child.ContainsKey("$value") then
+                        // Token leaf
+                        let tsType = child["$type"].ToString().Trim('"')
+                        match transformToken config index warnings childPath tsType child["$value"] with
+                        | None -> ()
+                        | Some (dtcgType, newValue) ->
+                            let leaf = JsonObject()
+                            leaf.Add("$type", JsonValue.Create(dtcgType))
+                            leaf.Add("$value", newValue.DeepClone())
+                            match tryGetString "$description" child with
+                            | Some d when d.Length > 0 -> leaf.Add("$description", JsonValue.Create(d))
+                            | _ -> ()
+                            result.Add(kvp.Key, leaf)
+                    else
+                        // Group — recurse
+                        let childResult = walkObj config index warnings childPath child
+                        if childResult.Count > 0 then
+                            result.Add(kvp.Key, childResult)
+                | _ -> ()
+
+        result
+
+
+    // ── $themes parser ────────────────────────────────────────────────────────
+
+    let private parseThemes (node: JsonNode) : TokensStudioTheme list =
+        match node with
+        | :? JsonArray as arr ->
+            arr
+            |> Seq.choose (function
+                | :? JsonObject as obj ->
+                    let sets =
+                        match tryGetNode "selectedTokenSets" obj with
+                        | Some (:? JsonObject as setsObj) ->
+                            setsObj
+                            |> Seq.map (fun kvp -> kvp.Key, kvp.Value.ToString().Trim('"'))
+                            |> Map.ofSeq
+                        | _ -> Map.empty
+                    Some {
+                        Id                = tryGetString "id"    obj |> Option.defaultValue ""
+                        Name              = tryGetString "name"  obj |> Option.defaultValue ""
+                        Group             = tryGetString "group" obj |> Option.defaultValue ""
+                        SelectedTokenSets = sets
+                    }
+                | _ -> None)
+            |> List.ofSeq
+        | _ -> []
+
+
+    // ── $metadata parser ──────────────────────────────────────────────────────
+
+    let private parseMetadata (node: JsonNode) : TokensStudioMetadata =
+        match node with
+        | :? JsonObject as obj ->
+            let strList key =
+                match tryGetArray key obj with
+                | Some arr -> arr |> Seq.map (fun n -> n.ToString().Trim('"')) |> List.ofSeq
+                | None     -> []
+            { TokenSetOrder = strList "tokenSetOrder"
+              ActiveThemes  = strList "activeThemes"
+              ActiveSets    = strList "activeSets" }
+        | _ -> { TokenSetOrder = []; ActiveThemes = []; ActiveSets = [] }
+
+
+    // ── Public API ────────────────────────────────────────────────────────────
+
+    /// Shim a Tokens Studio single-file export to DTCG 2025.10 per-set JSON.
+    ///
+    /// Input: the full JSON text from Penpot's Tokens panel → Tools → Export.
+    /// Output: ShimResult with one DTCG JSON string per set, plus extracted
+    ///         themes and metadata.
+    let shimSingleFile (config: ShimConfig) (jsonText: string) : Result<ShimResult, string> =
+        try
+            match JsonNode.Parse(jsonText) with
+            | :? JsonObject as root ->
+                let themes   = tryGetNode "$themes"   root |> Option.map parseThemes   |> Option.defaultValue []
+                let metadata = tryGetNode "$metadata" root |> Option.map parseMetadata |> Option.defaultValue { TokenSetOrder = []; ActiveThemes = []; ActiveSets = [] }
+
+                let sets =
+                    root
+                    |> Seq.choose (fun kvp ->
+                        if kvp.Key.StartsWith("$") then None
+                        else
+                            match kvp.Value with
+                            | :? JsonObject as obj -> Some (kvp.Key, obj)
+                            | _ -> None)
+                    |> Array.ofSeq
+
+                let index    = buildFlatIndex sets
+                let warnings = ResizeArray<ShimWarning>()
+                let opts     = JsonSerializerOptions(WriteIndented = true)
+
+                let transformedSets =
+                    sets
+                    |> Array.map (fun (setName, setObj) ->
+                        let transformed = walkObj config index warnings "" setObj
+                        setName, transformed.ToJsonString(opts))
+                    |> Map.ofArray
+
+                Ok {
+                    Sets     = transformedSets
+                    Themes   = themes
+                    Metadata = metadata
+                    Warnings = List.ofSeq warnings
+                }
+            | _ -> Error "root is not a JSON object"
+        with ex ->
+            Error ex.Message
+
+    /// Shim with default config (math expressions preserved).
+    let shim (jsonText: string) : Result<ShimResult, string> =
+        shimSingleFile ShimConfig.defaults jsonText
+
+    /// Format a ShimWarning as a human-readable string.
+    let formatWarning (w: ShimWarning) : string =
+        match w with
+        | SkippedMathExpression (path, expr) ->
+            sprintf "SKIP  %s — math expression: %s" path expr
+        | UnresolvedHslAlias (path, alias) ->
+            sprintf "WARN  %s — unresolved HSL alias: %s" path alias
