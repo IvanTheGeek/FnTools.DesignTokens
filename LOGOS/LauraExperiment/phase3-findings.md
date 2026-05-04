@@ -2,12 +2,14 @@
 area: Experiment
 status: complete — 2026-05-03
 phase: 3 — Token flow inward (Penpot → our tokens)
-source: Penpot Tokens panel → Tools → Export → laura-system-library.tokens.json
+source: Penpot Tokens panel → Tools → Export → both single and multi-file
 ---
 
 # Phase 3 Findings — Token Flow Inward
 
-Source file: `samples/laura-system-library.tokens.json`
+Source files:
+- `samples/laura-system-library.tokens.json` (single-file export)
+- `samples/laura-system-library-multifile.tokens.zip` (multi-file export)
 Exported from: System Library file, Tokens panel → Tools → Export
 Export format: Tokens Studio JSON (Penpot's native token format)
 
@@ -235,6 +237,70 @@ Required transforms:
 
 Items 1–4 and 6–7 are mechanical transforms with no design ambiguity.
 Item 5 requires a policy decision and potentially a math expression evaluator.
+
+---
+
+## Single-file vs multi-file export — comparison
+
+Both formats were tested. Key findings:
+
+**Token content: 100% identical.** Zero diffs across all 22 sets. Same values, same
+types, same alias references. The format choice is purely structural.
+
+**Structural difference:**
+
+Single-file — set name is the top-level key:
+```json
+{
+  "Brand/Core": { "font-family": {...}, "stroke": {...} },
+  "Foundations/Base": { "scale": {...}, ... },
+  "$themes": [...],
+  "$metadata": {...}
+}
+```
+
+Multi-file — set name is the file path; file contains tokens directly (no wrapper key):
+```
+Brand/Core.json          → { "font-family": {...}, "stroke": {...} }
+Foundations/Base.json    → { "scale": {...}, ... }
+$themes.json             → [...]
+$metadata.json           → {...}
+```
+
+The folder hierarchy mirrors the `/` in set names (`Brand/Core` → `Brand/Core.json`).
+
+**Multi-file is cleaner for the shim**: each file is a self-contained set with no
+wrapping key to strip. The set name is derived from the file path. `$themes` and
+`$metadata` are separate files rather than embedded keys.
+
+**`$metadata` carries more than `tokenSetOrder` — key discovery:**
+
+Both exports include `activeThemes` and `activeSets` in `$metadata`:
+
+```json
+{
+  "tokenSetOrder": ["Foundations/Base", ...],
+  "activeThemes": ["Brand/Eco Tools", "Color mode/Light", "Global/Always-on",
+                   "Breakpoint/Tablet", "Text zoom/100%"],
+  "activeSets":   ["Brand/Eco Tools", "Components/Button", "Typography", ...]
+}
+```
+
+`activeThemes` and `activeSets` capture the **UI state at export time** — which theme
+combination was active in the Tokens panel when the user clicked Export. This is the
+highest-fidelity record of active state we have found. Contrast with:
+- REST `get-file` `active-themes`: only contains `[/__PENPOT__HIDDEN__TOKEN__THEME__]`
+  (not updated by `set.active` Plugin API calls)
+- MCP `theme.isActive`: always empty (reads from same REST field)
+- `$metadata.activeThemes`: accurate, captured from the live Tokens panel UI state
+
+**Implication**: the export is the most reliable way to capture the intended active
+theme state. If you need to know "what was the designer's intended theme combination
+for this file", the exported `$metadata.activeThemes` is the answer.
+
+**Implication for the shim**: support both formats as input. Multi-file is preferred
+(cleaner structure); single-file is the fallback. Parse `$metadata.activeThemes` and
+`$metadata.activeSets` as resolver configuration input.
 
 ---
 
