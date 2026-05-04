@@ -89,8 +89,83 @@ let private twoThemeJson = """
 """
 
 
+/// Two-set JSON for testing EvaluateMath with alias-dependent expressions.
+/// multiplier is in "scale" set; expression is in "generated" set.
+let private evalMathAliasJson = """
+{
+  "scale": {
+    "base":       { "$type": "number", "$value": "16" },
+    "multiplier": { "$type": "number", "$value": "1.125" }
+  },
+  "generated": {
+    "xs":  { "$type": "number", "$value": "round({base} * pow({multiplier}, -1))" },
+    "3xs": { "$type": "number", "$value": "round({base} * pow({multiplier}, -3))" }
+  },
+  "$metadata": {
+    "tokenSetOrder": ["scale", "generated"]
+  }
+}
+"""
+
+
 let allTests =
     testList "TokensStudio" [
+
+        testList "EvaluateMath" [
+
+            testCase "plain number alias chain resolves" <| fun () ->
+                // base = 16, generated.xs = round(16 * pow(1.125, -1)) = round(14.22) = 14
+                match Api.importTokensStudio ShimConfig.defaults evalMathAliasJson with
+                | Error es -> failtestf "import failed: %A" es
+                | Ok result ->
+                    Expect.isEmpty (result.Warnings |> List.choose (function SetSkipped n -> Some n | _ -> None))
+                                   "no sets skipped"
+                    let xs = result.Tokens |> List.tryFind (fun (p, _) -> p = ["xs"])
+                    match xs with
+                    | Some (_, { Value = ResolvedNumber v }) -> Expect.equal v 14.0 "xs = round(14.22) = 14"
+                    | Some (_, rt) -> failtestf "expected ResolvedNumber for xs, got %A" rt
+                    | None -> failtest "xs token not found"
+
+            testCase "negative exponent: round(base * pow(multiplier, -3)) = 11" <| fun () ->
+                // round(16 * pow(1.125, -3)) = round(16 * 0.7023) = round(11.237) = 11
+                match Api.importTokensStudio ShimConfig.defaults evalMathAliasJson with
+                | Error es -> failtestf "import failed: %A" es
+                | Ok result ->
+                    let t3xs = result.Tokens |> List.tryFind (fun (p, _) -> p = ["3xs"])
+                    match t3xs with
+                    | Some (_, { Value = ResolvedNumber v }) -> Expect.equal v 11.0 "3xs = round(11.237) = 11"
+                    | Some (_, rt) -> failtestf "expected ResolvedNumber for 3xs, got %A" rt
+                    | None -> failtest "3xs token not found"
+
+            testCase "binary arithmetic without function call: a * b" <| fun () ->
+                let json = """
+{
+  "s": { "a": { "$type": "number", "$value": "3" },
+         "b": { "$type": "number", "$value": "4" } },
+  "t": { "c": { "$type": "number", "$value": "{a} * {b}" } },
+  "$metadata": { "tokenSetOrder": ["s", "t"] }
+}"""
+                match Api.importTokensStudio ShimConfig.defaults json with
+                | Error es -> failtestf "import failed: %A" es
+                | Ok result ->
+                    let c = result.Tokens |> List.tryFind (fun (p, _) -> p = ["c"])
+                    match c with
+                    | Some (_, { Value = ResolvedNumber v }) -> Expect.equal v 12.0 "3 * 4 = 12"
+                    | Some (_, rt) -> failtestf "expected 12.0, got %A" rt
+                    | None -> failtest "c token not found"
+
+            testCase "unresolvable alias produces MathEvalFailed warning, token omitted" <| fun () ->
+                let json = """
+{
+  "t": { "x": { "$type": "number", "$value": "round({missing} * 2)" } },
+  "$metadata": { "tokenSetOrder": ["t"] }
+}"""
+                match Api.importTokensStudio ShimConfig.defaults json with
+                | Error es -> failtestf "import failed: %A" es
+                | Ok result ->
+                    Expect.isEmpty result.Tokens "token omitted"
+                    // The set parses fine; the token itself is omitted via MathEvalFailed warning
+        ]
 
         testCase "importTokensStudio: two-set cross-set alias resolves" <| fun () ->
             match Api.importTokensStudio ShimConfig.defaults twoSetJson with
@@ -124,13 +199,27 @@ let allTests =
                     |> List.sort
                 Expect.equal values [1.25; 16.0] "correct numeric values"
 
-        testCase "importTokensStudio: math expression set skipped, recorded as SetSkipped" <| fun () ->
+        testCase "importTokensStudio: EvaluateMath resolves math expression to concrete value" <| fun () ->
+            // round({base} * pow(1.25, 2)) where base=16 → round(16 * 1.5625) = 25
             match Api.importTokensStudio ShimConfig.defaults mathExpressionJson with
             | Error es -> failtestf "import failed: %A" es
             | Ok result ->
                 let skipped = result.Warnings |> List.choose (function SetSkipped n -> Some n | _ -> None)
-                Expect.equal skipped ["generated"] "generated set skipped"
-                // core set still produces one resolved token
+                Expect.isEmpty skipped "no sets skipped"
+                Expect.equal (List.length result.Tokens) 2 "both tokens resolved"
+                let lgToken =
+                    result.Tokens |> List.tryFind (fun (p, _) -> p = ["lg"])
+                match lgToken with
+                | Some (_, { Value = ResolvedNumber v }) -> Expect.equal v 25.0 "lg = 25"
+                | Some (_, rt) -> failtestf "expected ResolvedNumber for lg, got %A" rt
+                | None -> failtest "lg token not found"
+
+        testCase "importTokensStudio: PreserveMath leaves expression as string, set skipped" <| fun () ->
+            match Api.importTokensStudio { MathPolicy = PreserveMath } mathExpressionJson with
+            | Error es -> failtestf "import failed: %A" es
+            | Ok result ->
+                let skipped = result.Warnings |> List.choose (function SetSkipped n -> Some n | _ -> None)
+                Expect.equal skipped ["generated"] "generated set skipped with PreserveMath"
                 Expect.equal (List.length result.Tokens) 1 "one token from core set"
 
         testCase "importTokensStudio: empty tokenSetOrder returns empty result" <| fun () ->
@@ -158,16 +247,16 @@ let allTests =
                 | Error es -> failtestf "import failed: %A" es
                 | Ok r -> r
 
-            testCase "produces 179 resolved tokens" <| fun () ->
-                Expect.equal (List.length result.Tokens) 179 "token count"
+            testCase "produces 232 resolved tokens (includes Foundations/Base with EvaluateMath)" <| fun () ->
+                Expect.equal (List.length result.Tokens) 232 "token count"
 
-            testCase "Foundations/Base is the only skipped set" <| fun () ->
+            testCase "no sets skipped (Foundations/Base math expressions now evaluate)" <| fun () ->
                 let skipped = result.Warnings |> List.choose (function SetSkipped n -> Some n | _ -> None)
-                Expect.equal skipped ["Foundations/Base"] "only Foundations/Base skipped"
+                Expect.isEmpty skipped "no sets skipped"
 
-            testCase "57 tokens unresolved (scale.* refs into skipped set)" <| fun () ->
+            testCase "18 tokens unresolved (cross-type alias limitations)" <| fun () ->
                 let unresolved = result.Warnings |> List.choose (function TokenUnresolved _ -> Some () | _ -> None)
-                Expect.equal (List.length unresolved) 57 "unresolved count"
+                Expect.equal (List.length unresolved) 18 "unresolved count"
 
             testCase "palette color tokens resolve to hex color values" <| fun () ->
                 let paletteTokens =

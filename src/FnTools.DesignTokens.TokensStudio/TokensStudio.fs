@@ -11,8 +11,14 @@ open System.Text.RegularExpressions
 /// Policy for Tokens Studio math expressions (e.g. round({base} * pow({multiplier}, 1))).
 /// DTCG has no math syntax — choose how the shim handles them.
 type MathPolicy =
+    /// Evaluate the expression using a recursive-descent math evaluator.
+    /// Alias references are resolved via the flat token index. If evaluation
+    /// fails (unresolvable alias, divide-by-zero, etc.) the token is omitted
+    /// and a MathEvalFailed warning is recorded.
+    | EvaluateMath
     /// Keep the expression as a string $value with type "number".
-    /// Downstream tooling (resolver or CSS emitter) must evaluate.
+    /// Note: Format.parse rejects string values for number tokens, so the
+    /// containing set will be recorded as SetSkipped in importTokensStudio.
     | PreserveMath
     /// Omit the token and record a ShimWarning.
     | SkipMath
@@ -22,10 +28,11 @@ type ShimConfig = {
 }
 
 module ShimConfig =
-    let defaults = { MathPolicy = PreserveMath }
+    let defaults = { MathPolicy = EvaluateMath }
 
 type ShimWarning =
     | SkippedMathExpression of path: string * expr: string
+    | MathEvalFailed        of path: string * expr: string
     | UnresolvedHslAlias    of path: string * alias: string
 
 type TokensStudioTheme = {
@@ -136,7 +143,13 @@ module TokensStudio =
 
     let private isAlias (s: string) =
         let t = s.Trim()
-        t.StartsWith("{") && t.EndsWith("}")
+        // A pure alias is exactly "{path}" — one brace pair, nothing else.
+        // "{a} * {b}" starts with { and ends with } but has a } before the last position.
+        t.Length > 2 &&
+        t.[0] = '{' &&
+        t.[t.Length-1] = '}' &&
+        t.IndexOf('{', 1) = -1 &&           // no second opening brace
+        t.IndexOf('}', 1) = t.Length - 1    // the only closing brace is the last char
 
     let private isBareNumber (s: string) =
         let t = s.Trim()
@@ -145,10 +158,186 @@ module TokensStudio =
         Double.TryParse(t, Globalization.NumberStyles.Float, Globalization.CultureInfo.InvariantCulture) |> fst
 
     // ── Math expression detection ─────────────────────────────────────────────
+    // Catches function-call forms (round/pow/ceil/etc.) and binary * or / with
+    // numeric or alias operands (e.g. "16 * {zoom}", "{base} / {divisor}").
 
-    let private mathRx = Regex(@"round\s*\(|pow\s*\(", RegexOptions.Compiled)
+    let private mathRx =
+        Regex(
+            @"round\s*\(|pow\s*\(|ceil\s*\(|floor\s*\(|abs\s*\(|sqrt\s*\(|min\s*\(|max\s*\(|\*|/",
+            RegexOptions.Compiled)
 
-    let private isMathExpression (s: string) = mathRx.IsMatch(s)
+    let private isMathExpression (s: string) =
+        not (isAlias s) && mathRx.IsMatch(s)
+
+    // ── Math expression evaluator ─────────────────────────────────────────────
+    // Recursive-descent evaluator for Tokens Studio number math expressions.
+    // Grammar: expr = add; add = mul ((+|-) mul)*; mul = unary ((*|/|%) unary)*;
+    //          unary = -unary | primary; primary = num | alias | (expr) | fn(args)
+
+    module private MathEval =
+
+        type Tok =
+            | TNum of float | TAlias of string | TIdent of string
+            | TLParen | TRParen | TComma
+            | TPlus | TMinus | TStar | TSlash | TPercent | TEOF
+
+        let private tokenize (s: string) : Tok array =
+            let result = ResizeArray<Tok>()
+            let mutable i = 0
+            let len = s.Length
+            while i < len do
+                match s.[i] with
+                | ' ' | '\t' | '\r' | '\n' -> i <- i + 1
+                | '{' ->
+                    let j = s.IndexOf('}', i + 1)
+                    if j > i then result.Add(TAlias s.[i+1..j-1]); i <- j + 1
+                    else i <- i + 1
+                | '(' -> result.Add TLParen;  i <- i + 1
+                | ')' -> result.Add TRParen;  i <- i + 1
+                | ',' -> result.Add TComma;   i <- i + 1
+                | '+' -> result.Add TPlus;    i <- i + 1
+                | '-' -> result.Add TMinus;   i <- i + 1
+                | '*' -> result.Add TStar;    i <- i + 1
+                | '/' -> result.Add TSlash;   i <- i + 1
+                | '%' -> result.Add TPercent; i <- i + 1
+                | c when Char.IsDigit c || (c = '.' && i + 1 < len && Char.IsDigit s.[i+1]) ->
+                    let mutable j = i
+                    while j < len && (Char.IsDigit s.[j] || s.[j] = '.') do j <- j + 1
+                    match Double.TryParse(s.[i..j-1], Globalization.NumberStyles.Float, Globalization.CultureInfo.InvariantCulture) with
+                    | true, f -> result.Add(TNum f)
+                    | _ -> ()
+                    i <- j
+                | c when Char.IsLetter c || c = '_' ->
+                    let mutable j = i
+                    while j < len && (Char.IsLetterOrDigit s.[j] || s.[j] = '_') do j <- j + 1
+                    result.Add(TIdent s.[i..j-1])
+                    i <- j
+                | _ -> i <- i + 1
+            result.Add TEOF
+            result.ToArray()
+
+        /// Evaluate a math expression string, resolving {alias} references via index.
+        /// seen: alias paths currently on the call stack (cycle detection).
+        let rec tryEval (index: Map<string, string>) (seen: Set<string>) (expr: string) : float option =
+            let tokens = tokenize (expr.Trim())
+            let pos = ref 0
+            let peek () = tokens.[!pos]
+            let consume () = pos := !pos + 1
+
+            let resolveAlias (path: string) : float option =
+                if seen.Contains path then None
+                else
+                    match Map.tryFind path index with
+                    | None -> None
+                    | Some raw ->
+                        tryEval index (seen.Add path) (raw.Trim().TrimEnd('%').Trim())
+
+            let applyFn (name: string) (args: float list) : float option =
+                match name.ToLowerInvariant(), args with
+                | "round", [x]    -> Some (Math.Round(x, MidpointRounding.AwayFromZero))
+                | "ceil",  [x]    -> Some (Math.Ceiling x)
+                | "floor", [x]    -> Some (Math.Floor x)
+                | "abs",   [x]    -> Some (Math.Abs x)
+                | "sqrt",  [x]    -> Some (Math.Sqrt x)
+                | "pow",   [x; y] -> Some (Math.Pow(x, y))
+                | "min",   [x; y] -> Some (Math.Min(x, y))
+                | "max",   [x; y] -> Some (Math.Max(x, y))
+                | _ -> None
+
+            let rec evalExpr () = evalAdd ()
+
+            and evalAdd () =
+                let mutable result : float option = evalMul ()
+                let mutable cont = result.IsSome
+                while cont do
+                    match peek () with
+                    | TPlus  ->
+                        consume ()
+                        match evalMul () with
+                        | None   -> result <- None; cont <- false
+                        | Some r -> result <- result |> Option.map (fun lhs -> lhs + r)
+                    | TMinus ->
+                        consume ()
+                        match evalMul () with
+                        | None   -> result <- None; cont <- false
+                        | Some r -> result <- result |> Option.map (fun lhs -> lhs - r)
+                    | _ -> cont <- false
+                result
+
+            and evalMul () =
+                let mutable result : float option = evalUnary ()
+                let mutable cont = result.IsSome
+                while cont do
+                    match peek () with
+                    | TStar ->
+                        consume ()
+                        match evalUnary () with
+                        | None   -> result <- None; cont <- false
+                        | Some r -> result <- result |> Option.map (fun lhs -> lhs * r)
+                    | TSlash ->
+                        consume ()
+                        match evalUnary () with
+                        | None   -> result <- None; cont <- false
+                        | Some r ->
+                            if r = 0.0 then result <- None; cont <- false
+                            else result <- result |> Option.map (fun lhs -> lhs / r)
+                    | TPercent ->
+                        consume ()
+                        match evalUnary () with
+                        | None   -> result <- None; cont <- false
+                        | Some r -> result <- result |> Option.map (fun lhs -> lhs % r)
+                    | _ -> cont <- false
+                result
+
+            and evalUnary () =
+                match peek () with
+                | TMinus -> consume (); evalUnary () |> Option.map (~-)
+                | TPlus  -> consume (); evalUnary ()
+                | _      -> evalPrimary ()
+
+            and evalPrimary () =
+                match peek () with
+                | TNum f ->
+                    consume (); Some f
+                | TAlias path ->
+                    consume (); resolveAlias path
+                | TLParen ->
+                    consume ()
+                    let v = evalExpr ()
+                    if peek () = TRParen then consume ()
+                    v
+                | TIdent name ->
+                    consume ()
+                    if peek () = TLParen then
+                        consume ()
+                        match evalArgList () with
+                        | None -> None
+                        | Some args ->
+                            if peek () = TRParen then consume ()
+                            applyFn name args
+                    else None
+                | _ -> None
+
+            and evalArgList () : float list option =
+                if peek () = TRParen then Some []
+                else
+                    match evalExpr () with
+                    | None -> None
+                    | Some first ->
+                        let mutable args = [first]
+                        let mutable cont = true
+                        let mutable ok = true
+                        while cont do
+                            match peek () with
+                            | TComma ->
+                                consume ()
+                                match evalExpr () with
+                                | None   -> ok <- false; cont <- false
+                                | Some v -> args <- args @ [v]
+                            | _ -> cont <- false
+                        if ok then Some args else None
+
+            evalExpr ()
 
     // ── HSL pattern and evaluation ────────────────────────────────────────────
 
@@ -342,6 +531,12 @@ module TokensStudio =
                     None
                 | PreserveMath ->
                     Some (dtcgType, value)   // keep as string — resolver evaluates later
+                | EvaluateMath ->
+                    match MathEval.tryEval index Set.empty rawValue with
+                    | Some f -> Some (dtcgType, JsonValue.Create(f) :> JsonNode)
+                    | None   ->
+                        warnings.Add(MathEvalFailed (path, rawValue))
+                        None
             elif not (isAlias rawValue) then
                 // Tokens Studio stores numbers as JSON strings — convert to JSON number
                 match Double.TryParse(rawValue, Globalization.NumberStyles.Float, Globalization.CultureInfo.InvariantCulture) with
@@ -564,6 +759,8 @@ module TokensStudio =
         match w with
         | SkippedMathExpression (path, expr) ->
             sprintf "SKIP  %s — math expression: %s" path expr
+        | MathEvalFailed (path, expr) ->
+            sprintf "EVAL  %s — could not evaluate: %s" path expr
         | UnresolvedHslAlias (path, alias) ->
             sprintf "WARN  %s — unresolved HSL alias: %s" path alias
 
