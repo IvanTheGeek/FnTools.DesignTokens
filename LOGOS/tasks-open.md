@@ -33,9 +33,11 @@ import/export. See `penpot-api.md` for the three-surface comparison.
   resolves base (global) sets and per-theme sets separately; `CssEmitter.emitThemed`
   emits `:root` + `[data-theme="X"]` override blocks for each named theme's diffs.
   12 new tests (8 unit + 4 Laura Light/Dark integration). 203/203 pass. 2026-05-04.
-- [ ] **Penpot export comparison (Phase 4b)** — compare three paths for getting component
-  code out of Penpot: (a) MCP `export_shape` → SVG, (b) Inspect tab HTML/CSS, (c) raw API
-  shapes → our CSS emitter. Document tradeoffs. See `LauraExperiment/plan.md` Phase 4b.
+- [x] **Penpot export comparison (Phase 4b)** — compare three paths: (a) MCP `export_shape`
+  → SVG, (b) Inspect tab HTML/CSS (Code view), (c) raw API shapes → our CSS emitter.
+  Key finding: all three paths lose token names; only Path C preserves them as CSS custom
+  properties. Missing step identified: shape-to-component CSS generator using `shape.tokens`.
+  Findings → `LauraExperiment/phase4b-findings.md`. 2026-05-04.
 - [ ] **PATHS state mapping (Phase 7)** — read prototype connections on all mock pages;
   map each screen to a PATHS state and each connection to a transition; document what
   information Penpot carries vs what PATHS needs.

@@ -79,13 +79,15 @@ Findings → `phase4-findings.md`
 **Goal**: Compare Penpot's own export paths against our API-derived approach to understand
 what each gives us and where gaps are.
 
-- [ ] **SVG export** — use MCP `export_shape` on a component instance; assess what is lost
-      (token paths, structure, interactivity) vs what is gained (ready-to-embed markup)
-- [ ] **Inspect tab HTML/CSS** — manually export a component via the Inspect tab; compare
-      the emitted CSS to what our token emitter would produce for the same component
-- [ ] **Raw API → our emitter** — what we have been building; compare output quality and
-      token fidelity against the above two
-- [ ] Document the tradeoffs: when would you use each path?
+- [x] **SVG export** — MCP `export_shape` on `pattern / card`; all tokens resolved to
+      RGB/px; font/image URLs internal; layout absent; zero token traceability. 2026-05-04.
+- [x] **Inspect tab HTML/CSS** — Code view: all tokens resolved to hex/px, UUID class names,
+      localhost URLs. Styles view: hybrid — radius/strokeWidth token names preserved,
+      colors/spacing resolved. 2026-05-04.
+- [x] **Raw API → our emitter** — produces CSS custom properties with full token names;
+      theme-switchable at runtime; missing step: shape-to-component CSS generator that
+      combines `shape.tokens` bindings with layout geometry. 2026-05-04.
+- [x] Document the tradeoffs: when would you use each path?
 
 Findings → `phase4b-findings.md`
 
