@@ -271,6 +271,48 @@ module Resolver =
 }
 """
 
+    /// Resolver document that uses $ref JSON Pointers to pull reusable source definitions
+    /// from a $defs section, including a chain ($ref → $ref) and a path-shorthand ref.
+    let refResolverJson = """
+{
+  "version": "2025.10",
+  "name": "ref-demo",
+  "$defs": {
+    "coreInline": {
+      "inline": {
+        "spacing": {
+          "$type": "dimension",
+          "sm": { "$value": { "value": 8, "unit": "px" } }
+        }
+      }
+    },
+    "coreSource": { "$ref": "#/$defs/coreInline" }
+  },
+  "sets": {
+    "core": {
+      "sources": [
+        { "$ref": "#/$defs/coreSource" }
+      ]
+    }
+  },
+  "modifiers": {
+    "density": {
+      "default": "normal",
+      "contexts": {
+        "normal": {
+          "sources": [
+            { "$ref": "#/$defs/coreInline" }
+          ]
+        }
+      }
+    }
+  },
+  "resolutionOrder": [
+    { "set": "core" }
+  ]
+}
+"""
+
 
 // ─── Invalid fixtures (rejection tests) ──────────────────────────────────────
 

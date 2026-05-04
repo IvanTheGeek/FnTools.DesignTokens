@@ -22,44 +22,82 @@ let private collect (xs: Result<'a, 'e list> list) : Result<'a list, 'e list> =
     if errs.Count > 0 then Error (List.ofSeq errs) else Ok (List.ofSeq oks)
 
 
+// ─── JSON Pointer resolution (RFC 6901, same-document "#/..." form) ──────────
+
+/// Resolve a same-document JSON Pointer against the root object of the resolver document.
+/// Handles reference-token escaping (~0 → ~, ~1 → /).
+let private resolveJsonPointer (root: JsonObject) (ref_: string) : Result<JsonNode, ParseError list> =
+    if ref_ = "#" then Ok (root :> JsonNode)
+    elif ref_.StartsWith "#/" then
+        let segments =
+            ref_.[2..].Split '/'
+            |> Array.map (fun s -> s.Replace("~1", "/").Replace("~0", "~"))
+        let mutable current : JsonNode = root
+        let mutable err : ParseError list option = None
+        for seg in segments do
+            if err.IsNone then
+                match current with
+                | :? JsonObject as obj ->
+                    match tryGetProperty seg obj with
+                    | Some node -> current <- node
+                    | None ->
+                        err <- Some [InvalidValue ("$ref", sprintf "segment '%s' not found (in %s)" seg ref_)]
+                | :? JsonArray as arr ->
+                    match Int32.TryParse seg with
+                    | true, i when i >= 0 && i < arr.Count -> current <- arr.[i]
+                    | _ ->
+                        err <- Some [InvalidValue ("$ref", sprintf "segment '%s' is not a valid array index (in %s)" seg ref_)]
+                | _ ->
+                    err <- Some [InvalidValue ("$ref", sprintf "cannot descend into non-object at '%s' (in %s)" seg ref_)]
+        match err with
+        | Some e -> Error e
+        | None   -> Ok current
+    else
+        Error [InvalidValue ("$ref", sprintf "only same-document '#/...' pointers are supported; got '%s'" ref_)]
+
+
 // ─── Parse TokenSource ───────────────────────────────────────────────────────
 
-let private parseTokenSource (path: string) (n: JsonNode) : Result<TokenSource, ParseError list> =
+let rec private parseTokenSource (root: JsonObject) (path: string) (n: JsonNode) : Result<TokenSource, ParseError list> =
     match asObject n with
     | Some o ->
-        match tryGetProperty "path" o with
-        | Some pNode ->
-            requireString path "path" pNode |> liftSingle |> Result.map FileRef
+        match tryGetProperty "$ref" o with
+        | Some refNode ->
+            requireString path "$ref" refNode |> liftSingle >>= fun ref_ ->
+                resolveJsonPointer root ref_ >>= parseTokenSource root path
         | None ->
-            match tryGetProperty "inline" o with
-            | Some inline_ ->
-                let raw = inline_.ToJsonString()
-                Format.parse raw |> Result.map Inline
+            match tryGetProperty "path" o with
+            | Some pNode ->
+                requireString path "path" pNode |> liftSingle |> Result.map FileRef
             | None ->
-                Error [InvalidValue (path, "source must have 'path' or 'inline'")]
+                match tryGetProperty "inline" o with
+                | Some inline_ ->
+                    let raw = inline_.ToJsonString()
+                    Format.parse raw |> Result.map Inline
+                | None ->
+                    Error [InvalidValue (path, "source must have '$ref', 'path', or 'inline'")]
     | None ->
         match tryGetString n with
         | Some s -> Ok (FileRef s)
         | None   -> Error [InvalidValue (path, "source must be a string or object")]
 
-let private parseSources (path: string) (n: JsonNode) : Result<TokenSource list, ParseError list> =
+let private parseSources (root: JsonObject) (path: string) (n: JsonNode) : Result<TokenSource list, ParseError list> =
     match asArray n with
     | Some arr ->
         [ for i in 0 .. arr.Count - 1 ->
-            parseTokenSource (sprintf "%s[%d]" path i) arr.[i] ]
+            parseTokenSource root (sprintf "%s[%d]" path i) arr.[i] ]
         |> collect
     | None ->
-        // single-source shorthand
-        parseTokenSource path n |> Result.map List.singleton
+        parseTokenSource root path n |> Result.map List.singleton
 
 
 // ─── Parse Set ───────────────────────────────────────────────────────────────
 
-let private parseSetDefinition (path: string) (n: JsonNode) : Result<SetDefinition, ParseError list> =
+let private parseSetDefinition (root: JsonObject) (path: string) (n: JsonNode) : Result<SetDefinition, ParseError list> =
     requireObject path "set" n |> liftSingle >>= fun o ->
         let sourcesR =
             requireProperty path "sources" o |> liftSingle
-            >>= parseSources (path + ".sources")
+            >>= parseSources root (path + ".sources")
         let descR =
             match tryGetProperty "description" o with
             | Some node -> requireString path "description" node |> liftSingle |> Result.map Some
@@ -81,14 +119,14 @@ let private parseSetDefinition (path: string) (n: JsonNode) : Result<SetDefiniti
 
 // ─── Parse Modifier ──────────────────────────────────────────────────────────
 
-let private parseModifierContext (path: string) (n: JsonNode) : Result<ModifierContext, ParseError list> =
+let private parseModifierContext (root: JsonObject) (path: string) (n: JsonNode) : Result<ModifierContext, ParseError list> =
     requireObject path "context" n |> liftSingle >>= fun o ->
         let sourcesR =
             requireProperty path "sources" o |> liftSingle
-            >>= parseSources (path + ".sources")
+            >>= parseSources root (path + ".sources")
         sourcesR |> Result.map (fun s -> { Sources = s })
 
-let private parseModifierDefinition (path: string) (n: JsonNode) : Result<ModifierDefinition, ParseError list> =
+let private parseModifierDefinition (root: JsonObject) (path: string) (n: JsonNode) : Result<ModifierDefinition, ParseError list> =
     requireObject path "modifier" n |> liftSingle >>= fun o ->
         let contextsR =
             match tryGetProperty "contexts" o with
@@ -97,7 +135,7 @@ let private parseModifierDefinition (path: string) (n: JsonNode) : Result<Modifi
                     let parsed =
                         properties co
                         |> Seq.map (fun (k, v) ->
-                            parseModifierContext (sprintf "%s.contexts.%s" path k) v
+                            parseModifierContext root (sprintf "%s.contexts.%s" path k) v
                             |> Result.map (fun ctx -> k, ctx))
                         |> List.ofSeq
                     collect parsed
@@ -187,7 +225,7 @@ let parseResolver (jsonText: string) : Result<ResolverDocument, ParseError list>
                     requireObject "sets" "sets" node |> liftSingle >>= fun so ->
                         properties so
                         |> Seq.map (fun (k, v) ->
-                            parseSetDefinition ("sets." + k) v
+                            parseSetDefinition o ("sets." + k) v
                             |> Result.map (fun d -> k, d))
                         |> List.ofSeq
                         |> collect
@@ -199,7 +237,7 @@ let parseResolver (jsonText: string) : Result<ResolverDocument, ParseError list>
                     requireObject "modifiers" "modifiers" node |> liftSingle >>= fun mo ->
                         properties mo
                         |> Seq.map (fun (k, v) ->
-                            parseModifierDefinition ("modifiers." + k) v
+                            parseModifierDefinition o ("modifiers." + k) v
                             |> Result.map (fun d -> k, d))
                         |> List.ofSeq
                         |> collect

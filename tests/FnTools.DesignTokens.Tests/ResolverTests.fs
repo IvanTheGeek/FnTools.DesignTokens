@@ -83,4 +83,67 @@ let allTests =
                 match Resolver.resolve noLoad ctx doc with
                 | Error _ -> ()
                 | Ok _ -> failtest "expected unknown context error"
+
+        testCase "parseResolver: $ref in set sources parses" <| fun () ->
+            match Resolver.parseResolver Resolver.refResolverJson with
+            | Error es -> failtestf "parse failed: %A" es
+            | Ok doc ->
+                Expect.equal (List.length doc.Sets) 1 "one set"
+                let (_, core) = doc.Sets.[0]
+                Expect.equal (List.length core.Sources) 1 "one source in core"
+                match core.Sources.[0] with
+                | Inline _ -> ()
+                | other -> failtestf "expected Inline source after $ref resolution; got %A" other
+
+        testCase "parseResolver: $ref chain ($ref → $ref) resolves transitively" <| fun () ->
+            // coreSource $ref → coreInline, so the set should see one Inline source
+            match Resolver.parseResolver Resolver.refResolverJson with
+            | Error es -> failtestf "parse failed: %A" es
+            | Ok doc ->
+                let (_, core) = doc.Sets.[0]
+                match core.Sources.[0] with
+                | Inline f ->
+                    let hasSpacing =
+                        f.Children |> List.exists (fun (n, _) -> TokenName.value n = "spacing")
+                    Expect.isTrue hasSpacing "resolved inline contains spacing group"
+                | other -> failtestf "expected Inline; got %A" other
+
+        testCase "parseResolver: $ref in modifier context sources parses" <| fun () ->
+            match Resolver.parseResolver Resolver.refResolverJson with
+            | Error es -> failtestf "parse failed: %A" es
+            | Ok doc ->
+                let (_, density) = doc.Modifiers.[0]
+                let (_, normalCtx) = density.Contexts |> List.find (fun (n, _) -> n = "normal")
+                Expect.equal (List.length normalCtx.Sources) 1 "one source in normal context"
+                match normalCtx.Sources.[0] with
+                | Inline _ -> ()
+                | other -> failtestf "expected Inline source in modifier context; got %A" other
+
+        testCase "parseResolver: $ref to unknown pointer fails with clear error" <| fun () ->
+            let bad = """
+{
+  "version": "2025.10",
+  "sets": { "s": { "sources": [{ "$ref": "#/$defs/missing" }] } },
+  "modifiers": {},
+  "resolutionOrder": [{ "set": "s" }]
+}"""
+            match Resolver.parseResolver bad with
+            | Error es ->
+                let msg = es |> List.map (sprintf "%A") |> String.concat "; "
+                Expect.stringContains msg "missing" "error mentions the missing segment"
+            | Ok _ -> failtest "expected parse error for unknown $ref"
+
+        testCase "parseResolver: external $ref (non-same-document) fails" <| fun () ->
+            let bad = """
+{
+  "version": "2025.10",
+  "sets": { "s": { "sources": [{ "$ref": "other-file.json#/foo" }] } },
+  "modifiers": {},
+  "resolutionOrder": [{ "set": "s" }]
+}"""
+            match Resolver.parseResolver bad with
+            | Error es ->
+                let msg = es |> List.map (sprintf "%A") |> String.concat "; "
+                Expect.stringContains msg "same-document" "error explains same-document restriction"
+            | Ok _ -> failtest "expected parse error for external $ref"
     ]
