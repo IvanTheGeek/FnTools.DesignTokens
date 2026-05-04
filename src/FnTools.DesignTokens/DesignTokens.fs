@@ -655,6 +655,118 @@ let importTokensStudioThemed
                 Error errors
 
 
+/// Shim a Tokens Studio multi-set JSON export, combine the sets from multiple named themes
+/// into a single resolution context, and return a flat token list.
+///
+/// <remarks>
+/// Unlike <see cref="importTokensStudioThemed"/>, which resolves each theme independently,
+/// this function merges the sets from all requested themes into one math index and one
+/// resolution pass. The key difference is that <c>allThemeSets</c> is computed from
+/// <em>all</em> themes in the file (not just the active ones), so sets belonging to
+/// non-requested themes are never mistaken for base sets and never bleed into the math index.
+///
+/// This is the correct call when themes from different modifier groups must be combined —
+/// for example, a Color-mode theme ("Light") and a Breakpoint theme ("Desktop") — because
+/// the sets of each group's non-selected variant (e.g. "Dark" or "Mobile") are excluded
+/// from the math index rather than treated as base.
+///
+/// Returns a flat <see cref="TokensStudioImportResult"/> suitable for emitting a single
+/// <c>:root</c> CSS block or a single token snapshot.
+///
+/// Unknown theme names produce a <see cref="ThemeNotFound"/> warning and are skipped.
+/// </remarks>
+let importTokensStudioCombined
+    (config     : ShimConfig)
+    (themeNames : string list)
+    (jsonText   : string)
+    : Result<TokensStudioImportResult, ImportError list> =
+    match TokensStudio.shimSingleFile config jsonText with
+    | Error msg -> Error [ParseFailed [InvalidJson msg]]
+    | Ok shimResult ->
+        let warnings = ResizeArray<TokensStudioImportWarning>()
+
+        let allSetOrder = shimResult.Metadata.TokenSetOrder
+
+        let activeThemes =
+            themeNames
+            |> List.choose (fun name ->
+                match shimResult.Themes |> List.tryFind (fun t -> t.Name = name) with
+                | Some t -> Some t
+                | None ->
+                    warnings.Add (ThemeNotFound name)
+                    None)
+
+        // Key difference from importTokensStudioThemed:
+        // Use ALL themes in the file to identify which sets are theme-owned, so sets
+        // belonging to non-requested themes are never included as implicit base sets
+        // and never bleed into the math index (cross-group bleed fix, ADR-025).
+        let allThemeSets =
+            shimResult.Themes
+            |> List.collect (fun t -> t.SelectedTokenSets |> Map.toList |> List.map fst)
+            |> Set.ofList
+
+        // Union of all active themes' enabled/source sets
+        let combinedOwn =
+            activeThemes
+            |> List.collect (fun t ->
+                t.SelectedTokenSets
+                |> Map.toList
+                |> List.choose (fun (name, status) ->
+                    match status with
+                    | "enabled" | "source" -> Some name
+                    | _ -> None))
+            |> Set.ofList
+
+        // Combined set list in tokenSetOrder: base sets (not in any theme) plus all
+        // active themes' own sets. Non-requested theme sets are excluded entirely.
+        let combinedSets =
+            allSetOrder |> List.filter (fun s ->
+                not (allThemeSets.Contains s) || combinedOwn.Contains s)
+
+        let parsedSets =
+            match TokensStudio.shimSingleFileWithMathIndex config combinedSets jsonText with
+            | Error _ -> Map.empty
+            | Ok perShim ->
+                perShim.Sets
+                |> Map.toList
+                |> List.choose (fun (name, setJson) ->
+                    match Format.parse setJson with
+                    | Ok file -> Some (name, file)
+                    | Error _ ->
+                        warnings.Add (SetSkipped name)
+                        None)
+                |> Map.ofList
+
+        let ordered =
+            combinedSets
+            |> List.choose (fun n ->
+                parsedSets |> Map.tryFind n |> Option.map (fun f -> n, f))
+
+        if ordered.IsEmpty then
+            Ok { Tokens = []; Warnings = List.ofSeq warnings }
+        else
+            let setDefs =
+                ordered
+                |> List.map (fun (n, f) ->
+                    n, { Sources = [Inline f]; Description = None; Extensions = [] })
+            let resOrder = ordered |> List.map (fun (n, _) -> SetRef n)
+            let doc = {
+                Name            = None
+                Version         = V2025_10
+                Description     = None
+                Sets            = setDefs
+                Modifiers       = []
+                ResolutionOrder = resOrder
+            }
+            match Resolver.resolve (fun _ -> Error "inline-only") Map.empty doc with
+            | Error es -> Error [ResolveFailed es]
+            | Ok merged ->
+                let tokens, unresolved = partialFlattenResolvedFile merged
+                for (p, r) in unresolved do
+                    warnings.Add (TokenUnresolved (p, r))
+                Ok { Tokens = tokens; Warnings = List.ofSeq warnings }
+
+
 /// Round-trip a resolved-token sequence back to JSON.
 /// Builds a flat TokenFile (no groups beyond what dot-paths require) and serializes.
 let export (tokens: (string list * ResolvedToken) seq) : string =
@@ -828,6 +940,7 @@ module Primitives =
     let formatShimWarning           = TokensStudio.formatWarning
     let formatImportWarning         = TokensStudio.formatImportWarning
     let importTokensStudioThemed    = importTokensStudioThemed
+    let importTokensStudioCombined  = importTokensStudioCombined
     let toResolverDocument          = TokensStudio.toResolverDocument
     let exportTokensStudio          = TokensStudio.exportToTokensStudio
     let formatExportWarning         = TokensStudio.formatExportWarning

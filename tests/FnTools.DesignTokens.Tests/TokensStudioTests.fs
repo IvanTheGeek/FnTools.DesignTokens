@@ -557,6 +557,79 @@ let allTests =
             ]
         ]
 
+        // ─── importTokensStudioCombined ──────────────────────────────────────
+        // Verifies that combining themes from different modifier groups gives
+        // correct math results by using ALL themes (not just active) for the
+        // allThemeSets computation (ADR-025 cross-group bleed fix).
+        //
+        // Contrast with importTokensStudioThemed ["Small"]:
+        //   allThemeSets = Small's sets only → zoom/large treated as base → bleeds in
+        //   → size = round(10 * zoom=2) = 20  (WRONG)
+        //
+        // importTokensStudioCombined ["Small"]:
+        //   allThemeSets = all themes' sets → zoom/large excluded → math index = [zoom/small, base]
+        //   → size = round(10 * zoom=1) = 10  (correct)
+        testList "importTokensStudioCombined" [
+
+            testCase "Small theme: size = round(10 * zoom=1) = 10" <| fun () ->
+                match Api.importTokensStudioCombined ShimConfig.defaults ["Small"] mathBleedJson with
+                | Error es -> failtestf "import failed: %A" es
+                | Ok result ->
+                    let size = result.Tokens |> List.tryFind (fun (p, _) -> p = ["size"])
+                    match size with
+                    | Some (_, { Value = ResolvedNumber v }) ->
+                        Expect.equal v 10.0 "size = round(10 * 1) = 10"
+                    | Some (_, rt) -> failtestf "expected ResolvedNumber, got %A" rt
+                    | None -> failtest "size token not found"
+
+            testCase "Large theme: size = round(10 * zoom=2) = 20" <| fun () ->
+                match Api.importTokensStudioCombined ShimConfig.defaults ["Large"] mathBleedJson with
+                | Error es -> failtestf "import failed: %A" es
+                | Ok result ->
+                    let size = result.Tokens |> List.tryFind (fun (p, _) -> p = ["size"])
+                    match size with
+                    | Some (_, { Value = ResolvedNumber v }) ->
+                        Expect.equal v 20.0 "size = round(10 * 2) = 20"
+                    | Some (_, rt) -> failtestf "expected ResolvedNumber, got %A" rt
+                    | None -> failtest "size token not found"
+
+            testCase "importTokensStudioThemed [Small] gives 20 (cross-group bleed)" <| fun () ->
+                // Demonstrates the bug that importTokensStudioCombined fixes.
+                // When only Small is active, allThemeSets = Small's sets only, so
+                // zoom/large is treated as a base set and bleeds into the math index.
+                match Api.importTokensStudioThemed ShimConfig.defaults ["Small"] mathBleedJson with
+                | Error es -> failtestf "import failed: %A" es
+                | Ok result ->
+                    let smallTheme = result.Themes |> List.tryFind (fun t -> t.ThemeName = "Small")
+                    match smallTheme with
+                    | None -> failtest "Small theme not found"
+                    | Some theme ->
+                        let size = theme.Tokens |> List.tryFind (fun (p, _) -> p = ["size"])
+                        match size with
+                        | Some (_, { Value = ResolvedNumber v }) ->
+                            Expect.equal v 20.0 "themed gives 20 (zoom/large bleeds in as base)"
+                        | Some (_, rt) -> failtestf "expected ResolvedNumber, got %A" rt
+                        | None -> failtest "size token not found in Small theme"
+
+            testCase "unknown theme: ThemeNotFound warning, still returns remaining tokens" <| fun () ->
+                match Api.importTokensStudioCombined ShimConfig.defaults ["Small"; "NoSuch"] mathBleedJson with
+                | Error es -> failtestf "import failed: %A" es
+                | Ok result ->
+                    let notFound = result.Warnings |> List.choose (function ThemeNotFound n -> Some n | _ -> None)
+                    Expect.equal notFound ["NoSuch"] "ThemeNotFound warning for unknown theme"
+                    Expect.isTrue (List.length result.Tokens > 0) "tokens resolved for valid theme"
+
+            testCase "empty theme list: resolves base sets only (global, variant excluded)" <| fun () ->
+                // No themes active → allThemeSets = all themes' sets = {zoom/small, zoom/large, base}
+                // combinedOwn = {} → combinedSets = sets not in any theme = []
+                // (All sets in mathBleedJson are owned by some theme, so result is empty)
+                match Api.importTokensStudioCombined ShimConfig.defaults [] mathBleedJson with
+                | Error es -> failtestf "import failed: %A" es
+                | Ok result ->
+                    Expect.isEmpty result.Tokens "no tokens when all sets are theme-owned and none active"
+
+        ]
+
         testList "export" [
 
             let shimAndParse (json: string) : ShimResult * Map<string, TokenFile> =

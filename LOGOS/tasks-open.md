@@ -102,6 +102,11 @@ import/export. See `penpot-api.md` for the three-surface comparison.
   recoverable via `toResolverDocument` / `exportToTokensStudio`. Key finding: combined zoom +
   breakpoint per-theme call needed for correct scale spread. See `LauraExperiment/phase3-findings.md`.
   2026-05-04.
+- [x] **`importTokensStudioCombined` (ADR-025)** — new API for combining themes from different
+  modifier groups into a single resolution context. Fixes cross-group math bleed: uses ALL
+  themes (not just active) for `allThemeSets` computation, so sets from non-requested groups
+  are never mistaken for base sets. Returns flat `TokensStudioImportResult`. 5 new tests.
+  248/248 pass. 2026-05-04.
 - [ ] **PATHS state mapping (Phase 7)** — read prototype connections on all mock pages;
   map each screen to a PATHS state and each connection to a transition; document what
   information Penpot carries vs what PATHS needs.
