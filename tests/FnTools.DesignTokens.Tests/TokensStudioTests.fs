@@ -402,6 +402,93 @@ let allTests =
                             | None -> false)
                     Expect.isGreaterThan (Map.count diffs) 0 "Light and Dark have different token values"
             ]
+
+            // ─── Math-evaluator theme-bleed fix ──────────────────────────────────
+            // Verifies that importTokensStudioThemed evaluates math expressions
+            // using a per-theme index, not the global full-set index. With the bug,
+            // the last zoom set in tokenSetOrder wins for all themes (zoom=2 bleeds
+            // into zoom/small, making size=20 instead of 10).
+            testList "math-bleed fix: per-theme math index" [
+
+                /// Two mutually-exclusive zoom sets and a base set with a math expression.
+                /// tokenSetOrder: zoom/small, zoom/large, base  (zoom/large is LAST).
+                /// With the bug: base.size = round(10 * {zoom}) uses global index →
+                ///   {zoom} = 2 (zoom/large wins) → size = 20 for BOTH themes.
+                /// With the fix: each theme uses its own zoom set → size = 10 or 20.
+                let mathBleedJson = """
+{
+  "zoom/small": {
+    "zoom": { "$type": "number", "$value": "1" }
+  },
+  "zoom/large": {
+    "zoom": { "$type": "number", "$value": "2" }
+  },
+  "base": {
+    "size": { "$type": "number", "$value": "round(10 * {zoom})" }
+  },
+  "$themes": [
+    {
+      "id": "1", "name": "Small", "group": "Scale",
+      "selectedTokenSets": { "zoom/small": "enabled", "base": "source" }
+    },
+    {
+      "id": "2", "name": "Large", "group": "Scale",
+      "selectedTokenSets": { "zoom/large": "enabled", "base": "source" }
+    }
+  ],
+  "$metadata": {
+    "tokenSetOrder": ["zoom/small", "zoom/large", "base"]
+  }
+}
+"""
+
+                testCase "Small theme: size = round(10 * zoom=1) = 10" <| fun () ->
+                    match Api.importTokensStudioThemed ShimConfig.defaults ["Small"; "Large"] mathBleedJson with
+                    | Error es -> failtestf "import failed: %A" es
+                    | Ok result ->
+                        let smallTheme = result.Themes |> List.tryFind (fun t -> t.ThemeName = "Small")
+                        match smallTheme with
+                        | None -> failtest "Small theme not found"
+                        | Some t ->
+                            let size = t.Tokens |> List.tryFind (fun (p, _) -> p = ["size"])
+                            match size with
+                            | Some (_, { Value = ResolvedNumber v }) ->
+                                Expect.equal v 10.0 "Small theme: size = round(10 * 1) = 10"
+                            | Some (_, rt) -> failtestf "expected ResolvedNumber for size, got %A" rt
+                            | None -> failtest "size token not found in Small theme"
+
+                testCase "Large theme: size = round(10 * zoom=2) = 20" <| fun () ->
+                    match Api.importTokensStudioThemed ShimConfig.defaults ["Small"; "Large"] mathBleedJson with
+                    | Error es -> failtestf "import failed: %A" es
+                    | Ok result ->
+                        let largeTheme = result.Themes |> List.tryFind (fun t -> t.ThemeName = "Large")
+                        match largeTheme with
+                        | None -> failtest "Large theme not found"
+                        | Some t ->
+                            let size = t.Tokens |> List.tryFind (fun (p, _) -> p = ["size"])
+                            match size with
+                            | Some (_, { Value = ResolvedNumber v }) ->
+                                Expect.equal v 20.0 "Large theme: size = round(10 * 2) = 20"
+                            | Some (_, rt) -> failtestf "expected ResolvedNumber for size, got %A" rt
+                            | None -> failtest "size token not found in Large theme"
+
+                testCase "themes differ: Small=10, Large=20 (not both 20 as with the bug)" <| fun () ->
+                    match Api.importTokensStudioThemed ShimConfig.defaults ["Small"; "Large"] mathBleedJson with
+                    | Error es -> failtestf "import failed: %A" es
+                    | Ok result ->
+                        let getSize (themeName: string) =
+                            result.Themes
+                            |> List.tryFind (fun t -> t.ThemeName = themeName)
+                            |> Option.bind (fun t -> t.Tokens |> List.tryFind (fun (p, _) -> p = ["size"]))
+                            |> Option.bind (fun (_, rt) ->
+                                match rt.Value with ResolvedNumber v -> Some v | _ -> None)
+                        match getSize "Small", getSize "Large" with
+                        | Some small, Some large ->
+                            Expect.notEqual small large "Small and Large have different size values"
+                            Expect.equal small 10.0 "Small size = 10"
+                            Expect.equal large 20.0 "Large size = 20"
+                        | _ -> failtest "could not find size token in both themes"
+            ]
         ]
 
         testList "export" [

@@ -78,10 +78,13 @@ import/export. See `penpot-api.md` for the three-surface comparison.
   All 120 bound shapes verified. Local set last-in-order wins over System Library. 2026-05-04.
   Key findings: new REST API format (`set-id`/`token-id` UUIDs required); math-evaluator
   theme-bleed bug; dimension unit stripping. See `LauraExperiment/phase2-findings.md` Part 2.
-- [ ] **Math-evaluator theme-bleed fix** — `EvaluateMath` evaluates math at shim time using
-  the full multi-set token index; last set wins for each alias path. `Text zoom/200%`
-  (last in `tokenSetOrder`) makes `zoom=2 → base=32` for all themes instead of the theme's
-  own zoom. Fix: re-evaluate math per-theme using only the active-set index, not the full index.
+- [x] **Math-evaluator theme-bleed fix** — `EvaluateMath` evaluated math at shim time using
+  the full multi-set token index; last set in `tokenSetOrder` won for each alias path, making
+  `Text zoom/200%` (zoom=2) override all themes. Fix: `shimSingleFileWithMathIndex` builds the
+  alias-resolution index from only the active-set list; `importTokensStudioThemed` calls it once
+  per theme (and once for base sets) with the per-theme set list. `shimCore` private helper
+  factors the shared logic. 3 new tests (math-bleed fixture + Small=10/Large=20 assertions).
+  230/230 tests pass. 2026-05-04.
 - [ ] **PATHS state mapping (Phase 7)** — read prototype connections on all mock pages;
   map each screen to a PATHS state and each connection to a transition; document what
   information Penpot carries vs what PATHS needs.

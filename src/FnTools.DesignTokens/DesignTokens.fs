@@ -546,21 +546,14 @@ let importTokensStudioThemed
     (themeNames : string list)
     (jsonText   : string)
     : Result<ThemeAwareImportResult, ImportError list> =
+    // Phase 1: global shim — used only to extract $themes and $metadata.
+    // Token values from this pass are NOT used for resolution; the global index
+    // is subject to the math-evaluator theme-bleed bug (last set wins for every
+    // alias path). Per-set-list re-shims below fix this for each resolution.
     match TokensStudio.shimSingleFile config jsonText with
     | Error msg -> Error [ParseFailed [InvalidJson msg]]
     | Ok shimResult ->
         let warnings = ResizeArray<TokensStudioImportWarning>()
-
-        let parsedSets =
-            shimResult.Sets
-            |> Map.toList
-            |> List.choose (fun (name, setJson) ->
-                match Format.parse setJson with
-                | Ok file -> Some (name, file)
-                | Error _ ->
-                    warnings.Add (SetSkipped name)
-                    None)
-            |> Map.ofList
 
         let allSetOrder = shimResult.Metadata.TokenSetOrder
 
@@ -595,8 +588,29 @@ let importTokensStudioThemed
             allSetOrder |> List.filter (fun s ->
                 not (allThemeSets.Contains s) || themeOwn.Contains s)
 
-        // Resolve an ordered list of set names, accumulating unresolved-alias warnings
-        let resolveNames (setNames: string list) : Result<(string list * ResolvedToken) list, ImportError list> =
+        // Phase 2: re-shim with a per-set-list math index, parse, and resolve.
+        // Using only the active sets for the math index prevents mutually-exclusive
+        // sets (e.g. Text zoom/100% vs Text zoom/200%) from bleeding into each other
+        // when their alias-referenced values differ (ADR-020 theme-bleed fix).
+        let resolveNamesWithIndex
+            (mathIndexSets : string list)
+            (setNames      : string list)
+            : Result<(string list * ResolvedToken) list, ImportError list> =
+
+            let parsedSets =
+                match TokensStudio.shimSingleFileWithMathIndex config mathIndexSets jsonText with
+                | Error msg -> Map.empty  // propagate as empty; resolution will return []
+                | Ok perShim ->
+                    perShim.Sets
+                    |> Map.toList
+                    |> List.choose (fun (name, setJson) ->
+                        match Format.parse setJson with
+                        | Ok file -> Some (name, file)
+                        | Error _ ->
+                            warnings.Add (SetSkipped name)
+                            None)
+                    |> Map.ofList
+
             let ordered =
                 setNames |> List.choose (fun n ->
                     parsedSets |> Map.tryFind n |> Option.map (fun f -> n, f))
@@ -623,13 +637,14 @@ let importTokensStudioThemed
                         warnings.Add (TokenUnresolved (p, r))
                     Ok tokens
 
-        match resolveNames baseSets with
+        match resolveNamesWithIndex baseSets baseSets with
         | Error es -> Error es
         | Ok baseTokens ->
             let themeResults =
                 activeThemes
                 |> List.map (fun theme ->
-                    match resolveNames (setsForTheme theme) with
+                    let themeSets = setsForTheme theme
+                    match resolveNamesWithIndex themeSets themeSets with
                     | Error es -> Error es
                     | Ok tokens -> Ok { ThemeName = theme.Name; Tokens = tokens })
             let errors = themeResults |> List.collect (function Error es -> es | Ok _ -> [])

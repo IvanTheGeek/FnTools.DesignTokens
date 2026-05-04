@@ -915,12 +915,16 @@ module TokensStudio =
 
     // ── Public API ────────────────────────────────────────────────────────────
 
-    /// Shim a Tokens Studio single-file export to DTCG 2025.10 per-set JSON.
-    ///
-    /// Input: the full JSON text from Penpot's Tokens panel → Tools → Export.
-    /// Output: ShimResult with one DTCG JSON string per set, plus extracted
-    ///         themes and metadata.
-    let shimSingleFile (config: ShimConfig) (jsonText: string) : Result<ShimResult, string> =
+    /// Core shim implementation. <c>mathIndexFilter</c> restricts which sets contribute
+    /// to the flat alias-resolution index used by the math evaluator:
+    /// <c>None</c> uses all sets (global index); <c>Some names</c> uses only the named sets.
+    /// All sets are still shimmed regardless of the filter — only math alias resolution
+    /// is restricted to the filtered index.
+    let private shimCore
+        (config          : ShimConfig)
+        (mathIndexFilter : Set<string> option)
+        (jsonText        : string)
+        : Result<ShimResult, string> =
         try
             match JsonNode.Parse(jsonText) with
             | :? JsonObject as root ->
@@ -937,7 +941,12 @@ module TokensStudio =
                             | _ -> None)
                     |> Array.ofSeq
 
-                let index    = buildFlatIndex sets
+                let indexSets =
+                    match mathIndexFilter with
+                    | None       -> sets
+                    | Some names -> sets |> Array.filter (fun (name, _) -> names.Contains name)
+
+                let index    = buildFlatIndex indexSets
                 let warnings = ResizeArray<ShimWarning>()
                 let opts     = JsonSerializerOptions(WriteIndented = true)
 
@@ -957,6 +966,32 @@ module TokensStudio =
             | _ -> Error "root is not a JSON object"
         with ex ->
             Error ex.Message
+
+    /// Shim a Tokens Studio single-file export to DTCG 2025.10 per-set JSON.
+    ///
+    /// Input: the full JSON text from Penpot's Tokens panel → Tools → Export.
+    /// Output: ShimResult with one DTCG JSON string per set, plus extracted
+    ///         themes and metadata.
+    ///
+    /// Math expressions are evaluated using the full flat index (all sets combined,
+    /// last-set-wins for duplicate paths). For per-theme math evaluation, use
+    /// <see cref="shimSingleFileWithMathIndex"/>.
+    let shimSingleFile (config: ShimConfig) (jsonText: string) : Result<ShimResult, string> =
+        shimCore config None jsonText
+
+    /// Like <see cref="shimSingleFile"/>, but evaluates math expressions using only the
+    /// tokens from <c>mathIndexSets</c> to build the alias-resolution index.
+    ///
+    /// Use this in themed import pipelines to prevent mutually-exclusive sets (e.g.
+    /// <c>Text zoom/100%</c> vs <c>Text zoom/200%</c>) from contaminating each other's
+    /// math evaluation. Pass the set names active for the current theme as <c>mathIndexSets</c>;
+    /// all sets are still shimmed — only math alias resolution is restricted.
+    let shimSingleFileWithMathIndex
+        (config        : ShimConfig)
+        (mathIndexSets : string list)
+        (jsonText      : string)
+        : Result<ShimResult, string> =
+        shimCore config (Some (Set.ofList mathIndexSets)) jsonText
 
     /// Shim with default config (math expressions preserved).
     let shim (jsonText: string) : Result<ShimResult, string> =

@@ -245,15 +245,17 @@ exclusive sets (Dark, Mobile/Tablet, 150%/200% zoom) from bleeding into the base
 Colors extracted from the "Light" + "Core" theme resolved tokens; spacing/radius/size
 computed directly from the Desktop scale formula (`round(16 * 1.25^N)`).
 
-**Shim math evaluator theme-bleed bug discovered**: `EvaluateMath` evaluates math
-expressions at shim time against the full multi-set token index. The last set in
-`tokenSetOrder` wins for each path — `Text zoom/200%` (zoom=2) is last, so
-`base = 16 * {zoom} = 32` regardless of which theme is being resolved. This makes
-spacing and radius values wrong (all 32 instead of the correct scale) when using
-`importTokensStudioThemed` for themes that include `Foundations/Base`.
+**Shim math evaluator theme-bleed bug discovered and fixed (2026-05-04)**:
+`EvaluateMath` evaluated math at shim time against the full multi-set token index. The
+last set in `tokenSetOrder` won for each path — `Text zoom/200%` (zoom=2) was last, so
+`base = 16 * {zoom} = 32` regardless of which theme was being resolved.
 
-**Workaround**: compute scale values directly using `round(base * pow(multiplier, N))`.
-**This is a bug to fix**: math should be re-evaluated per-theme, not at shim time.
+**Fix**: `shimSingleFileWithMathIndex` in `TokensStudio.fs` accepts a list of set names
+and builds the alias-resolution index from ONLY those sets. `importTokensStudioThemed` in
+`DesignTokens.fs` calls it once per theme (and once for base sets) with the per-theme set
+list returned by `setsForTheme`. The zoom set active in each theme (e.g. `Text zoom/100%`)
+is now the only one visible to the math evaluator for that theme's resolution, so
+`zoom=1 → base=16` for the "100%" theme, `zoom=2 → base=32` for "200%", as intended.
 
 Correct Desktop + 100% zoom scale values:
 | scale | value |
