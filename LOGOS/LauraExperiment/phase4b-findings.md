@@ -239,42 +239,133 @@ the gap is the layout/geometry extraction.
 
 ---
 
+## Path D — .penpot Archive (export-binfile)
+
+This path was not in the original plan but is the richest format available.
+
+**Invocation**: `POST /api/rpc/command/export-binfile` with `fileId`, `includeLibraries: true`,
+`embedAssets: true`. Returns a ZIP file identical to the Design tab → Download backup format.
+
+### Archive structure relevant to tokens
+
+```
+files/<file-uuid>/
+  tokens.json                       ← Tokens Studio format, aliases preserved
+  pages/<shape-uuid>.json           ← one per shape, contains appliedTokens
+```
+
+`tokens.json` for Design Mocks has 19 sets, 8 themes, `$metadata` with `tokenSetOrder` and
+`activeThemes`. Alias chains (`{scale.3xs}`) and math expressions
+(`round({base} * pow({multiplier}, -3))`) stored as-is — our shim resolves them.
+
+### Per-shape JSON
+
+```json
+{
+  "appliedTokens": {
+    "fill":        "color.background.default",
+    "strokeColor": "color.border.default",
+    "strokeWidth": "stroke.hairline",
+    "r1": "radius.sm", "r2": "radius.sm",
+    "r3": "radius.sm", "r4": "radius.sm",
+    "columnGap":   "spacing.3xs",
+    "rowGap":      "spacing.3xs"
+  }
+}
+```
+
+Token dot-paths are stored as-is, not resolved. 1277 shapes in Design Mocks have
+non-empty `appliedTokens`.
+
+### What is present
+
+- All token path names (not resolved values) for every bound property
+- Full alias chain for resolution via `tokens.json`
+- Theme metadata (`$themes`, `activeThemes`) for multi-theme emission
+- Shape geometry for layout/structural CSS
+- Works headlessly — no browser required; pure REST call
+
+### What is missing
+
+Same structural gap as Path C: the archive gives token bindings and geometry, but not a
+ready-to-use component CSS file. The code-gen step is still manual.
+
+Also: `tokens.json` is Tokens Studio format with math expressions in `Foundations/Base`.
+Our shim skips that set, producing 57 unresolved tokens (spacing, sizing, typography).
+Those tokens show up in `appliedTokens` as unresolvable until the math expressions are
+evaluated. This is the same gap documented in the multi-set resolution findings.
+
+---
+
+## Composite approach: generateStyle + shape.tokens
+
+A newly confirmed Plugin API path (`penpot.generateStyle`) offers a useful complement:
+
+```javascript
+// Returns resolved CSS string — token names absent, but layout structure present
+const css = penpot.generateStyle([shape], { type: "css", includeChildren: false });
+```
+
+`generateStyle` produces the same CSS as Inspect Code view (concrete hex/px values,
+UUID class names). It is NOT token-aware. However, it faithfully generates the layout
+properties (`display: grid`, `grid-template-rows: 1fr auto`, `flex-direction`, `gap`,
+`padding`) that are geometry-derived and theme-invariant.
+
+**Clean split**:
+- `penpot.generateStyle()` → extract layout/structural CSS (`display`, `grid-template-*`,
+  `flex-direction`, `flex-wrap`, `max-width`) — these don't change across themes
+- `shape.tokens` → the token-bound properties (`fill`, `stroke`, `radius`, `gap`,
+  `padding`) — replace resolved values with `var(--token-path)` references
+
+The result: a component CSS block where layout is literal and theming is variable-driven.
+This assembly step is the missing Phase 5 deliverable.
+
+---
+
 ## Comparison Summary
 
-| Dimension                    | Path A: SVG export    | Path B: Inspect CSS          | Path C: Our emitter          |
-|------------------------------|-----------------------|------------------------------|------------------------------|
-| Token names preserved        | No                    | Partial (Styles view only)   | Yes (as `--var` names)       |
-| Theme switching at runtime   | No                    | No                           | Yes                          |
-| Layout structure             | No (geometry only)    | Yes (grid/flex)              | Partial (tokens only, not layout) |
-| Portable font URLs           | No (penpot-frontend)  | No (localhost:9001)          | N/A (not in scope)           |
-| Portable image assets        | No (media IDs)        | No (inline SVG with media)   | N/A                          |
-| Stable class/selector names  | N/A (SVG IDs)         | No (UUID fragments)          | Yes (author-controlled)      |
-| Complete component output    | Visual only           | Mostly (needs URL fixes)     | No (vars only, no structure) |
-| Active-theme awareness       | Renders one theme     | Shows active theme values    | Emits all themes as overrides |
-| Usable in CI/headless        | Yes                   | No (requires Penpot UI)      | Yes                          |
-| Math expression resolution   | Yes (opaque)          | Yes (opaque)                 | Yes (transparent chain)      |
+| Dimension                    | Path A: SVG export    | Path B: Inspect CSS          | Path C: Our emitter          | Path D: .penpot archive      |
+|------------------------------|-----------------------|------------------------------|------------------------------|------------------------------|
+| Token names preserved        | No                    | Partial (Styles view only)   | Yes (as `--var` names)       | Yes (dot-paths in appliedTokens) |
+| Theme switching at runtime   | No                    | No                           | Yes                          | Requires code-gen step       |
+| Layout structure             | No (geometry only)    | Yes (grid/flex)              | No (vars only)               | Yes (shape geometry)         |
+| Portable font URLs           | No (penpot-frontend)  | No (localhost:9001)          | N/A                          | N/A (tokens only)            |
+| Portable image assets        | No (media IDs)        | No (inline SVG with media)   | N/A                          | Embedded (with embedAssets)  |
+| Stable class/selector names  | N/A (SVG IDs)         | No (UUID fragments)          | Yes (author-controlled)      | Requires code-gen step       |
+| Complete component output    | Visual only           | Mostly (needs URL fixes)     | No (vars only, no structure) | No (needs assembly step)     |
+| Active-theme awareness       | Renders one theme     | Shows active theme values    | Emits all themes as overrides | Full theme metadata present  |
+| Usable in CI/headless        | Yes                   | No (requires Penpot UI)      | Yes                          | Yes (pure REST)              |
+| Math expression resolution   | Yes (opaque)          | Yes (opaque)                 | Yes (transparent chain)      | No (raw expressions stored)  |
+| Alias chains preserved       | No                    | No                           | Yes (shim resolves)          | Yes (shim resolves)          |
 
 ---
 
 ## Implications for the FnTools / FnHCI pipeline
 
-1. **Path A (SVG) + Path C (our emitter) are the CI-compatible paths.** Path B requires
-   the Penpot UI; it cannot be scripted.
+1. **Paths A + C + D are the CI-compatible paths.** Path B requires the Penpot UI open in
+   a browser; it cannot be scripted. All three CI paths are pure HTTP.
 
-2. **The missing step is shape-to-component CSS generation.** Our emitter produces the
-   variable file. A second pass reading `shape.tokens` (via Plugin API or REST) would
-   produce the component CSS that references those variables. This is the natural Phase 5
-   deliverable.
+2. **Path D (archive) is the richest input for a code generator.** It provides token
+   dot-paths in `appliedTokens`, alias chains in `tokens.json`, theme metadata, and shape
+   geometry — all in one REST call, headlessly, without a browser. It is the best starting
+   point for a shape-to-component code generator.
 
-3. **Layout properties are geometry, not tokens.** Gap and padding values appear in
-   `shape.tokens` (e.g. `columnGap → spacing.3xs`) but display/grid-template/flex-direction
-   are pure layout metadata. A complete code generator needs both: token bindings from
-   `shape.tokens` AND layout metadata from the shape's geometry fields.
+3. **The composite approach for Phase 5**: 
+   - `export-binfile` (or `get-file`) → shape `appliedTokens` + geometry
+   - Our shim on `tokens.json` → resolved `--variable` map per theme
+   - Per-shape: replace `appliedTokens` entries with `var(--token-path)`, take layout
+     properties from geometry
+   - Output: component CSS file with variable references + `:root`/theme override blocks
 
-4. **Inspect Styles view is the best human inspection tool.** It shows token names for
-   structural tokens (radius, stroke) while resolving colors — a useful hybrid for
-   manual review. Code view is for copying resolved CSS into a prototype.
+4. **`penpot.generateStyle()` is useful for layout extraction in interactive sessions.**
+   When a browser is available, it provides the layout/structural CSS block in one call.
+   For CI, read layout from shape geometry directly (it is simpler and scriptable).
 
-5. **Class name stability is a blocker for Inspect CSS in production.** UUID-fragment
-   class names (`.pattern-85a4f62f0d06`) break on any file copy, rename, or re-import.
-   Our approach uses author-named classes that reference stable variable names.
+5. **The remaining math expression gap affects spacing/sizing/typography tokens.** The
+   `Foundations/Base` set uses `round({base} * pow({multiplier}, N))` expressions. Our
+   shim skips it, leaving 57 unresolved tokens. These appear in `appliedTokens` but cannot
+   be resolved without evaluating the math. This is the primary fidelity gap in the pipeline.
+
+6. **Inspect Styles view is the best human inspection tool.** Token names for structural
+   props (radius, stroke-width) are visible; Code view resolves everything. Neither is
+   suitable for production use directly.

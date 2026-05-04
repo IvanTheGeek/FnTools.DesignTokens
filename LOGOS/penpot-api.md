@@ -20,7 +20,7 @@ token import/export format, internal storage structure, and setup notes.
 | **Scope** | Any file in the instance | Currently open file only | Currently open file only |
 | **Token read/write** | Yes — `get-file` returns full token data; `update-file` with `set-token` / `set-token-set` / `set-token-theme` change types (verified 2.14.4) | **Read only** — `penpot.library.local.tokens.sets` (no write surface in Plugin API as of 2.14.4) | Yes (direct DOM/JS access) |
 | **Shape create/modify** | Yes via `update-file` change ops | Full | Full |
-| **Export shape as image** | Via exporter service | Yes (`export_shape` tool) | Yes (screenshot) |
+| **Export shape** | `export-binfile` → `.penpot` ZIP (full structure + tokens); no rendered-image export on its own | `export_shape` (PNG/SVG) and `shape.export()` (SVG/PNG/JPEG/WEBP/PDF) | Yes (screenshot) |
 | **File management** | Yes (create/rename/delete files, projects) | No | No |
 | **Multi-file operations** | Yes | No | No |
 | **Webhooks** | Yes (outbound on file changes) | No | No |
@@ -502,6 +502,170 @@ Each set exposes: `id`, `name`, `active` (boolean), `toggleActive()`, `tokens` (
 Each token exposes: `id`, `name`, `type`, `value`, `resolvedValue`, `resolvedValueString`,
 `description`, `duplicate()`, `remove()`, `applyToShapes(prop, shapes)` (no-op),
 `applyToSelected(prop)` (no-op).
+
+## Plugin API — shape geometry and layout properties
+
+Available on every shape (via `execute_code`):
+
+```javascript
+// Geometry — all readonly
+shape.x, shape.y          // absolute canvas position
+shape.width, shape.height // rendered size
+shape.boardX, shape.boardY   // relative to containing frame
+shape.parentX, shape.parentY // relative to parent
+shape.bounds              // { x, y, width, height }
+shape.rotation            // degrees
+shape.flipX, shape.flipY
+
+// Visual properties
+shape.fills               // Fill[]
+shape.strokes             // Stroke[]
+shape.shadows             // Shadow[]
+shape.blur                // Blur | undefined
+shape.borderRadius        // number
+shape.borderRadiusTopLeft/TopRight/BottomRight/BottomLeft
+shape.opacity
+shape.blendMode
+
+// Layout (frames/boards only)
+shape.flex                // FlexLayout | undefined (readonly)
+shape.grid                // GridLayout | undefined (readonly)
+shape.layoutChild         // LayoutChildProperties | undefined (readonly, when in layout frame)
+shape.layoutCell          // LayoutCellProperties | undefined (readonly, when in grid)
+```
+
+These give the geometry data needed to complement token bindings — `shape.tokens` gives the
+token-driven CSS properties; shape geometry gives the layout/structural CSS.
+
+## Plugin API — CSS and markup generation
+
+These functions are on the root `penpot` object, not on individual shapes:
+
+```javascript
+// Returns resolved CSS as a string — token names are NOT preserved, concrete values only.
+// Useful for extracting layout/structural CSS (display, grid-template, flex-direction, etc.)
+// since those properties are geometry-derived, not token-driven.
+penpot.generateStyle(
+  shapes,
+  { type: "css", withPrelude: boolean, includeChildren: boolean }
+): string
+
+// Returns HTML or SVG markup as a string
+penpot.generateMarkup(shapes, { type: "html" | "svg" }): string
+
+// Returns @font-face declarations as a string (async)
+penpot.generateFontFaces(shapes): Promise<string>
+```
+
+**Critical**: `generateStyle` uses the CSS generation path that works on resolved shape
+attributes. It has zero awareness of token names — output is identical in character to
+the Inspect tab Code view CSS (concrete hex/px, UUID-fragment class names). Token names
+are absent.
+
+**Useful split**: Use `generateStyle` for layout/structural properties (`display`, 
+`grid-template-*`, `flex-direction`, `flex-wrap`, `max-width`) that are geometry-derived
+and theme-invariant. Use `shape.tokens` for the token-driven properties (fill, stroke,
+radius, gap, padding) and replace those with `var(--token-path)` references.
+
+## Plugin API — shape export (rendered)
+
+```javascript
+shape.export({
+  type: "svg" | "png" | "jpeg" | "webp" | "pdf",
+  scale: number,         // optional, for raster formats
+  suffix: string,        // optional
+  skipChildren: boolean  // optional
+}): Promise<Uint8Array>
+```
+
+All five formats are rendered snapshots. Same as MCP `export_shape` — no token names,
+no structural data. The `.penpot` ZIP archive (via `export-binfile`) is the only export
+path that preserves token bindings.
+
+## .penpot archive format (export-binfile)
+
+**Endpoint**: `POST /api/rpc/command/export-binfile`
+**Params**: `fileId` (uuid), `includeLibraries` (boolean), `embedAssets` (boolean)
+**Returns**: `.penpot` ZIP file
+
+### Archive structure
+
+```
+manifest.json
+files/
+  <file-uuid>.json          (file metadata)
+  <file-uuid>/
+    tokens.json             (token sets — Tokens Studio format, aliases preserved)
+    pages/
+      <shape-uuid>.json     (one JSON per shape — includes appliedTokens)
+    components/
+    media/
+    thumbnails/
+objects/
+  <media-uuid>.json + .png  (media object thumbnails)
+```
+
+`manifest.json` declares the Penpot version and feature set per file (e.g. `design-tokens/v1`).
+
+### tokens.json
+
+Tokens Studio format with full alias chains preserved:
+```json
+{
+  "Foundations/Spacing": {
+    "spacing": {
+      "3xs": { "$value": "{scale.3xs}", "$type": "spacing" }
+    }
+  },
+  "$themes": [ { "name": "Color mode/Dark", "selectedTokenSets": {...} } ],
+  "$metadata": { "tokenSetOrder": [...], "activeThemes": [...] }
+}
+```
+
+Aliases like `{scale.3xs}` are stored as-is. Math expressions like
+`round({base} * pow({multiplier}, -3))` are also stored as-is (not resolved).
+Our Tokens Studio shim handles both.
+
+### Per-shape JSON (appliedTokens)
+
+Each shape file contains `appliedTokens` with dot-path token names — not resolved values:
+
+```json
+{
+  "appliedTokens": {
+    "fill":        "color.background.default",
+    "strokeColor": "color.border.default",
+    "strokeWidth": "stroke.hairline",
+    "r1": "radius.sm", "r2": "radius.sm", "r3": "radius.sm", "r4": "radius.sm",
+    "columnGap": "spacing.3xs",
+    "rowGap":    "spacing.3xs"
+  }
+}
+```
+
+Full set of `appliedTokens` attribute names: `fill`, `strokeColor`, `strokeWidth`,
+`r1`–`r4` (border-radius corners), `p1`–`p4` (padding), `m1`–`m4` (margin), `rowGap`,
+`columnGap`, `width`, `height`, `opacity`, `shadow`, `rotation`, `x`, `y`, `lineHeight`,
+`fontFamily`, `fontSize`, `fontWeight`, `letterSpacing`, `textCase`, `textDecoration`,
+`typography`, `layoutItemMinW`, `layoutItemMaxW`, `layoutItemMinH`, `layoutItemMaxH`.
+
+1277 shapes across the Design Mocks file have non-empty `appliedTokens`.
+
+### Why this is the richest export format
+
+The `.penpot` archive is the only path (besides `get-file` transit+json) that gives:
+- Token path names in `appliedTokens` (not resolved values)
+- Full alias chain in `tokens.json` for resolution
+- Theme metadata for multi-theme resolution
+- Shape geometry for layout/structural CSS
+- All without requiring a browser session
+
+**Pipeline using the archive**:
+1. `export-binfile` → unzip
+2. `tokens.json` → our Tokens Studio shim → resolved CSS custom property map per theme
+3. Per-shape `appliedTokens` → map each entry to `property: var(--token-path)`
+4. Shape geometry → layout/structural CSS (`display`, `grid-template-*`, `flex-direction`)
+5. Combine 3 + 4 → complete component CSS block
 
 ## Notes for AI agents
 
