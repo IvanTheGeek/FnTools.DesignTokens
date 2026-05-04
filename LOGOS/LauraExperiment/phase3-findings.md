@@ -304,6 +304,39 @@ for this file", the exported `$metadata.activeThemes` is the answer.
 
 ---
 
+## Plugin comparison
+
+### Juanfran — Color styles to JSON
+Output: empty (89 bytes, `$themes: []`, `$metadata` all empty).
+Reason: reads Penpot **native color styles** (Assets panel → Colors), not the Tokens tab.
+Laura's file uses Tokens Studio tokens exclusively — no native color styles defined.
+**Finding**: native Penpot color styles and Tokens Studio tokens are completely separate
+storage systems. A plugin targeting one is blind to the other.
+
+### Design Token Manager (Elhombretecla)
+Reads from the Tokens tab. Sees all 22 sets with correct token counts (matches our
+analysis exactly: 305 tokens total). Has a built-in math expression evaluator.
+
+**Math evaluator — Design Token Manager syntax:**
+- Basic operators: `+`, `-`, `*`, `/`
+- Grouping: parentheses
+- Function: `roundTo(value, decimals)` — rounds to N decimal places
+- Constraint: spaces required around operators (`8 * 8` not `8*8`)
+- Constraint: cannot mix units (`rem + px` invalid)
+- Constraint: cannot use math on composite tokens (multi-value tokens)
+
+**Syntax mismatch with Laura's tokens:**
+Laura's `Foundations/Base` uses:
+```
+round({base} * pow({multiplier}, -1))
+```
+The Design Token Manager documents `roundTo()` (not `round()`) and has no `pow()` function.
+Laura's math uses a different function set — likely Tokens Studio's own math engine, not
+this plugin's evaluator. Whether the plugin can display/resolve Laura's math tokens
+correctly is TBD (user is exploring).
+
+---
+
 ## Open questions
 
 - Should the shim live in `FnTools.DesignTokens.Format` (codec concern) or in a new
