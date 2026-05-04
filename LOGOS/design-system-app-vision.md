@@ -130,6 +130,29 @@ Penpot handles visual composition and asset storage. The design system app is no
 - ADR creation writes back to git via a small server-side handler
 - PATH walkthrough uses the real component library — no static snapshots
 
+## UX Reference — 72F Design System Generator
+
+The [72F Design System Generator](https://github.com/72F-Studio/72f-design-system-generator)
+Penpot plugin (by Parth Kulkarni / 72F Studio) is worth studying as a UX reference for the
+Token Management section. It offers a structured, form-driven workflow for:
+
+- Creating token sets from preset templates
+- Defining colors, typography, spacing, radius, and shadow tokens through guided forms
+- Managing themes (create, delete, switch active)
+- Exporting tokens to JSON
+
+The interaction model is more accessible than raw JSON editing, and the generator +
+manager + export tab structure maps naturally onto what the design system app needs.
+
+The gap between 72F and what we want: it outputs Tokens Studio format (not DTCG), has
+no CSS ingestion or conversion workflow, no alias chain visualization, and no ADR/PATHS
+integration. A DTCG-native version of this UX — built on `FnTools.DesignTokens` — with
+the CSS bootstrap workflow (ingest → audit → name → refactor) layered in would be the
+target. The 72F plugin is the rough proof that the form-driven model works in practice.
+
+Note: 72F has a license mismatch (README says Apache 2.0, `LICENSE` file is AGPL-3.0).
+Issue filed: https://github.com/72F-Studio/72f-design-system-generator/issues/1
+
 ## Status
 
 Vision only. No implementation started. Capture here as direction for future ATLAS/FnHCI work.

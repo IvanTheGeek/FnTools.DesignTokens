@@ -483,6 +483,13 @@ is a *generator* — its value is creating design systems from templates. The ex
 a secondary feature intended for round-tripping its own generated tokens, not for
 extracting an existing system.
 
+**UX note:** The interaction model is worth studying as inspiration. It offers a
+structured, form-driven workflow for token creation, set management, and theme
+definition — more approachable than editing raw JSON. A version of this UX built on
+top of true DTCG-compliant tokens (rather than Tokens Studio format), with CSS
+ingestion and conversion flows, would serve the design system app vision well. See
+`design-system-app-vision.md`.
+
 ### Design MD Skills (TypeUI)
 Manifest: `https://penpot-design-skills-plugin.vercel.app/manifest.json`
 Permissions: `content:read`, `allow:downloads`
