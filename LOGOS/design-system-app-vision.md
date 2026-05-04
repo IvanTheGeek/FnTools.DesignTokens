@@ -57,6 +57,44 @@ Steps 1 and 4 are fully automated. Step 2 is automatable (scanner). Step 3 requi
 - History view: timeline of decisions
 
 ### ATLAS Integration — PATH Modeling
+
+**The design mocks file is the input surface for PATH state definitions.**
+
+Each screen in the mocks represents a specific application state — what the user
+sees at a particular moment with particular data after a particular sequence of
+actions. Prototype connections between screens express transitions. The mocks file
+is not a picture of the application; it is a specification of the application's
+state space, expressed visually.
+
+The flow is:
+
+```
+System Library          Design Mocks              PATHS + Fun.Blazor
+──────────────          ────────────              ─────────────────
+Tokens (values)    →    Screens (states)      →   State graph (nodes + edges)
+Components         →    Component layout      →   Component tree per state
+Themes/Sets        →    Token resolution      →   CSS custom properties
+                        Prototype connections  →   Router / navigation events
+```
+
+The mocks file bridges the design system and the implementation. It consumes
+the library's primitives and composes them into specific states. The implementation
+consumes the mocks to know what states to build and how to build them.
+
+**What the mocks file informs for PATHS and Fun.Blazor:**
+- Which states need to exist (one per distinct screen)
+- Which components appear in each state and how they compose
+- Which component variants are actually used (limits what needs to be built)
+- What transitions connect states (prototype connections → router events)
+- Which token combination is active per state (breakpoint + mode + brand)
+
+**What the mocks file does not carry (requires separate authoring):**
+- Guard conditions on transitions ("only navigable if logged in")
+- Data bindings and state parameters ("which user ID to show")
+- Error states and loading states (usually implicit in the design, not explicit)
+- Back-navigation intent beyond what prototype connections express
+
+PATH modeling tools:
 - Import ATLAS PATH definitions (user journeys across screens)
 - Each PATH step maps to a component or screen
 - Walk a PATH as a prototype: renders the relevant components in sequence

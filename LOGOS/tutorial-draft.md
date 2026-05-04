@@ -293,6 +293,40 @@ They don't carry: guard conditions ("only if logged in"), data bindings ("pass t
 user ID"), error states, back-navigation intent, loading states. Those require a
 separate translation step from designer intent to developer implementation.
 
+## The three-layer stack
+
+This is the complete picture once the pieces are connected:
+
+```
+System Library
+  Tokens (values) + Components (primitives and patterns)
+  — defines WHAT exists and WHAT it looks like per theme
+
+Design Mocks
+  Screens (specific application states) + Prototype connections (transitions)
+  — defines WHICH states the application has and HOW they connect
+  — also defines WHICH components and token combinations each state uses
+
+Implementation (Fun.Blazor / CSS / Router)
+  Component tree per state + CSS custom properties + navigation events
+  — the working application built FROM the above two layers
+```
+
+The System Library answers: "what building blocks do we have?"
+The Design Mocks answer: "what do we build with them, and in what states?"
+The implementation answers: "how does it run?"
+
+**The mocks file does not duplicate the library — it composes it.**
+We verified this directly: zero token diffs, zero local components between
+the Design Mocks file and the System Library. Every token and component the
+mocks use comes from the library unchanged. The mocks file's contribution is
+entirely in how those pieces are arranged into states.
+
+This clean boundary is what makes the stack maintainable. Change a token value
+in the library → every screen that uses it updates. Add a new component variant
+to the library → the mocks can use it without touching any token definitions.
+Build a new Fun.Blazor component → the mocks file told you exactly what it needs.
+
 ---
 
 ## Things still to figure out
