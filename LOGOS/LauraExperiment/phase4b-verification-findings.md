@@ -31,9 +31,9 @@ foundation sets (`Foundations/*`, `Color/Palettes and Scales`, `Typography`,
 | `color.background.body`    | `#f3f2f3` | `#f2f3f2` | ~ |
 | `color.border.default`     | `#c2bcc1` | `#bcc2be` | ~ |
 | `breakpoint`               | `1200px`  | `1200px`  | ✓ |
-| `spacing.3xs`              | `8px`     | `8`       | ✓ value, no unit |
-| `spacing.sm`               | `16px`    | `16`      | ✓ value, no unit |
-| `radius.sm`                | `16px`    | `16`      | ✓ value, no unit |
+| `spacing.3xs`              | `8px`     | `8px`     | ✓ |
+| `spacing.sm`               | `16px`    | `16px`    | ✓ |
+| `radius.sm`                | `16px`    | `16px`    | ✓ |
 
 **Scale values now correct**: `--scale-3xs: 8`, `--scale-sm: 16`, `--scale-md: 20`,
 `--scale-lg: 25`, `--scale-xl: 31`, `--scale-2xl: 39`, `--scale-3xl: 49`. The full
@@ -86,20 +86,23 @@ theme per call, or extending the shim to support separate globalIndex/HSL-index 
 
 ---
 
-## `spacing.*` / `radius.*` resolve as `ResolvedNumber`, not `ResolvedDimension`
+## `spacing.*` / `radius.*` alias-type coercion (fixed 2026-05-04)
 
-The alias chain is: `spacing.sm` (`$type: dimension`, `$value: {scale.sm}`) →
-`scale.sm` (`$type: number`, `$value: 16`). DTCG alias resolution inherits the target's
-resolved value, so `spacing.sm` becomes a `ResolvedNumber(16)` rather than
-`ResolvedDimension {Value=16, Unit=Px}`.
+The alias chain `spacing.sm` (`$type: dimension`, `$value: {scale.sm}`) →
+`scale.sm` (`$type: number`, `$value: 16`) previously discarded the `dimension` annotation
+and resolved to `ResolvedNumber(16)` (bare number, no unit).
 
-The CSS emitter emits `--spacing-sm: 16` (bare number, no unit). This matches Penpot's
-`token.resolvedValue` behavior (strips the unit to a bare number) but is not a valid CSS
-length — a `px` suffix is required for most CSS properties.
+**Fix** — two changes in `partialFlattenResolvedFile` (`DesignTokens.fs`):
 
-Workaround (Phase 5): at the component layer, add `px` via `calc(var(--spacing-sm) * 1px)`
-or by using the emitted numbers as multipliers. Long-term fix: the shim should propagate
-the `$type` annotation through alias chains so `spacing.*` dimensions keep their `px` unit.
+1. **Type precedence flip**: `t.Type |> Option.orElse target.Type` — the alias token's own
+   `$type` now takes precedence over the aliased target's type, per DTCG intent.
+
+2. **Number→Dimension coercion**: when the resolved type is `DimensionType` but the value is
+   a bare `Number`, it is promoted to `Dimension {Value=n, Unit=Px}` before `toResolvedValue`.
+
+**Shim fix** (`TokensStudio.fs` `walkObj`): a typeless alias token (`$value: {ref}` with no
+`$type` and no inherited scope type) is now passed through as a leaf (previously silently
+dropped because `isLeaf = false`). Three new tests verify all coercion paths; 254 pass.
 
 ---
 
@@ -120,11 +123,14 @@ in an inner `:root { }` rule, producing valid CSS:
 The `emitThemed` function automatically benefits — callers can pass `@media (...)` as the
 `selectorForTheme` return value and get correct output.
 
-Responsive CSS emitted: `importTokensStudioCombined ["Always-on"; "Light"; "Desktop"; "100%"; "Core"]`
-as `:root`, then `importTokensStudioCombined ["Always-on"; "Light"; "Mobile"; "100%"; "Core"]`
-compared against the base to produce the `@media (max-width: 360px)` override. The diff
-contains only the tokens that change between Desktop and Mobile (primarily `breakpoint` and
-`multiplier`). The full responsive CSS is 16 KB for 248 base tokens plus 2-token mobile diff.
+Responsive CSS emitted:
+- `:root` — `importTokensStudioCombined ["Always-on"; "Light"; "Desktop"; "100%"; "Core"]`
+- `@media (max-width: 1020px)` — `importTokensStudioCombined ["Always-on"; "Light"; "Tablet"; "100%"; "Core"]` diff against desktop base
+- `@media (max-width: 360px)` — `importTokensStudioCombined ["Always-on"; "Light"; "Mobile"; "100%"; "Core"]` diff against desktop base
+
+Each `@media` block contains only the tokens that differ from the desktop base (primarily
+`breakpoint` and `multiplier`). Full responsive CSS is 17 KB for 248 base tokens plus
+tablet and mobile diffs.
 
 ---
 
@@ -133,19 +139,19 @@ contains only the tokens that change between Desktop and Mobile (primarily `brea
 | Item | Status |
 |---|---|
 | `emitBlock` `@media` nesting (`:root` inside `@`) | ✓ done |
-| 3 new `emitBlock` tests + 1 `emitThemed @media` test | ✓ 251 tests pass |
+| 3 new `emitBlock` tests + 1 `emitThemed @media` test | ✓ done |
 | `buildFlatIndex` tokenSetOrder sort fix | ✓ done |
 | Scale token values correct (8, 10, 13, 16, 20, 25, 31, 39, 49) | ✓ verified |
 | Color tokens verified against phase2 push | ~ same family, hue differs by ~Eco Tools vs Core |
-| Breakpoint token correct (1200px desktop, 360px mobile) | ✓ verified |
-| Responsive CSS written to `scripts/phase4-output.css` | ✓ done |
+| Breakpoint correct (Desktop 1200px, Tablet 1020px, Mobile 360px) | ✓ verified |
+| `spacing.*` / `radius.*` emit with `px` unit | ✓ fixed (alias-type coercion) |
+| Responsive CSS written to `scripts/phase4-output.css` | ✓ done (17 KB) |
+| 254 tests pass | ✓ |
 
 ---
 
 ## Gaps carried to Phase 5
 
-- **`ResolvedNumber` for spacing/radius** — bare numbers without `px` unit; component layer
-  must add the unit.
 - **HSL brand-bleed** — color tokens evaluated at shim time with last-brand hue; brand
   per-call theme separation needed for correct per-brand colors.
 - **`spacing.*` / `radius.*` unresolved with just `["Light"; "Desktop"; "100%"]`** — the

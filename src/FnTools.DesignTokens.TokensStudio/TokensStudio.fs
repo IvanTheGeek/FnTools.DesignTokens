@@ -825,6 +825,17 @@ module TokensStudio =
                     let isLeaf =
                         child.ContainsKey("$value")
                         && (childHasOwnType || scopeType.IsSome)
+                    // A pure alias token with no $type (own or inherited) is still a leaf.
+                    // Tokens Studio always emits $type, but DTCG allows typeless alias tokens
+                    // whose type is inferred from the referenced token. Pass them through
+                    // without calling transformToken (which is type-dispatch only).
+                    let isTypelessAlias =
+                        child.ContainsKey("$value")
+                        && not childHasOwnType
+                        && scopeType.IsNone
+                        && (match Option.ofObj child["$value"] with
+                            | Some v -> isAlias (v.ToString().Trim('"'))
+                            | None   -> false)
                     if isLeaf then
                         // Token leaf — use own $type if present, else inherited.
                         let tsType =
@@ -859,6 +870,21 @@ module TokensStudio =
                             | _ -> ()
                             // Pass through any non-marker $extensions so unknown vendor
                             // extensions survive the round-trip per the DTCG spec.
+                            match cloneExtensionsForOutput child with
+                            | Some ext -> leaf.Add("$extensions", ext)
+                            | None     -> ()
+                            result.Add(kvp.Key, leaf)
+                    elif isTypelessAlias then
+                        // Typeless alias leaf — emit $value only; $type is inferred later
+                        // from the referenced token's type in partialFlattenResolvedFile.
+                        match Option.ofObj child["$value"] with
+                        | None -> ()
+                        | Some valueNode ->
+                            let leaf = JsonObject()
+                            leaf.Add("$value", valueNode.DeepClone())
+                            match tryGetString "$description" child with
+                            | Some d when d.Length > 0 -> leaf.Add("$description", JsonValue.Create(d))
+                            | _ -> ()
                             match cloneExtensionsForOutput child with
                             | Some ext -> leaf.Add("$extensions", ext)
                             | None     -> ()

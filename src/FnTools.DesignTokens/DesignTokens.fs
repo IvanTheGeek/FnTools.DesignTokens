@@ -445,7 +445,13 @@ let private partialFlattenResolvedFile
             match t.Value with
             | TokenValue.Alias r ->
                 match tryResolveAliasIn r file with
-                | Some target -> Ok { target with Type = target.Type |> Option.orElse t.Type }
+                | Some target ->
+                    // Alias token's own $type takes precedence over the target's type.
+                    // This preserves intended semantics when an alias token has an explicit
+                    // $type annotation that differs from its target — e.g. a spacing.sm
+                    // (dimension) that aliases to scale.sm (number). Without this, the
+                    // dimension annotation is silently discarded and the unit is lost.
+                    Ok { target with Type = t.Type |> Option.orElse target.Type }
                 | None ->
                     let refStr =
                         match r with
@@ -460,7 +466,17 @@ let private partialFlattenResolvedFile
             match ft.Type |> Option.orElse inferred with
             | None -> errs.Add (pathStr, "cannot determine $type")
             | Some tt ->
-                match toResolvedValue pathStr file ft.Value with
+                // Coerce bare numbers to the annotated type when the annotation and value
+                // type differ. Handles spacing/radius alias chains where the resolved
+                // value is a number but the token carries an explicit dimension annotation.
+                let coercedValue =
+                    match tt, ft.Value with
+                    | DimensionType, TokenValue.Number n ->
+                        TokenValue.Dimension { Value = n; Unit = Px }
+                    | DurationType, TokenValue.Number n ->
+                        TokenValue.Duration { Value = n; Unit = Milliseconds }
+                    | _ -> ft.Value
+                match toResolvedValue pathStr file coercedValue with
                 | Error es ->
                     for e in es do
                         match e with

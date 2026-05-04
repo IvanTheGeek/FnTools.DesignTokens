@@ -270,6 +270,75 @@ let allTests =
                 Expect.isTrue isParseFailed "expected ParseFailed"
             | Ok _ -> failtest "expected error"
 
+        // ─── Alias type coercion ──────────────────────────────────────────────
+        // When a dimension token aliases to a number token, the alias token's own
+        // $type annotation (dimension) must take precedence over the target's type
+        // (number). Without this, the px unit is lost and the token resolves to a
+        // bare number, which is not a valid CSS length.
+        testList "alias $type annotation takes precedence over target type" [
+
+            testCase "dimension token aliasing to number resolves as ResolvedDimension with px unit" <| fun () ->
+                // Set "base" contains a "scale" group; set "semantic" contains a "spacing" group.
+                // The alias {scale.sm} correctly resolves to scale.sm in the merged namespace.
+                // (Set names are stripped by the shim — only group names form the token path.)
+                let json = """
+{
+  "base":     { "scale":   { "sm": { "$type": "number",    "$value": "16" } } },
+  "semantic": { "spacing": { "sm": { "$type": "dimension", "$value": "{scale.sm}" } } },
+  "$metadata": { "tokenSetOrder": ["base", "semantic"] }
+}"""
+                match Api.importTokensStudio ShimConfig.defaults json with
+                | Error es -> failtestf "import failed: %A" es
+                | Ok result ->
+                    let sm = result.Tokens |> List.tryFind (fun (p, _) -> p = ["spacing"; "sm"])
+                    match sm with
+                    | Some (_, { Value = ResolvedDimension d; Type = DimensionType }) ->
+                        Expect.equal d.Value 16.0 "value = 16"
+                        Expect.equal d.Unit  Px    "unit = px"
+                    | Some (_, rt) -> failtestf "expected ResolvedDimension, got %A" rt
+                    | None -> failtest "spacing.sm not found"
+
+            testCase "number token without annotation stays ResolvedNumber" <| fun () ->
+                // When the alias token has no $type annotation, the target's type is used.
+                let json = """
+{
+  "base":     { "scale": { "sm": { "$type": "number", "$value": "16" } } },
+  "semantic": { "alias": { "sm": { "$value": "{scale.sm}" } } },
+  "$metadata": { "tokenSetOrder": ["base", "semantic"] }
+}"""
+                match Api.importTokensStudio ShimConfig.defaults json with
+                | Error es -> failtestf "import failed: %A" es
+                | Ok result ->
+                    let sm = result.Tokens |> List.tryFind (fun (p, _) -> p = ["alias"; "sm"])
+                    match sm with
+                    | Some (_, { Value = ResolvedNumber v }) -> Expect.equal v 16.0 "value = 16"
+                    | Some (_, rt) -> failtestf "expected ResolvedNumber, got %A" rt
+                    | None -> failtest "alias.sm not found"
+
+            testCase "dimension annotation wins even when JSON property order puts scale set last" <| fun () ->
+                // Regression: buildFlatIndex used JSON property order, not tokenSetOrder.
+                // In Laura's file Foundations/Base is last in JSON order — this test ensures
+                // the tokenSetOrder sort fix is in effect by using reversed JSON order.
+                // "semantic" appears before "base" in JSON but after it in tokenSetOrder.
+                let json = """
+{
+  "semantic": { "spacing": { "sm": { "$type": "dimension", "$value": "{scale.sm}" } } },
+  "base":     { "scale":   { "sm": { "$type": "number",    "$value": "8" } } },
+  "$metadata": { "tokenSetOrder": ["base", "semantic"] }
+}"""
+                match Api.importTokensStudio ShimConfig.defaults json with
+                | Error es -> failtestf "import failed: %A" es
+                | Ok result ->
+                    let sm = result.Tokens |> List.tryFind (fun (p, _) -> p = ["spacing"; "sm"])
+                    match sm with
+                    | Some (_, { Value = ResolvedDimension d }) ->
+                        Expect.equal d.Value 8.0 "value = 8"
+                        Expect.equal d.Unit  Px   "unit = px"
+                    | Some (_, rt) -> failtestf "expected ResolvedDimension, got %A" rt
+                    | None -> failtest "spacing.sm not found"
+
+        ]
+
         testList "Laura system library integration" [
 
             let lauraPath = "samples/laura-system-library.tokens.json"

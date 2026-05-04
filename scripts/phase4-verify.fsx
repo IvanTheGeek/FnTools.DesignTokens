@@ -116,7 +116,7 @@ let rootCss = CssEmitter.emit lightDesktopTokens
 printfn "  %d characters, first 300:" rootCss.Length
 printfn "%s" (rootCss.[..min 299 (rootCss.Length - 1)])
 
-// ── 5. Mobile + Light + 100% zoom + Core brand (for @media override) ──────────
+// ── 5. Breakpoint overrides: Mobile (360px) and Tablet (1020px) ───────────────
 
 printfn ""
 printfn "=== importTokensStudioCombined (Mobile theme) ==="
@@ -133,12 +133,26 @@ printfn ""
 printfn "-- Mobile breakpoint values --"
 checkDim "breakpoint" 360.0 mobileTokens
 
-// ── 6. Emit full responsive CSS: :root + @media mobile ────────────────────────
+printfn ""
+printfn "=== importTokensStudioCombined (Tablet theme) ==="
+let tabletThemes = ["Always-on"; "Light"; "Tablet"; "100%"; "Core"]
+
+let tabletTokens =
+    match Api.importTokensStudioCombined config tabletThemes lauraJson with
+    | Error es -> failwithf "tablet import failed: %A" es
+    | Ok r     ->
+        printfn "  %d tokens resolved, %d warnings" (List.length r.Tokens) (List.length r.Warnings)
+        r.Tokens
 
 printfn ""
-printfn "=== Responsive CSS emission (Desktop base + Mobile @media) ==="
+printfn "-- Tablet breakpoint values --"
+checkDim "breakpoint" 1020.0 tabletTokens
 
-// Build a base-decls lookup from lightDesktopTokens so emitThemed can diff
+// ── 6. Emit full responsive CSS: :root + @media mobile + @media tablet ────────
+
+printfn ""
+printfn "=== Responsive CSS emission (Desktop base + Mobile @media + Tablet @media) ==="
+
 let responsiveCss =
     CssEmitter.emitThemed
         (fun n ->
@@ -147,19 +161,26 @@ let responsiveCss =
             | "Tablet" -> "@media (max-width: 1020px)"
             | other    -> sprintf "[data-theme=\"%s\"]" other)
         lightDesktopTokens
-        (seq { yield "Mobile", (mobileTokens |> List.toSeq) })
+        (seq {
+            yield "Tablet", (tabletTokens |> List.toSeq)
+            yield "Mobile", (mobileTokens |> List.toSeq)
+        })
 
-let mobileBlockStart = responsiveCss.IndexOf "@media"
-let hasMobileBlock   = mobileBlockStart >= 0
-printfn "  :root block: %s" (if responsiveCss.Contains ":root {" then "present" else "MISSING")
-printfn "  @media (max-width: 360px) block: %s" (if hasMobileBlock then "present" else "MISSING")
+printfn "  :root block:                       %s" (if responsiveCss.Contains ":root {"               then "present" else "MISSING")
+printfn "  @media (max-width: 1020px) block:  %s" (if responsiveCss.Contains "@media (max-width: 1020px)" then "present" else "MISSING")
+printfn "  @media (max-width: 360px) block:   %s" (if responsiveCss.Contains "@media (max-width: 360px)"  then "present" else "MISSING")
 
-if hasMobileBlock then
-    let mobileBlock = responsiveCss.[mobileBlockStart..]
-    let hasMobileBreakpoint = mobileBlock.Contains "--breakpoint: 360px;"
-    let hasNestedRoot       = mobileBlock.Contains "  :root {"
-    printfn "  nested :root in @media: %s" (if hasNestedRoot then "yes" else "NO")
-    printfn "  --breakpoint: 360px in @media: %s" (if hasMobileBreakpoint then "yes" else "NO")
+let tabletIdx = responsiveCss.IndexOf "@media (max-width: 1020px)"
+if tabletIdx >= 0 then
+    let block = responsiveCss.[tabletIdx..]
+    printfn "  --breakpoint: 1020px in @media tablet: %s" (if block.Contains "--breakpoint: 1020px;" then "yes" else "NO")
+    printfn "  nested :root in @media tablet: %s"         (if block.Contains "  :root {"             then "yes" else "NO")
+
+let mobileIdx = responsiveCss.IndexOf "@media (max-width: 360px)"
+if mobileIdx >= 0 then
+    let block = responsiveCss.[mobileIdx..]
+    printfn "  --breakpoint: 360px in @media mobile: %s"  (if block.Contains "--breakpoint: 360px;"  then "yes" else "NO")
+    printfn "  nested :root in @media mobile: %s"         (if block.Contains "  :root {"             then "yes" else "NO")
 
 // Write the full CSS to a file for manual inspection
 let outPath = "/home/ivan/DEVELOPMENT/FnTools/FnTools.DesignTokens/scripts/phase4-output.css"
