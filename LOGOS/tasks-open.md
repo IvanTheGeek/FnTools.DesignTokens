@@ -61,6 +61,12 @@ import/export. See `penpot-api.md` for the three-surface comparison.
   `ExportWarning.LossyColorConversion`. `$themes` and `$metadata` reconstructed from `ShimResult`.
   Public API: `Api.exportTokensStudio`, `Api.toResolverDocument`, `formatExportWarning`.
   9 new tests. 222/222 pass. 2026-05-04.
+- [x] **Penpot `$extensions` preservation test** — pre-ADR-023 empirical check.
+  Result: Penpot strips `$extensions` (Plugin API Token has only `id/name/type/value/description`;
+  `.extensions` assignment doesn't persist; internal transit storage has no extensions slot;
+  export format omits them). ADR-022 (`$description` annotation) retained; ADR-023
+  (`$extensions` as round-trip carrier) **deferred** — cross-tool benefit only when no
+  Penpot stage is present. Findings → `penpot-extensions-preservation-test.md`. 2026-05-04.
 - [ ] **PATHS state mapping (Phase 7)** — read prototype connections on all mock pages;
   map each screen to a PATHS state and each connection to a transition; document what
   information Penpot carries vs what PATHS needs.
