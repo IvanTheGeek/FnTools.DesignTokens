@@ -1,6 +1,6 @@
 ---
 area: Experiment
-status: complete — 2026-05-04
+status: complete — 2026-05-04 (extended 2026-05-04)
 phase: 2 — Token flow outward (our tokens → Penpot)
 ---
 
@@ -224,3 +224,173 @@ visual correctness, the fill must be updated separately to match the token's res
   verified — the tokens panel may not surface descriptions in the token list view.)
 - REST write path discovered for themes (`set-token-theme`) — not tested. Phase 6 will
   need this for bidirectional validation.
+
+---
+
+## Part 2 — Laura semantic token push (2026-05-04)
+
+Goal: push a DTCG-resolved token set mirroring Laura's Dashboard semantic structure
+(`color.*`, `spacing.*`, `radius.*`, `typography.*`, `breakpoint`) and verify
+that Dashboard shapes resolve against it.
+
+File: Design mocks (`11baa5c9-2a66-8156-8007-f7969761f14d`) — ID changed since
+2026-05-03; use `get-project-files` to find current IDs (they change on each re-import).
+
+---
+
+### Resolution approach
+
+`Api.importTokensStudioThemed` was used with ALL 11 theme names to prevent mutually
+exclusive sets (Dark, Mobile/Tablet, 150%/200% zoom) from bleeding into the base.
+Colors extracted from the "Light" + "Core" theme resolved tokens; spacing/radius/size
+computed directly from the Desktop scale formula (`round(16 * 1.25^N)`).
+
+**Shim math evaluator theme-bleed bug discovered**: `EvaluateMath` evaluates math
+expressions at shim time against the full multi-set token index. The last set in
+`tokenSetOrder` wins for each path — `Text zoom/200%` (zoom=2) is last, so
+`base = 16 * {zoom} = 32` regardless of which theme is being resolved. This makes
+spacing and radius values wrong (all 32 instead of the correct scale) when using
+`importTokensStudioThemed` for themes that include `Foundations/Base`.
+
+**Workaround**: compute scale values directly using `round(base * pow(multiplier, N))`.
+**This is a bug to fix**: math should be re-evaluated per-theme, not at shim time.
+
+Correct Desktop + 100% zoom scale values:
+| scale | value |
+|---|---|
+| hairline | 1 |
+| micro | 2 |
+| 3xs | 8 |
+| 2xs | 10 |
+| xs | 13 |
+| sm | 16 |
+| md | 20 |
+| lg | 25 |
+| xl | 31 |
+| 2xl | 39 |
+| 3xl | 49 |
+
+---
+
+### REST API change — new push format (breaking change from 2026-05-03)
+
+The `set-token-set` and `set-token` change types have a new schema in this Penpot version.
+
+**`set-token-set` (now):**
+```json
+["^ ",
+  "~:type", "~:set-token-set",
+  "~:id",   "~u<SET_UUID>",
+  "~:attrs", ["^ ",
+    "~:id",          "~u<SET_UUID>",
+    "~:name",        "laura-light-desktop",
+    "~:description", "...",
+    "~:modified-at", "~m<epoch-ms>"
+  ]
+]
+```
+- `~:id` on the change itself is now required (was absent before)
+- `~:attrs.tokens` works (inline token map) BUT the `token?` predicate rejects all tokens — use individual `set-token` changes instead
+
+**`set-token` (now):**
+```json
+["^ ",
+  "~:type",     "~:set-token",
+  "~:set-id",   "~u<SET_UUID>",
+  "~:token-id", "~u<TOKEN_UUID>",
+  "~:attrs", ["^ ",
+    "~:id",          "~u<TOKEN_UUID>",
+    "~:name",        "color.background.body",
+    "~:type",        "~:color",
+    "~:value",       "#f3f2f3",
+    "~:description", "..."
+  ]
+]
+```
+- `~:token-set-name` + `~:name` replaced by `~:set-id` (UUID) + `~:token-id` (UUID)
+- `~:modified-at` is optional in `set-token.attrs`
+
+**Old format still rejected** — both the old `set-token-set` (without `:id`) and old
+`set-token` (with `token-set-name` instead of `set-id`) return HTTP 400 params-validation.
+
+The old format worked during Phase 2 Part 1. This is a schema change between Penpot versions
+or possibly between the initial push and this follow-up push.
+
+---
+
+### Push result
+
+Set `laura-light-desktop` with 35 tokens pushed in one `update-file` request:
+- 1 `set-token-set` change (create the set)
+- 35 `set-token` changes (one per token)
+
+Verified via MCP Plugin API:
+- 35/35 tokens readable with correct names, types, and values
+- Types stored as: `"color"`, `"dimension"`, `"typography"` (transit keywords decoded)
+- Color values stored as hex strings: `"#f28ce1"`, `"#fafafa"`, etc.
+- Dimension values stored as px strings: `"16px"`, `"13px"`, `"1200px"`, etc.
+  - **Resolved numeric** (unit stripped): `radius.sm` resolves to `16`, not `"16px"`
+
+---
+
+### Token precedence — local set wins over System Library
+
+`laura-light-desktop` was appended to the end of the set list (position 23 of 23).
+**Last set in order always wins** (same as CSS cascade — later declaration overrides).
+
+With our set active alongside `Breakpoints/Tablet` (System Library, active):
+
+| Token path | System Library active | Our set (last) | Resolved |
+|---|---|---|---|
+| `breakpoint` | 1020 (Tablet) | 1200px (Desktop) | **1200** |
+| `color.background.default` | `{palette.default.800}` dark (Dark Core active) | `#fafafa` | **#fafafa** |
+| `color.border.default` | `{palette.default.700}` dark | `#c2bcc1` light | **#c2bcc1** |
+| `radius.sm` | `{scale.sm}` = 32 (wrong, zoom-bleed) | `16px` | **16** |
+| `spacing.3xs` | `{scale.3xs}` = 32 (wrong, zoom-bleed) | `8px` | **8** |
+
+Our set overwrites the System Library's dark-mode + wrong-scale values entirely.
+This is the mechanism to use for scripted theme switching without activating/deactivating
+individual Library sets.
+
+---
+
+### Dashboard shape verification
+
+All 120 shapes with `appliedTokens` confirmed present. Sample of shapes bound to our tokens:
+
+| Shape | Token binding | Resolved value |
+|---|---|---|
+| Swatches frame | `width: breakpoint` | 1200 (was 1020) |
+| pattern / card | `fill: color.background.default` | #fafafa (was dark) |
+| pattern / card | `strokeColor: color.border.default` | #c2bcc1 |
+| pattern / card | `r1-r4: radius.sm` | 16 |
+| pattern / card | `strokeWidth: stroke.hairline` | 1 |
+| pattern / card | `columnGap/rowGap: spacing.3xs` | 8 |
+
+Typography token paths (`typography.heading.level-2`, `typography.default`, etc.) are
+present in the set and bound by shapes — visual update in the editor depends on the font
+being available in Penpot's font registry.
+
+---
+
+### What broke / gaps
+
+| Gap | Detail |
+|---|---|
+| `token?` predicate blocks inline `attrs.tokens` embed | Embedding tokens directly in `set-token-set.attrs.tokens` fails the custom `token_QMARK_` predicate — root cause unknown; individual `set-token` changes work |
+| Math-evaluator theme-bleed | Shim evaluates math at full-index time; spacing/radius values are wrong per-theme when multiple zoom sets exist |
+| Typography font availability | Typography tokens push correctly but Penpot only applies them visually if the font is loaded in its font registry |
+| Dimension unit stripping | Values pushed as `"16px"` are resolved as `16` (numeric, unit dropped). This is expected Penpot behavior but means our push values and resolved values differ in format |
+| Set position is append-only | No `position` field on `set-token-set` — new sets are always appended; cannot control insertion position |
+| Local vs Library precedence | Local sets always win over connected Library sets when placed later in order. This could cause unintended overrides if a local set is accidentally active |
+
+---
+
+### Updated known IDs
+
+| File | ID |
+|---|---|
+| System library | `11baa5c9-2a66-8156-8007-f7969761f14c` |
+| Design mocks | `11baa5c9-2a66-8156-8007-f7969761f14d` |
+
+(Unchanged since 2026-05-03 re-import — confirm via `get-project-files` before use.)

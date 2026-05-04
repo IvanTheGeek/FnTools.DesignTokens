@@ -37,9 +37,15 @@ Findings → `phase1-findings.md`
 - [x] Push `ivanthegeek.tokens.json` (DTCG 2025.10) via REST `set-token-set` + `set-token`.
       27/27 tokens pushed and read back (REST + MCP Plugin API). Type name map documented.
       Plugin API is read-only — no write surface in 2.14.4. 2026-05-04.
-- [ ] Define a DTCG token file mirroring Laura's semantic structure for the Dashboard screen
-      and push it; verify via MCP that shapes have `appliedTokens` resolving to the new values
-- [ ] Document what broke: missing paths, format mismatches, schema gaps
+- [x] Define a DTCG token file mirroring Laura's semantic structure for the Dashboard screen
+      and push it; verify via MCP that shapes have `appliedTokens` resolving to the new values.
+      Set `laura-light-desktop` (35 tokens: 15 colors, 13 dimensions, 6 typography + 1 stroke)
+      pushed to Design mocks. All 120 bound shapes verified — our set wins over System Library
+      (last-in-order precedence). Breakpoint resolved to 1200 (Desktop), colors to Light
+      mode values. API schema breaking change documented. 2026-05-04.
+- [x] Document what broke: missing paths, format mismatches, schema gaps.
+      See phase2-findings.md Part 2. Key gaps: math-evaluator theme-bleed, `token?`
+      predicate blocks inline set embed, dimension unit stripping, append-only set order.
 
 Findings → `phase2-findings.md`
 
