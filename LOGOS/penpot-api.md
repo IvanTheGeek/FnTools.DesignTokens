@@ -210,6 +210,35 @@ Rules:
   rotation, font-size, font-family, font-weight, letter-spacing, number, text-case,
   text-decoration, stroke-width, typography
 
+### Multi-set import and precedence
+
+**Multiple sets**: standard — each imported JSON file creates one named set. Import as many
+files as needed; the `TokenCatalog` is a list of sets.
+
+**Duplicate set name on re-import**: the existing set is **replaced entirely** — no merging
+of old and new tokens. Re-importing `cheddar.json` overwrites the `cheddar` set.
+
+**Conflict resolution across active sets**: **last set in the list wins.** If two active sets
+define the same token path, the one listed lower (later) in the sets panel takes precedence.
+Same semantics as CSS cascade. Same semantics as DTCG `resolutionOrder` (later entries win).
+
+**Themes**: a theme selects *which* sets are active — it does not change token values. Themes
+are "activation presets", not value overrides. A "LaundryLog" theme activates all three tiers;
+a "CheddarBooks" theme activates only the first two. Ordering still determines who wins among
+the active ones.
+
+**Multi-tier design system import pattern** (Cheddar → CheddarBooks → LaundryLog):
+
+1. Export each tier to a separate JSON via `serializeAs SecondEditorsDraft IAcceptDataLoss`
+   (produces hex-string colors Penpot accepts)
+2. Import in order: `cheddar-primitives.json` → `cheddar-books.json` → `laundrylog.json`
+3. In the Penpot sets panel, verify order matches resolution order (primitives first,
+   overrides last)
+4. Activate all three sets, or define themes that activate the right combination per brand
+
+Penpot set ordering is the direct equivalent of `resolutionOrder` in our `.resolver.json`.
+The resolver produces the same merged result as Penpot does at design time.
+
 ### Importing via browser (AI automation)
 
 The Claude in Chrome extension **cannot** upload local files to web inputs (`file_upload` tool
