@@ -35,11 +35,13 @@ rm -rf artifacts/
 
 if [ "$DEV" = true ]; then
     SHORT_SHA="$(git rev-parse --short HEAD)"
-    echo "    dev pre-release: suffix=dev.${SHORT_SHA}"
+    BASE_VERSION="$(grep -m1 '<Version>' src/FnTools.DesignTokens/FnTools.DesignTokens.fsproj | sed 's/.*<Version>\(.*\)<\/Version>.*/\1/')"
+    DEV_VERSION="${BASE_VERSION}-dev.${SHORT_SHA}"
+    echo "    dev pre-release: ${DEV_VERSION}"
     dotnet pack FnTools.DesignTokens.slnx -c Release --nologo -v quiet \
         --no-build \
         -o artifacts/ \
-        -p:VersionSuffix="dev.${SHORT_SHA}"
+        -p:Version="${DEV_VERSION}"
 else
     dotnet pack FnTools.DesignTokens.slnx -c Release --nologo -v quiet \
         --no-build \

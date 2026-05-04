@@ -25,9 +25,10 @@ jobs:
       - name: Pack (dev pre-release)
         run: |
           SHORT_SHA="${GITHUB_SHA::7}"
+          BASE_VERSION="$(grep -m1 '<Version>' src/FnTools.DesignTokens/FnTools.DesignTokens.fsproj | sed 's/.*<Version>\(.*\)<\/Version>.*/\1/')"
           dotnet pack FnTools.DesignTokens.slnx -c Release --nologo --no-build \
             -o artifacts/ \
-            -p:VersionSuffix="dev.${SHORT_SHA}"
+            -p:Version="${BASE_VERSION}-dev.${SHORT_SHA}"
 
       - name: Push to Forgejo NuGet feed
         run: |
