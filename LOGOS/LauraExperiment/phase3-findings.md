@@ -317,23 +317,29 @@ storage systems. A plugin targeting one is blind to the other.
 Reads from the Tokens tab. Sees all 22 sets with correct token counts (matches our
 analysis exactly: 305 tokens total). Has a built-in math expression evaluator.
 
+**Author:** Juan de la Cruz — Co-founder of Penpot. This is not a community plugin.
+**License:** MIT
+**First commits:** February 2026 (after native tokens already shipped). Last touched March 2026.
+**Total commits:** 31
+
+**Export claim vs reality:** README states "Import / Export: Upload and download token sets
+as JSON files" but zero files in the codebase mention `export` or `download`. The feature
+was documented but never implemented. No export functionality exists in the UI.
+
 **Math evaluator — Design Token Manager syntax:**
 - Basic operators: `+`, `-`, `*`, `/`
-- Grouping: parentheses
-- Function: `roundTo(value, decimals)` — rounds to N decimal places
-- Constraint: spaces required around operators (`8 * 8` not `8*8`)
-- Constraint: cannot mix units (`rem + px` invalid)
-- Constraint: cannot use math on composite tokens (multi-value tokens)
+- Function: `roundTo(value, decimals)`
+- Constraint: spaces required around operators; cannot mix units; no composite token math
 
 **Syntax mismatch with Laura's tokens:**
-Laura's `Foundations/Base` uses:
-```
-round({base} * pow({multiplier}, -1))
-```
-The Design Token Manager documents `roundTo()` (not `round()`) and has no `pow()` function.
-Laura's math uses a different function set — likely Tokens Studio's own math engine, not
-this plugin's evaluator. Whether the plugin can display/resolve Laura's math tokens
-correctly is TBD (user is exploring).
+Laura's math: `round({base} * pow({multiplier}, -1))` — uses `round()` and `pow()`.
+DTM documents `roundTo()` only, no `pow()`. Incompatible syntax — DTM would show raw
+expression strings for Laura's scale tokens, not resolved values.
+
+**Verdict:** Not useful for our workflow. No export, math syntax mismatch with Laura's
+tokens, and superseded by the native Tokens panel for everything else. The comparison
+view and alias resolution UI are the only features not in the native panel, but they
+don't add value to our pipeline.
 
 ---
 
