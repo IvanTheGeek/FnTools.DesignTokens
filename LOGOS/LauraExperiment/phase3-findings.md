@@ -450,6 +450,52 @@ expects nested JSON where the dot-path is expressed as object nesting:
 **Use case**: quick palette injection into an empty Tokens panel. Not useful for
 extracting tokens back out — wrong structure for DTCG consumers.
 
+### 72F Design System Generator
+Manifest: `https://72f-studio.github.io/72f-design-system-generator/manifest.json`
+Permissions: `content:read`, `content:write`, `library:read`, `library:write`
+
+Reads tokens via `penpot.library.local.tokens` (the same Plugin API we use). Sees all
+22 sets and all 305 tokens. Its export handler:
+
+```javascript
+const i = [];
+o.sets.forEach(a => {
+  (a.tokens ?? []).forEach(f => {
+    i.push({ name: f.name, type: f.type, value: f.value });
+  });
+});
+// sends: { type: "export-tokens", tokens: i }
+```
+
+**What this loses vs the native Penpot export:**
+- Set context — no set name on each token; resolution order gone
+- `$themes` — no theme definitions
+- `$metadata` — no `tokenSetOrder` / `activeThemes`
+- Result is a flat array of `{name, type, value}` with no DTCG structure
+
+**What it does not fix:** same Tokens Studio types (`borderWidth`, `spacing`, etc.),
+same HSL expressions (`hsla({hue.red},{saturation.colors},{lightness.950},1)`), same
+`transparent` color values, same math expressions. All the gaps from the native export
+are present here too.
+
+**Verdict:** Strictly less information than the native Tokens Studio export. This plugin
+is a *generator* — its value is creating design systems from templates. The export is
+a secondary feature intended for round-tripping its own generated tokens, not for
+extracting an existing system.
+
+### Design MD Skills (TypeUI)
+Manifest: `https://penpot-design-skills-plugin.vercel.app/manifest.json`
+Permissions: `content:read`, `allow:downloads`
+
+The `plugin.js` reads only `penpot.theme` — for UI theming of the plugin window.
+No token API calls. All work happens in the plugin iframe: a manual form where you
+enter design system details (color tokens, spacing, typography, etc.) and it generates
+a `skill.md` file for AI tools (Claude, Codex, Gemini, Cursor).
+
+**Verdict:** Not a token extractor — a manual documentation generator. Interesting
+concept (structured design system markdown for AI consumption) but no Penpot token
+integration. Requires manual data entry.
+
 ### UI Color Palette (Tokens Studio-compatible)
 Paywalled. Requires account. Not tested. Manifest:
 `https://ui-color-palette.com/penpot/manifest.json`
