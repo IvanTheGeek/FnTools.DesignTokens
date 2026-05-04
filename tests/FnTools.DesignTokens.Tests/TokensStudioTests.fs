@@ -403,4 +403,149 @@ let allTests =
                     Expect.isGreaterThan (Map.count diffs) 0 "Light and Dark have different token values"
             ]
         ]
+
+        testList "export" [
+
+            let shimAndParse (json: string) : ShimResult * Map<string, TokenFile> =
+                match TokensStudio.shim json with
+                | Error e -> failwithf "shim failed: %s" e
+                | Ok sr ->
+                    let sets =
+                        sr.Sets
+                        |> Map.toList
+                        |> List.choose (fun (n, j) ->
+                            match Api.Primitives.parse j with
+                            | Ok f -> Some (n, f)
+                            | Error _ -> None)
+                        |> Map.ofList
+                    sr, sets
+
+            testCase "toResolverDocument: two-theme group → one modifier, primitives in base" <| fun () ->
+                let sr, sets = shimAndParse twoThemeJson
+                let doc = TokensStudio.toResolverDocument sr sets
+                Expect.equal (List.length doc.Modifiers) 1 "one modifier"
+                let (mName, mDef) = doc.Modifiers.[0]
+                Expect.equal mName "Mode" "modifier name is Mode"
+                Expect.equal (List.length mDef.Contexts) 2 "two contexts"
+                let ctxNames = mDef.Contexts |> List.map fst
+                Expect.contains ctxNames "Light" "Light context"
+                Expect.contains ctxNames "Dark"  "Dark context"
+                Expect.equal mDef.Default (Some "Light") "default context is first (Light)"
+                let baseSets =
+                    doc.ResolutionOrder
+                    |> List.choose (function SetRef n -> Some n | _ -> None)
+                Expect.contains baseSets "primitives"    "primitives is a base set"
+                Expect.isFalse (List.contains "light-colors" baseSets) "light-colors not in base"
+                Expect.isFalse (List.contains "dark-colors"  baseSets) "dark-colors not in base"
+
+            testCase "toResolverDocument: no themes → all parsed sets become base SetRefs" <| fun () ->
+                let json = """
+{
+  "a": { "x": { "$type": "number", "$value": "1" } },
+  "b": { "y": { "$type": "number", "$value": "2" } },
+  "$metadata": { "tokenSetOrder": ["a", "b"] }
+}"""
+                let sr, sets = shimAndParse json
+                let doc = TokensStudio.toResolverDocument sr sets
+                Expect.isEmpty doc.Modifiers "no modifiers"
+                let refs = doc.ResolutionOrder |> List.choose (function SetRef n -> Some n | _ -> None)
+                Expect.equal (List.length refs) 2 "two base set refs"
+                Expect.contains refs "a" "set a in resolution order"
+                Expect.contains refs "b" "set b in resolution order"
+
+            testCase "toResolverDocument: resolver resolves correct context via modifier" <| fun () ->
+                let sr, sets = shimAndParse twoThemeJson
+                let doc = TokensStudio.toResolverDocument sr sets
+                let noLoad _ = Error "inline-only"
+                let lightCtx = Map [ "Mode", "Light" ]
+                match Resolver.resolve noLoad lightCtx doc with
+                | Error es -> failtestf "resolve failed: %A" es
+                | Ok merged ->
+                    let bg =
+                        merged.Children
+                        |> List.tryPick (fun (n, node) ->
+                            if TokenName.value n = "bg" then
+                                match node with TokenLeaf t -> Some t | _ -> None
+                            else None)
+                    Expect.isSome bg "bg token present in Light resolution"
+
+            testCase "exportToTokensStudio: sRGB color emitted as hex, no warnings" <| fun () ->
+                let json = """
+{
+  "colors": { "brand": { "$type": "color", "$value": "#0066cc" } },
+  "$metadata": { "tokenSetOrder": ["colors"] }
+}"""
+                let sr, sets = shimAndParse json
+                let outJson, warnings = TokensStudio.exportToTokensStudio sr sets
+                Expect.isEmpty warnings "no lossy warnings"
+                Expect.stringContains outJson "\"#0066cc\"" "hex color in output"
+
+            testCase "exportToTokensStudio: alias preserved as {path} string" <| fun () ->
+                let sr, sets = shimAndParse twoSetJson
+                let outJson, _ = TokensStudio.exportToTokensStudio sr sets
+                Expect.stringContains outJson "{blue}" "alias {blue} in output"
+
+            testCase "exportToTokensStudio: $themes and $metadata emitted" <| fun () ->
+                let sr, sets = shimAndParse twoThemeJson
+                let outJson, _ = TokensStudio.exportToTokensStudio sr sets
+                Expect.stringContains outJson "\"$themes\""      "$themes key present"
+                Expect.stringContains outJson "\"$metadata\""    "$metadata key present"
+                Expect.stringContains outJson "\"tokenSetOrder\"" "tokenSetOrder in $metadata"
+                Expect.stringContains outJson "\"primitives\""   "primitives in tokenSetOrder"
+                Expect.stringContains outJson "\"Mode\""         "Mode group in $themes"
+
+            testCase "exportToTokensStudio: wide-gamut color produces LossyColorConversion warning and $description" <| fun () ->
+                let fakeShim : ShimResult = {
+                    Sets     = Map.empty
+                    Themes   = []
+                    Metadata = { TokenSetOrder = ["tokens"]; ActiveThemes = []; ActiveSets = [] }
+                    Warnings = []
+                }
+                let oklchJson = """
+{
+  "brand": {
+    "$type": "color",
+    "primary": {
+      "$value": { "colorSpace": "oklch", "components": [0.7, 0.2, 120] }
+    }
+  }
+}"""
+                match Api.Primitives.parse oklchJson with
+                | Error es -> failtestf "parse failed: %A" es
+                | Ok file ->
+                    let sets = Map [ "tokens", file ]
+                    let outJson, warnings = TokensStudio.exportToTokensStudio fakeShim sets
+                    Expect.equal (List.length warnings) 1 "one lossy warning"
+                    let (LossyColorConversion (path, ann)) = warnings.[0]
+                    Expect.equal path "brand.primary" "warning path is brand.primary"
+                    Expect.stringContains ann "oklch"         "annotation mentions oklch"
+                    Expect.stringContains ann "Tokens Studio" "annotation mentions Tokens Studio"
+                    Expect.stringContains outJson "$description" "$description present in output"
+                    Expect.stringContains outJson "oklch"        "oklch annotation in output"
+
+            testCase "exportToTokensStudio: dimension emitted as string value" <| fun () ->
+                let json = """
+{
+  "size": { "sm": { "$type": "dimension", "$value": "8px" } },
+  "$metadata": { "tokenSetOrder": ["size"] }
+}"""
+                let sr, sets = shimAndParse json
+                let outJson, _ = TokensStudio.exportToTokensStudio sr sets
+                Expect.stringContains outJson "\"8px\"" "dimension emitted as string"
+
+            testCase "exportToTokensStudio: type names are DTCG names, not TS legacy names" <| fun () ->
+                let json = """
+{
+  "s": {
+    "gap":  { "$type": "spacing",   "$value": "16" },
+    "size": { "$type": "fontSizes", "$value": "14" }
+  },
+  "$metadata": { "tokenSetOrder": ["s"] }
+}"""
+                let sr, sets = shimAndParse json
+                let outJson, _ = TokensStudio.exportToTokensStudio sr sets
+                Expect.stringContains outJson "\"dimension\""     "DTCG 'dimension' type in output"
+                Expect.isFalse (outJson.Contains("\"spacing\""))   "no TS legacy 'spacing' type"
+                Expect.isFalse (outJson.Contains("\"fontSizes\"")) "no TS legacy 'fontSizes' type"
+        ]
     ]

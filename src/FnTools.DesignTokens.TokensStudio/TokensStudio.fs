@@ -76,6 +76,12 @@ type TokensStudioImportResult = {
     Warnings : TokensStudioImportWarning list
 }
 
+/// Warning produced during Tokens Studio export.
+type ExportWarning =
+    /// A color value was converted from wide-gamut to an approximate sRGB hex string.
+    /// The original DTCG color description is included in the token's $description field.
+    | LossyColorConversion of path: string * original: string
+
 /// One theme's fully-resolved tokens (base sets + the theme's own sets merged).
 type ThemeSet = {
     ThemeName : string
@@ -807,3 +813,485 @@ module TokensStudio =
             sprintf "UNRESOLVED  %s → %s" path ref
         | ThemeNotFound name ->
             sprintf "THEME  '%s' — not found in $themes" name
+
+    /// Format an ExportWarning as a human-readable string.
+    let formatExportWarning (w: ExportWarning) : string =
+        match w with
+        | LossyColorConversion (path, original) ->
+            sprintf "LOSSY  %s — %s" path original
+
+
+    // ── Export: type name ─────────────────────────────────────────────────────
+
+    let private typeNameStr (t: TokenType) : string =
+        match t with
+        | ColorType      -> "color"       | DimensionType   -> "dimension"
+        | FontFamilyType -> "fontFamily"  | FontWeightType  -> "fontWeight"
+        | DurationType   -> "duration"    | CubicBezierType -> "cubicBezier"
+        | NumberType     -> "number"      | StrokeStyleType -> "strokeStyle"
+        | BorderType     -> "border"      | ShadowType      -> "shadow"
+        | TransitionType -> "transition"  | GradientType    -> "gradient"
+        | TypographyType -> "typography"
+
+
+    // ── Export: color helpers ─────────────────────────────────────────────────
+
+    let private colorSpaceStr (cs: ColorSpace) : string =
+        match cs with
+        | SRGB         -> "srgb"          | SRGBLinear   -> "srgb-linear"
+        | DisplayP3    -> "display-p3"    | A98RGB       -> "a98-rgb"
+        | ProPhotoRGB  -> "prophoto-rgb"  | Rec2020      -> "rec2020"
+        | HSL          -> "hsl"           | HWB          -> "hwb"
+        | Lab          -> "lab"           | LCH          -> "lch"
+        | OKLab        -> "oklab"         | OKLCH        -> "oklch"
+        | XYZD65       -> "xyz-d65"       | XYZD50       -> "xyz-d50"
+
+    let private compF (c: ColorComponent) : float =
+        match c with Channel f -> f | Missing -> 0.0
+
+    let private compByte (c: ColorComponent) : int =
+        int (Math.Round(compF c * 255.0)) |> max 0 |> min 255
+
+    let private colorToHex (c: ColorValue) : string =
+        let (c1, c2, c3) = c.Components
+        match c.Alpha with
+        | Some a when a < 1.0 ->
+            let a8 = int (Math.Round(a * 255.0)) |> max 0 |> min 255
+            sprintf "#%02x%02x%02x%02x" (compByte c1) (compByte c2) (compByte c3) a8
+        | _ ->
+            sprintf "#%02x%02x%02x" (compByte c1) (compByte c2) (compByte c3)
+
+    let private colorDtcgStr (c: ColorValue) : string =
+        let fStr cc = match cc with Channel f -> sprintf "%g" f | Missing -> "none"
+        let (c1, c2, c3) = c.Components
+        let alphaStr = match c.Alpha with Some a when a < 1.0 -> sprintf " / %g" a | _ -> ""
+        sprintf "color(%s %s %s %s%s)"
+            (colorSpaceStr c.ColorSpace) (fStr c1) (fStr c2) (fStr c3) alphaStr
+
+    /// Serialize a ColorValue to a hex string.
+    /// Returns (hex, Some annotation) if wide-gamut (lossy); (hex, None) if lossless.
+    let private exportColorHex
+        (path    : string)
+        (c       : ColorValue)
+        (warnings: ResizeArray<ExportWarning>)
+        : string * string option =
+        match c.Hex with
+        | Some hex -> hex, None
+        | None ->
+            match c.ColorSpace with
+            | SRGB ->
+                colorToHex c, None
+            | _ ->
+                let hex = colorToHex c
+                let ann =
+                    sprintf "source: %s — converted to sRGB hex for Tokens Studio compatibility"
+                        (colorDtcgStr c)
+                warnings.Add(LossyColorConversion (path, ann))
+                hex, Some ann
+
+
+    // ── Export: value helpers ─────────────────────────────────────────────────
+
+    let private fwKeywordStr (k: FontWeightKeyword) : string =
+        match k with
+        | Thin | Hairline          -> "100"
+        | ExtraLight | UltraLight  -> "200"
+        | Light                    -> "300"
+        | Normal | Regular | Book  -> "400"
+        | Medium                   -> "500"
+        | SemiBold | DemiBold      -> "600"
+        | Bold                     -> "700"
+        | ExtraBold | UltraBold    -> "800"
+        | Black | Heavy            -> "900"
+        | ExtraBlack | UltraBlack  -> "950"
+
+    let private fwNode (fw: FontWeightValue) : JsonNode =
+        match fw with
+        | Numeric n -> JsonValue.Create(n) :> JsonNode
+        | Keyword k -> JsonValue.Create(fwKeywordStr k) :> JsonNode
+
+    let private dimStr (d: DimensionValue) : string =
+        let u = match d.Unit with Px -> "px" | Rem -> "rem"
+        sprintf "%g%s" d.Value u
+
+    let private durStr (d: DurationValue) : string =
+        let u = match d.Unit with Milliseconds -> "ms" | Seconds -> "s"
+        sprintf "%g%s" d.Value u
+
+    let private refStr (r: TokenRef) : string =
+        match r with
+        | CurlyBrace segs -> "{" + String.concat "." segs + "}"
+        | JsonPointer p   -> p
+
+    let private vorToNode (toLit: 'T -> JsonNode) (vor: ValueOrRef<'T>) : JsonNode =
+        match vor with
+        | Literal v   -> toLit v
+        | Reference r -> JsonValue.Create(refStr r) :> JsonNode
+
+    let private strokeKwStr (k: StrokeStyleKeyword) : string =
+        match k with
+        | Solid   -> "solid"  | Dashed -> "dashed" | Dotted -> "dotted"
+        | Double  -> "double" | Groove -> "groove" | Ridge  -> "ridge"
+        | Outset  -> "outset" | Inset  -> "inset"
+
+    let private lineCapStr (lc: LineCap) : string =
+        match lc with Round -> "round" | Butt -> "butt" | Square -> "square"
+
+
+    // ── Export: token value serializer ────────────────────────────────────────
+
+    /// Serialize a TokenValue to a JsonNode for Tokens Studio output.
+    /// Returns Some (valueNode, optAnnotation) or None to skip this token.
+    let private exportValue
+        (path    : string)
+        (v       : TokenValue)
+        (warnings: ResizeArray<ExportWarning>)
+        : (JsonNode * string option) option =
+        let dimN (d: DimensionValue) : JsonNode = JsonValue.Create(dimStr d) :> JsonNode
+        let durN (d: DurationValue)  : JsonNode = JsonValue.Create(durStr d)  :> JsonNode
+        let colorHexN (p: string) (c: ColorValue) : JsonNode * string option =
+            let hex, ann = exportColorHex p c warnings
+            JsonValue.Create(hex) :> JsonNode, ann
+        let shadowObjN (p: string) (so: ShadowObject) : JsonNode =
+            let o = JsonObject()
+            let cHex =
+                match so.Color with
+                | Literal c   -> fst (exportColorHex p c warnings)
+                | Reference r -> refStr r
+            o.Add("color",   JsonValue.Create(cHex))
+            o.Add("offsetX", vorToNode dimN so.OffsetX)
+            o.Add("offsetY", vorToNode dimN so.OffsetY)
+            o.Add("blur",    vorToNode dimN so.Blur)
+            o.Add("spread",  vorToNode dimN so.Spread)
+            match so.Inset with
+            | Some b -> o.Add("inset", JsonValue.Create(b))
+            | None   -> ()
+            o :> JsonNode
+        match v with
+        | TokenValue.Alias r ->
+            Some (JsonValue.Create(refStr r) :> JsonNode, None)
+        | TokenValue.Color c ->
+            let n, ann = colorHexN path c
+            Some (n, ann)
+        | TokenValue.Dimension d ->
+            Some (dimN d, None)
+        | TokenValue.FontFamily f ->
+            match f with
+            | Single s ->
+                Some (JsonValue.Create(s) :> JsonNode, None)
+            | Stack ss ->
+                let arr = JsonArray()
+                for s in ss do arr.Add(JsonValue.Create(s))
+                Some (arr :> JsonNode, None)
+        | TokenValue.FontWeight fw ->
+            Some (fwNode fw, None)
+        | TokenValue.Duration d ->
+            Some (durN d, None)
+        | TokenValue.CubicBezier cb ->
+            let arr = JsonArray()
+            arr.Add(JsonValue.Create(cb.P1x))
+            arr.Add(JsonValue.Create(cb.P1y))
+            arr.Add(JsonValue.Create(cb.P2x))
+            arr.Add(JsonValue.Create(cb.P2y))
+            Some (arr :> JsonNode, None)
+        | TokenValue.Number n ->
+            Some (JsonValue.Create(n) :> JsonNode, None)
+        | TokenValue.StrokeStyle s ->
+            match s with
+            | StrokeKeyword k ->
+                Some (JsonValue.Create(strokeKwStr k) :> JsonNode, None)
+            | StrokeCustom obj ->
+                let o = JsonObject()
+                let dashArr = JsonArray()
+                for d in obj.DashArray do dashArr.Add(vorToNode dimN d)
+                o.Add("dashArray", dashArr)
+                o.Add("lineCap",   JsonValue.Create(lineCapStr obj.LineCap))
+                Some (o :> JsonNode, None)
+        | TokenValue.Shadow sv ->
+            match sv with
+            | ShadowSingle obj ->
+                Some (shadowObjN path obj, None)
+            | ShadowMultiple xs ->
+                let arr = JsonArray()
+                for x in xs do
+                    match x with
+                    | ShadowLiteral obj -> arr.Add(shadowObjN path obj)
+                    | ShadowReference r -> arr.Add(JsonValue.Create(refStr r) :> JsonNode)
+                Some (arr :> JsonNode, None)
+        | TokenValue.Border b ->
+            let o = JsonObject()
+            let cHex =
+                match b.Color with
+                | Literal c   -> fst (exportColorHex (path + ".color") c warnings)
+                | Reference r -> refStr r
+            o.Add("color", JsonValue.Create(cHex))
+            o.Add("width", vorToNode dimN b.Width)
+            let styleN =
+                match b.Style with
+                | Literal (StrokeKeyword k) -> JsonValue.Create(strokeKwStr k) :> JsonNode
+                | Literal (StrokeCustom _)  -> JsonValue.Create("solid")        :> JsonNode
+                | Reference r               -> JsonValue.Create(refStr r)       :> JsonNode
+            o.Add("style", styleN)
+            Some (o :> JsonNode, None)
+        | TokenValue.Transition t ->
+            let o = JsonObject()
+            o.Add("duration",       vorToNode durN t.Duration)
+            o.Add("delay",          vorToNode durN t.Delay)
+            let tfN =
+                match t.TimingFunction with
+                | Literal cb ->
+                    let arr = JsonArray()
+                    arr.Add(JsonValue.Create(cb.P1x))
+                    arr.Add(JsonValue.Create(cb.P1y))
+                    arr.Add(JsonValue.Create(cb.P2x))
+                    arr.Add(JsonValue.Create(cb.P2y))
+                    arr :> JsonNode
+                | Reference r -> JsonValue.Create(refStr r) :> JsonNode
+            o.Add("timingFunction", tfN)
+            Some (o :> JsonNode, None)
+        | TokenValue.Gradient g ->
+            let arr = JsonArray()
+            for stop in g do
+                let o = JsonObject()
+                let cHex =
+                    match stop.Color with
+                    | Literal c   -> fst (exportColorHex path c warnings)
+                    | Reference r -> refStr r
+                o.Add("color", JsonValue.Create(cHex))
+                let posN =
+                    match stop.Position with
+                    | Literal f   -> JsonValue.Create(f) :> JsonNode
+                    | Reference r -> JsonValue.Create(refStr r) :> JsonNode
+                o.Add("position", posN)
+                arr.Add(o :> JsonNode)
+            Some (arr :> JsonNode, None)
+        | TokenValue.Typography t ->
+            let o = JsonObject()
+            let ffN (f: FontFamilyValue) : JsonNode =
+                match f with
+                | Single s ->
+                    JsonValue.Create(s) :> JsonNode
+                | Stack ss ->
+                    let arr = JsonArray()
+                    for s in ss do arr.Add(JsonValue.Create(s))
+                    arr :> JsonNode
+            o.Add("fontFamily",    vorToNode ffN t.FontFamily)
+            o.Add("fontSize",      vorToNode dimN t.FontSize)
+            o.Add("fontWeight",    vorToNode fwNode t.FontWeight)
+            o.Add("letterSpacing", vorToNode dimN t.LetterSpacing)
+            let lhN =
+                match t.LineHeight with
+                | Literal f   -> JsonValue.Create(f) :> JsonNode
+                | Reference r -> JsonValue.Create(refStr r) :> JsonNode
+            o.Add("lineHeight", lhN)
+            Some (o :> JsonNode, None)
+
+
+    // ── Export: tree walker ───────────────────────────────────────────────────
+
+    let rec private addTokensToObj
+        (warnings : ResizeArray<ExportWarning>)
+        (path     : string)
+        (children : (TokenName * TokenNode) list)
+        (target   : JsonObject)
+        : unit =
+        for (name, node) in children do
+            let key   = TokenName.value name
+            let cPath = if path = "" then key else path + "." + key
+            match node with
+            | TokenLeaf t ->
+                let leaf = JsonObject()
+                match t.Type with
+                | Some tt -> leaf.Add("$type", JsonValue.Create(typeNameStr tt))
+                | None    -> ()
+                match exportValue cPath t.Value warnings with
+                | None -> ()
+                | Some (vn, annOpt) ->
+                    leaf.Add("$value", vn)
+                    let desc =
+                        match t.Metadata.Description, annOpt with
+                        | Some d, Some a -> Some (d + "\n" + a)
+                        | Some d, None   -> Some d
+                        | None,   Some a -> Some a
+                        | None,   None   -> None
+                    match desc with
+                    | Some d -> leaf.Add("$description", JsonValue.Create(d))
+                    | None   -> ()
+                    target.Add(key, leaf)
+            | Group g ->
+                let grp = JsonObject()
+                match g.Type with
+                | Some tt -> grp.Add("$type", JsonValue.Create(typeNameStr tt))
+                | None    -> ()
+                addTokensToObj warnings cPath g.Children grp
+                if grp.Count > 0 then target.Add(key, grp)
+
+
+    // ── $themes / $metadata builders ─────────────────────────────────────────
+
+    let private buildThemesArray (themes: TokensStudioTheme list) : JsonArray =
+        let arr = JsonArray()
+        for th in themes do
+            let o = JsonObject()
+            if th.Id    <> "" then o.Add("id",    JsonValue.Create(th.Id))
+            if th.Name  <> "" then o.Add("name",  JsonValue.Create(th.Name))
+            if th.Group <> "" then o.Add("group", JsonValue.Create(th.Group))
+            let sets = JsonObject()
+            for (k, v) in th.SelectedTokenSets |> Map.toList do sets.Add(k, JsonValue.Create(v))
+            o.Add("selectedTokenSets", sets)
+            arr.Add(o :> JsonNode)
+        arr
+
+    let private buildMetadataObj (metadata: TokensStudioMetadata) : JsonObject =
+        let o = JsonObject()
+        let orderArr = JsonArray()
+        for s in metadata.TokenSetOrder do orderArr.Add(JsonValue.Create(s))
+        o.Add("tokenSetOrder", orderArr)
+        if not metadata.ActiveThemes.IsEmpty then
+            let arr = JsonArray()
+            for t in metadata.ActiveThemes do arr.Add(JsonValue.Create(t))
+            o.Add("activeThemes", arr)
+        if not metadata.ActiveSets.IsEmpty then
+            let arr = JsonArray()
+            for s in metadata.ActiveSets do arr.Add(JsonValue.Create(s))
+            o.Add("activeSets", arr)
+        o
+
+
+    // ── Public: toResolverDocument ────────────────────────────────────────────
+
+    /// Map Tokens Studio $themes/$metadata to a DTCG ResolverDocument (ADR-021).
+    ///
+    /// Themes with a non-empty <c>group</c> field become modifiers; sets whose status
+    /// varies across a modifier group become per-context sources; the remainder become
+    /// base <c>SetRef</c> entries in the resolution order.
+    let toResolverDocument
+        (shimResult : ShimResult)
+        (parsedSets : Map<string, TokenFile>)
+        : ResolverDocument =
+        let allSets   = shimResult.Metadata.TokenSetOrder
+        let allThemes = shimResult.Themes
+        // Only themes with a non-empty group become modifiers
+        let modGroups =
+            allThemes
+            |> List.filter (fun t -> t.Group <> "")
+            |> List.groupBy (fun t -> t.Group)
+        // Varying sets per modifier group: enabled in some themes but not all
+        let varyingPerGroup =
+            modGroups
+            |> List.map (fun (gName, themes) ->
+                let varying =
+                    allSets
+                    |> List.filter (fun setName ->
+                        let statuses =
+                            themes |> List.map (fun t ->
+                                t.SelectedTokenSets
+                                |> Map.tryFind setName
+                                |> Option.defaultValue "disabled")
+                        statuses |> List.exists (fun s -> s = "enabled") &&
+                        statuses |> List.exists (fun s -> s <> "enabled"))
+                    |> Set.ofList
+                gName, varying)
+            |> Map.ofList
+        let allVarying =
+            varyingPerGroup |> Map.toList |> List.map snd |> List.fold Set.union Set.empty
+        // Base sets: not varying, and either:
+        // - not mentioned in any theme's selectedTokenSets (global set), or
+        // - present as "source" in any theme, or
+        // - "enabled" in all themes
+        let baseSets =
+            allSets
+            |> List.filter (fun setName ->
+                not (Set.contains setName allVarying) &&
+                let notMentioned =
+                    allThemes |> List.forall (fun t -> not (t.SelectedTokenSets.ContainsKey setName))
+                let isSource =
+                    allThemes |> List.exists (fun t ->
+                        t.SelectedTokenSets |> Map.tryFind setName = Some "source")
+                let isEnabledAll =
+                    not allThemes.IsEmpty &&
+                    allThemes |> List.forall (fun t ->
+                        t.SelectedTokenSets |> Map.tryFind setName = Some "enabled")
+                notMentioned || isSource || isEnabledAll)
+        // Build modifier definitions
+        let modifiers =
+            modGroups
+            |> List.map (fun (gName, themes) ->
+                let varying =
+                    varyingPerGroup |> Map.tryFind gName |> Option.defaultValue Set.empty
+                let contexts =
+                    themes
+                    |> List.map (fun theme ->
+                        let ctxName =
+                            let i = theme.Name.LastIndexOf('/')
+                            if i >= 0 then theme.Name.[i+1..] else theme.Name
+                        let sources =
+                            allSets
+                            |> List.choose (fun setName ->
+                                if not (Set.contains setName varying) then None
+                                else
+                                    match theme.SelectedTokenSets
+                                          |> Map.tryFind setName
+                                          |> Option.defaultValue "disabled" with
+                                    | "enabled" ->
+                                        parsedSets |> Map.tryFind setName |> Option.map Inline
+                                    | _ -> None)
+                        ctxName, { Sources = sources })
+                let defCtx = contexts |> List.tryHead |> Option.map fst
+                gName, {
+                    Contexts    = contexts
+                    Default     = defCtx
+                    Description = None
+                    Extensions  = []
+                })
+        // Set definitions: every set in tokenSetOrder that has a parsed TokenFile
+        let setDefs =
+            allSets
+            |> List.choose (fun n ->
+                parsedSets |> Map.tryFind n |> Option.map (fun f ->
+                    n, { Sources = [Inline f]; Description = None; Extensions = [] }))
+        // Resolution order: base sets then one ModifierRef per modifier (empty = use default)
+        let resOrder =
+            (baseSets |> List.map SetRef) @
+            (modifiers |> List.map (fun (n, _) -> ModifierRef (n, "")))
+        {
+            Name            = None
+            Version         = V2025_10
+            Description     = None
+            Sets            = setDefs
+            Modifiers       = modifiers
+            ResolutionOrder = resOrder
+        }
+
+
+    // ── Public: exportToTokensStudio ─────────────────────────────────────────
+
+    /// Export DTCG token sets back to Tokens Studio JSON format (ADR-022).
+    ///
+    /// Uses the preserve-aliases path: alias references remain as <c>{path.to.token}</c>
+    /// strings. sRGB colors are serialized to hex without loss. Wide-gamut colors are
+    /// approximated to sRGB hex and the original color value is appended to the token's
+    /// <c>$description</c> field; each such conversion produces a
+    /// <see cref="ExportWarning.LossyColorConversion"/> warning.
+    ///
+    /// The <c>$themes</c> and <c>$metadata</c> blocks are reconstructed from
+    /// <c>shimResult</c>. Output is a Tokens Studio JSON file ready for Penpot import.
+    let exportToTokensStudio
+        (shimResult : ShimResult)
+        (parsedSets : Map<string, TokenFile>)
+        : string * ExportWarning list =
+        let warnings = ResizeArray<ExportWarning>()
+        let root     = JsonObject()
+        let opts     = JsonSerializerOptions(WriteIndented = true)
+        // Emit sets in tokenSetOrder
+        for setName in shimResult.Metadata.TokenSetOrder do
+            match parsedSets |> Map.tryFind setName with
+            | None -> ()
+            | Some file ->
+                let setObj = JsonObject()
+                addTokensToObj warnings "" file.Children setObj
+                root.Add(setName, setObj)
+        // Emit $themes and $metadata
+        root.Add("$themes",   buildThemesArray shimResult.Themes   :> JsonNode)
+        root.Add("$metadata", buildMetadataObj shimResult.Metadata :> JsonNode)
+        root.ToJsonString(opts), List.ofSeq warnings

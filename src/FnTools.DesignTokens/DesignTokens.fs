@@ -771,6 +771,23 @@ let export (tokens: (string list * ResolvedToken) seq) : string =
 
 let formatImportError (e: ImportError) : string = ImportError.format e
 
+/// Map Tokens Studio $themes/$metadata to a DTCG ResolverDocument.
+/// Wraps <see cref="TokensStudio.toResolverDocument"/>.
+let toResolverDocument
+    (shimResult : ShimResult)
+    (parsedSets : Map<string, TokenFile>)
+    : ResolverDocument =
+    TokensStudio.toResolverDocument shimResult parsedSets
+
+/// Export DTCG token sets back to Tokens Studio JSON format (preserve-aliases path).
+/// Returns the JSON string and any lossy-color-conversion warnings.
+/// Wraps <see cref="TokensStudio.exportToTokensStudio"/>.
+let exportTokensStudio
+    (shimResult : ShimResult)
+    (parsedSets : Map<string, TokenFile>)
+    : string * ExportWarning list =
+    TokensStudio.exportToTokensStudio shimResult parsedSets
+
 
 // ─── Primitives module ───────────────────────────────────────────────────────
 
@@ -796,6 +813,9 @@ module Primitives =
     let formatShimWarning           = TokensStudio.formatWarning
     let formatImportWarning         = TokensStudio.formatImportWarning
     let importTokensStudioThemed    = importTokensStudioThemed
+    let toResolverDocument          = TokensStudio.toResolverDocument
+    let exportTokensStudio          = TokensStudio.exportToTokensStudio
+    let formatExportWarning         = TokensStudio.formatExportWarning
 
     let load (jsonText: string) : Result<TokenFile, LoadError list> =
         match Format.parse jsonText with

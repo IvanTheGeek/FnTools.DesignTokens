@@ -47,6 +47,20 @@ import/export. See `penpot-api.md` for the three-surface comparison.
   Key finding: all three paths lose token names; only Path C preserves them as CSS custom
   properties. Missing step identified: shape-to-component CSS generator using `shape.tokens`.
   Findings → `LauraExperiment/phase4b-findings.md`. 2026-05-04.
+- [x] **`$ref` JSON Pointer support in Resolver** — RFC 6901 same-document pointer resolution
+  in `parseTokenSource`; `resolveJsonPointer` walks `#/path/to/node` with `~0`/`~1` escaping
+  and array index support; `$ref → $ref` chains resolve transitively. Root `JsonObject` threaded
+  through 5 private parse functions so `$defs` is available as a pointer target. 5 new tests.
+  213 tests pass. 2026-05-04.
+- [x] **Tokens Studio export** (`toResolverDocument` + `exportToTokensStudio`) — ADR-021 and
+  ADR-022. `toResolverDocument` maps `$themes`/`$metadata` to a DTCG `ResolverDocument`:
+  modifier groups from `group` fields, varying-set detection per modifier group, global sets
+  (not mentioned in any theme) as base `SetRef`s. `exportToTokensStudio` serialises DTCG token
+  files back to Tokens Studio JSON (preserve-aliases path): alias refs kept as `{path}` strings,
+  sRGB colors → `#rrggbb` hex (lossless), wide-gamut → hex + `$description` annotation +
+  `ExportWarning.LossyColorConversion`. `$themes` and `$metadata` reconstructed from `ShimResult`.
+  Public API: `Api.exportTokensStudio`, `Api.toResolverDocument`, `formatExportWarning`.
+  9 new tests. 222/222 pass. 2026-05-04.
 - [ ] **PATHS state mapping (Phase 7)** — read prototype connections on all mock pages;
   map each screen to a PATHS state and each connection to a transition; document what
   information Penpot carries vs what PATHS needs.
