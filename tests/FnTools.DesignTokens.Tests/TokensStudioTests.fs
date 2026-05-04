@@ -557,24 +557,27 @@ let allTests =
 
             // Helper: strip the named keys from any JsonObject that has a "$value" sibling
             // (i.e. token leaf nodes) recursively. Replaces brittle regex-based stripping.
+            // Nullness is threaded through walk so System.Text.Json's nullable returns flow
+            // cleanly into the type system (no FS3261 escape valve).
             let stripLeafKeys (keys: string seq) (json: string) : string =
-                let keySet = System.Collections.Generic.HashSet<string>(keys)
-                let root = System.Text.Json.Nodes.JsonNode.Parse(json)
-                let rec walk (n: System.Text.Json.Nodes.JsonNode) =
-                    match n with
+                let keyList = Seq.toList keys
+                let rec walk (node: System.Text.Json.Nodes.JsonNode | null) =
+                    match node with
+                    | null -> ()
                     | :? System.Text.Json.Nodes.JsonObject as o ->
-                        let isLeaf = o.ContainsKey("$value")
-                        if isLeaf then
-                            for k in Seq.toList keys do
+                        if o.ContainsKey("$value") then
+                            for k in keyList do
                                 if o.ContainsKey(k) then o.Remove(k) |> ignore
-                        for kv in Seq.toList (o :> seq<_>) do
-                            if kv.Value <> null then walk kv.Value
+                        // Snapshot the kvp list so removals during walk don't perturb iteration.
+                        for kv in Seq.toList (o :> seq<_>) do walk kv.Value
                     | :? System.Text.Json.Nodes.JsonArray as a ->
-                        for i in 0 .. a.Count - 1 do
-                            if a.[i] <> null then walk a.[i]
+                        for i in 0 .. a.Count - 1 do walk a.[i]
                     | _ -> ()
+                let root = System.Text.Json.Nodes.JsonNode.Parse(json)
                 walk root
-                root.ToJsonString()
+                match root with
+                | null   -> json
+                | nonNul -> nonNul.ToJsonString()
 
             // Helper to extract the first color token from a parsed file's tree.
             let firstColorLeaf (f: TokenFile) : Token =
