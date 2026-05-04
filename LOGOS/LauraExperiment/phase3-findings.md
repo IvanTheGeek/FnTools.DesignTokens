@@ -228,16 +228,11 @@ lightness.200   = 88
 **110 tokens (36%)** use this pattern — the entire palette. DTCG 2025.10 `color` type
 requires hex, named color, or `{alias}` references. HSL expressions are not valid.
 
-**Shim policy options** (same structure as math expressions):
-- **A — Preserve as-is**: emit as string with type `color`. Downstream must evaluate.
-- **B — Evaluate at import time**: resolve alias chain, compute `hsl()`, convert to hex.
-  Straightforward: saturation value needs `%` strip from string; `hsl(h, s%, l%)` → hex.
-- **C — Skip with warning**: emit `Skipped` entries. 110 tokens → most palette unusable.
-
-Recommended: **B** — evaluate at import time. The math is deterministic (no theme
-dependence; `hue.*`, `saturation.*`, `lightness.*` are in the always-on
-`Foundations/Base` set). Unlike the `scale.*` tokens, HSL palette tokens have a
-single concrete resolved value. Convert to 6-digit hex in the shim.
+**Implemented: B — evaluate at import time.** The shim builds a flat alias index
+across all sets, resolves `{hue.blue}` → `203`, `{saturation.colors}` → (alias chain)
+→ `80`, `{lightness.100}` → `95`, then computes `hsl(203, 80%, 95%)` → `#d4e8f5` (hex).
+All 139 palette color tokens resolve correctly. Saturation values are bare numbers
+(0–100), not `%` strings — the `%` strip was not needed.
 
 ---
 
@@ -257,64 +252,76 @@ DTCG 2025.10 does not list `transparent` as a valid `color` value (requires hex 
 - Keep as `"transparent"` with type coerced to `string` — but loses type semantics
 - Emit `Skipped` — safest but breaks two real tokens
 
-Recommended: **map to `#00000000`** in the shim. The intent is zero opacity; the
-specific RGB channels are irrelevant since alpha = 0.
+**Implemented:** emit structured DTCG color object `{colorSpace: "srgb", components: [0,0,0], alpha: 0}`
+instead of 8-digit hex. The hex form `#00000000` was tried first but the Validation module's
+`hexRegex` only accepts 6-digit hex. The structured object is the cleaner DTCG 2025.10 form
+and bypasses the validation issue without modifying the Validation module.
 
 ---
 
-## What parses cleanly today (no shim needed)
+## What parses after shim (as of 2026-05-03)
 
-Against `FnTools.DesignTokens` `Api.import` (DTCG 2025.10):
+Against `FnTools.DesignTokens` `Api.import` (DTCG 2025.10), after `TokensStudio.shim`:
 
-The full single-file export (`laura-system-library.tokens.json`) was run through
-`Api.import` after extracting each set's token map from the top-level set keys.
-Results by category:
-
-| Category | Count | Result |
+| Set | Tokens | Single-set result |
 |---|---|---|
-| `color` — hex literals | 64 | ✓ parse OK |
-| `color` — alias references | ~10 | ✓ parse OK |
-| `color` — HSL expressions | 110 | ✗ Gap 5 |
-| `color` — `"transparent"` | 2 | ✗ Gap 6 |
-| `dimension` — unit values | 12 | ✓ parse OK |
-| `number` — literals | 47 | ✓ parse OK |
-| `number` — math expressions | 10 | ✗ Gap 2 |
-| `typography` composite | 18 | ✗ Gap 3 (field names) |
-| `spacing`, `borderRadius`, etc. | 44 | ✗ Gap 1 (type names) |
+| Color/Palettes and Scales | 139 | ✓ all parse — HSL evaluated to hex |
+| Breakpoints/Desktop | 2 | ✓ |
+| Breakpoints/Mobile | 2 | ✓ |
+| Breakpoints/Tablet | 2 | ✓ |
+| Text zoom/100% | 1 | ✓ |
+| Text zoom/150% | 1 | ✓ |
+| Text zoom/200% | 1 | ✓ |
+| All Brand/* sets | per-set | ✗ cross-set ref `{stroke.hairline}` |
+| Color/Dark-Light Core/Accent/Component | per-set | ✗ cross-set refs to `{palette.*}` |
+| Foundations/Base | 13 | ✗ `PreserveMath` expressions fail `Api.import` |
+| Foundations/Spacing, Sizing, Radius | per-set | ✗ cross-set refs to `{scale.*}` |
+| Typography | 18 | ✗ cross-set refs to `{scale.*}` |
+| Components/Button | per-set | ✗ cross-set refs to `{typography.*}` |
 
-**Clean without a shim: ~133 of 305 tokens (44%).** The remaining 172 require at
-least one shim transform. The largest single category is the HSL palette (110 tokens).
+**148 of 305 tokens (49%) parse in single-set mode.** The remaining 157 are not shim
+failures — they are cross-set alias references that the multi-set resolver handles
+when all sets are loaded together. `Foundations/Base` math-expression tokens parse
+only when `SkipMath` is used or when evaluated by the CSS emitter.
 
-Note: `Api.import` is the correct entry point — not `Format.parse` directly.
-The wrapper handles the top-level document structure (`$type`, `$value` at root,
-group nesting). When set content is passed directly, the set-key wrapper must be
-stripped first (single-file format wraps token maps under their set name key).
+**Additional transforms discovered during implementation** (beyond the original 7-item spec):
+- Tokens Studio stores `number` `$value` as JSON **strings** (e.g. `"203"`), not numbers.
+  Shim converts to JSON numbers where possible.
+- DTCG 2025.10 `dimension` `$value` format is `{value: float, unit: string}` (not
+  `"16px"` string — that was the older spec's string upgrade path, which is not applied
+  for V2025_10 documents).
+- Typography `fontWeight`: `"400 Italic"` (combined weight+style) → extract numeric part
+  `400`. The italic suffix is a Tokens Studio non-standard; DTCG has no `fontStyle` in
+  `typography` composite.
 
 ---
 
-## Shim specification (what needs to be built)
+## Shim implementation (built 2026-05-03)
 
-Module: `TokensStudio` in `FnTools.DesignTokens` (or a separate `.Css` or `.Adapters`
-module — TBD at layer split).
+Project: `src/FnTools.DesignTokens.TokensStudio/` — standalone layer, depends on Foundation only.
 
-Input: Tokens Studio JSON (top-level set keys + `$themes` + `$metadata`)
-Output: DTCG 2025.10 JSON + separated themes/metadata structure
+Entry points:
+- `TokensStudio.shim json` — default config (PreserveMath)
+- `TokensStudio.shimSingleFile config json` — explicit config
+- Returns `ShimResult` with `Sets: Map<string, string>` (set name → DTCG JSON text)
+  + `Themes: TokensStudioTheme list` + `Metadata: TokensStudioMetadata` + `Warnings`
 
-Required transforms:
-1. **Type rename pass** — map 5 TS types to DTCG equivalents
-2. **fontFamily unwrap** — `["X"]` → `"X"` at token level and inside typography composite
-3. **Typography field rename** — 4 field names in composite `$value`
-4. **Dimension unit injection** — add `px` suffix to bare-number dimension values
-   (only for literal values; alias references pass through unchanged)
-5. **Math expression policy** — configurable: preserve / evaluate / skip
-6. **HSL expression evaluation** — resolve alias chain, compute HSL, emit hex
-   (deterministic; no theme dependence for the palette set)
-7. **`"transparent"` normalization** — map to `"#00000000"` (zero-alpha hex)
-8. **`$themes` extraction** — separate from token output; preserve as resolver config
-9. **`$metadata` extraction** — preserve `tokenSetOrder` as resolver `resolutionOrder`
+Implemented transforms (11 total, up from original 9-item spec):
+1. **Type rename** — `fontFamilies`→`fontFamily`, `spacing`/`borderRadius`/`fontSizes`/`borderWidth`→`dimension`
+2. **fontFamily array unwrap** — `["X"]` → `"X"` at token and typography composite level
+3. **Typography field rename** — `fontFamilies/fontSizes/fontWeights/lineHeights` → DTCG names
+4. **Dimension object emit** — bare number strings → `{value: N, unit: "px"}` objects
+   (DTCG 2025.10 format; alias refs pass through as strings)
+5. **number string→number** — `"203"` → `203` JSON number; math expressions handled by policy
+6. **Math expression policy** — `PreserveMath` (keep as string) | `SkipMath` (omit + warn)
+7. **HSL evaluation** — flat alias index → resolve chain → `hsl(h, s%, l%)` → hex
+8. **`"transparent"` normalization** — DTCG `{colorSpace:"srgb", components:[0,0,0], alpha:0}`
+9. **Typography `fontWeight` coercion** — `"600"` → `600`; `"400 Italic"` → `400` (style suffix dropped)
+10. **Typography `lineHeight` coercion** — `"1.1"` → `1.1` JSON float
+11. **`$themes` / `$metadata` extraction** — `TokensStudioTheme list` + `TokensStudioMetadata`
 
-Items 1–4, 6–7, 8–9 are mechanical transforms with no design ambiguity.
-Item 5 requires a policy decision and potentially a math expression evaluator.
+`$metadata.activeThemes` is preserved as the most reliable record of the designer's
+intended active theme combination at export time.
 
 ---
 

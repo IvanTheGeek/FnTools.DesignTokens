@@ -9,10 +9,12 @@ demo is in `/home/ivan/ARCHIVE/Penpot-DesignTokens/`. Primary interaction is via
 **MCP server + browser extension** — not the REST API (broken for tokens) and not file
 import/export. See `penpot-api.md` for the three-surface comparison.
 
-- [ ] **Tokens Studio parser shim** — read a Tokens Studio `tokens.json`, strip non-DTCG types
-  (`fontFamilies`, `fontSizes`, `spacing`, `borderWidth`) and math/HSL expressions, return
-  parseable DTCG JSON per set. Use Laura's file as test input. This is a separate function
-  (not `Format.parse`) — it lives in a `TokensStudio` module.
+- [x] **Tokens Studio parser shim** — `FnTools.DesignTokens.TokensStudio` project; 9 transforms
+  (type rename, fontFamily unwrap, typography field rename, dimension unit injection,
+  math expression policy, HSL evaluation, transparent normalisation, $themes/$metadata
+  extraction). Verified against Laura's 305-token file: 148 tokens parse clean in
+  single-set mode; remaining sets fail only on expected cross-set refs or preserved math
+  expressions. 179/179 tests pass. Merged 2026-05-03.
 - [ ] **Token round-trip** — push `ivanthegeek.tokens.json` into Penpot and read it back.
   Two paths to compare: (a) MCP `execute_code` with `penpot.tokens` Plugin API, (b) REST
   `update-file` with `set-token-set` + `set-token` change ops. Both verified working in
