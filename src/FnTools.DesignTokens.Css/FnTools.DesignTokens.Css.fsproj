@@ -5,7 +5,7 @@
     <RootNamespace>FnTools.DesignTokens</RootNamespace>
     <AssemblyName>FnTools.DesignTokens.Css</AssemblyName>
     <PackageId>FnTools.DesignTokens.Css</PackageId>
-    <Version>0.2.0</Version>
+    <Version>0.3.0</Version>
     <Authors>FnTools</Authors>
     <Description>DTCG 2025.10 CSS custom-property emitter — resolved tokens to :root { } block</Description>
     <PackageLicenseExpression>AGPL-3.0-or-later</PackageLicenseExpression>
