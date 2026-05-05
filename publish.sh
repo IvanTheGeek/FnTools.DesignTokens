@@ -38,12 +38,12 @@ if [ "$DEV" = true ]; then
     BASE_VERSION="$(grep -m1 '<Version>' src/FnTools.DesignTokens/FnTools.DesignTokens.fsproj | sed 's/.*<Version>\(.*\)<\/Version>.*/\1/')"
     DEV_VERSION="${BASE_VERSION}-dev.${SHORT_SHA}"
     echo "    dev pre-release: ${DEV_VERSION}"
-    dotnet pack src/FnTools.DesignTokens/FnTools.DesignTokens.fsproj -c Release --nologo -v quiet \
+    dotnet pack FnTools.DesignTokens.slnx -c Release --nologo -v quiet \
         --no-build \
         -o artifacts/ \
         -p:Version="${DEV_VERSION}"
 else
-    dotnet pack src/FnTools.DesignTokens/FnTools.DesignTokens.fsproj -c Release --nologo -v quiet \
+    dotnet pack FnTools.DesignTokens.slnx -c Release --nologo -v quiet \
         --no-build \
         -o artifacts/
 fi
