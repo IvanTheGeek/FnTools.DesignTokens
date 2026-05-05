@@ -486,14 +486,30 @@ let private partialFlattenResolvedFile
     List.ofSeq oks, List.ofSeq errs
 
 
-/// Shim a Tokens Studio multi-set JSON export, merge all sets in tokenSetOrder, and resolve
-/// cross-set aliases. Returns a partial-success result: resolved tokens plus warnings for
-/// sets that could not parse (e.g. math expressions with PreserveMath) and tokens whose
-/// alias references could not be resolved.
-let importTokensStudio
-    (config: ShimConfig)
-    (jsonText: string)
-    : Result<TokensStudioImportResult, ImportError list> =
+/// Result of <see cref="importTokensStudioRaw"/>: resolved tokens plus the raw shim
+/// artifacts needed to export back to Tokens Studio format or build a resolver document.
+type TokensStudioRawImport = {
+    /// Resolved tokens and import warnings — same content as <see cref="importTokensStudio"/>.
+    Import     : TokensStudioImportResult
+    /// Raw shim output — pass directly to <see cref="exportTokensStudio"/> or <see cref="toResolverDocument"/>.
+    ShimResult : ShimResult
+    /// Parsed token files by set name — pass directly to <see cref="exportTokensStudio"/> or <see cref="toResolverDocument"/>.
+    ParsedSets : Map<string, TokenFile>
+}
+
+/// Shim a Tokens Studio multi-set JSON export, resolve all sets, and return both the
+/// resolved tokens and the raw shim artifacts needed to export back to Tokens Studio format.
+///
+/// <remarks>
+/// Use this in place of <see cref="importTokensStudio"/> when you need the full round-trip
+/// path: after resolving and optionally modifying tokens, pass <c>result.ShimResult</c> and
+/// <c>result.ParsedSets</c> directly to <see cref="exportTokensStudio"/> or
+/// <see cref="toResolverDocument"/> — no <c>Primitives</c> calls needed.
+/// </remarks>
+let importTokensStudioRaw
+    (config   : ShimConfig)
+    (jsonText : string)
+    : Result<TokensStudioRawImport, ImportError list> =
     match TokensStudio.shimSingleFile config jsonText with
     | Error msg -> Error [ParseFailed [InvalidJson msg]]
     | Ok shimResult ->
@@ -518,7 +534,11 @@ let importTokensStudio
                 parsedSets |> Map.tryFind name |> Option.map (fun f -> name, f))
 
         if orderedSets.IsEmpty then
-            Ok { Tokens = []; Warnings = List.ofSeq warnings }
+            Ok {
+                Import     = { Tokens = []; Warnings = List.ofSeq warnings }
+                ShimResult = shimResult
+                ParsedSets = parsedSets
+            }
         else
             let setDefs =
                 orderedSets
@@ -540,7 +560,29 @@ let importTokensStudio
                 let tokens, unresolved = partialFlattenResolvedFile merged
                 for (path, ref) in unresolved do
                     warnings.Add (TokenUnresolved (path, ref))
-                Ok { Tokens = tokens; Warnings = List.ofSeq warnings }
+                Ok {
+                    Import     = { Tokens = tokens; Warnings = List.ofSeq warnings }
+                    ShimResult = shimResult
+                    ParsedSets = parsedSets
+                }
+
+
+/// Shim a Tokens Studio multi-set JSON export, merge all sets in tokenSetOrder, and resolve
+/// cross-set aliases. Returns a partial-success result: resolved tokens plus warnings for
+/// sets that could not parse (e.g. math expressions with PreserveMath) and tokens whose
+/// alias references could not be resolved.
+///
+/// <remarks>
+/// When you also need to export back to Tokens Studio format, use
+/// <see cref="importTokensStudioRaw"/> instead — it returns the same resolved tokens plus
+/// the <c>ShimResult</c> and <c>ParsedSets</c> required by <see cref="exportTokensStudio"/>
+/// and <see cref="toResolverDocument"/>.
+/// </remarks>
+let importTokensStudio
+    (config: ShimConfig)
+    (jsonText: string)
+    : Result<TokensStudioImportResult, ImportError list> =
+    importTokensStudioRaw config jsonText |> Result.map (fun r -> r.Import)
 
 
 /// Shim a Tokens Studio multi-set JSON export, activate a named subset of themes, and emit
@@ -955,6 +997,7 @@ module Primitives =
     let shimWithConfig              = TokensStudio.shimSingleFile
     let formatShimWarning           = TokensStudio.formatWarning
     let formatImportWarning         = TokensStudio.formatImportWarning
+    let importTokensStudioRaw       = importTokensStudioRaw
     let importTokensStudioThemed    = importTokensStudioThemed
     let importTokensStudioCombined  = importTokensStudioCombined
     let toResolverDocument          = TokensStudio.toResolverDocument

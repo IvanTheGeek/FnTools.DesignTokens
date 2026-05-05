@@ -180,6 +180,13 @@ import/export. See `penpot-api.md` for the three-surface comparison.
 - [ ] TOML authoring format + parser
 - [ ] ADR-001 (FnHCI): Fun.Css vs FSS — record CSS binding choice for Fun.Blazor consumers once the FnHCI project has a LOGOS directory
 
+- [x] **`importTokensStudioRaw` round-trip API (ADR-029, 2026-05-04)** — `importTokensStudio*`
+  functions discarded `ShimResult` + `ParsedSets` internally; `exportTokensStudio` and
+  `toResolverDocument` both require them; callers had to use `Primitives.shimWithConfig`.
+  Fix: `TokensStudioRawImport` record + `importTokensStudioRaw` added to top-level `Api`;
+  `importTokensStudio` refactored to delegate. Round-trip is now three lines from `Api` alone.
+  258/258 pass. ADR-029 created.
+
 ### NuGet
 
 - [ ] CI publish on tag (deferred until first stable release)
