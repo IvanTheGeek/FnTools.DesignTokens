@@ -122,4 +122,4 @@ Architecture decisions are recorded in [LOGOS/decisions/](LOGOS/decisions/).
 
 ## License
 
-[AGPL-3.0-or-later](LICENSE)
+[AGPL-3.0](LICENSE)
