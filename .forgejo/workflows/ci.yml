@@ -10,12 +10,12 @@ jobs:
   build-test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '10.x'
+      - name: Checkout
+        run: |
+          git init .
+          git remote add origin ${{ github.server_url }}/${{ github.repository }}.git
+          git fetch --depth=1 origin ${{ github.sha }}
+          git checkout FETCH_HEAD
 
       - name: Build
         run: dotnet build FnTools.DesignTokens.slnx -c Release --nologo
