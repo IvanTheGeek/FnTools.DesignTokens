@@ -190,8 +190,14 @@ module DimensionUnitPolicy =
     let identity : DimensionUnitPolicy = fun _ u -> u
 
 let private dimensionWithPolicy (policy: DimensionUnitPolicy) (path: string list) (d: DimensionValue) : string =
-    let u = match policy path d.Unit with Px -> "px" | Rem -> "rem" | Em -> "em"
-    sprintf "%g%s" d.Value u
+    let targetUnit = policy path d.Unit
+    let value =
+        match d.Unit, targetUnit with
+        | Px,  Rem -> d.Value / 16.0
+        | Rem, Px  -> d.Value * 16.0
+        | _,   _   -> d.Value
+    let u = match targetUnit with Px -> "px" | Rem -> "rem" | Em -> "em"
+    sprintf "%g%s" value u
 
 let private tokenToCssDeclsWith (policy: DimensionUnitPolicy) (path: string list) (token: ResolvedToken) : (string * string) list =
     let v   = cssVarName path
