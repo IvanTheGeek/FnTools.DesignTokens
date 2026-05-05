@@ -1,0 +1,96 @@
+# FnTools.DesignTokens
+
+> F# library implementing DTCG 2025.10 (Design Tokens W3C Community Group) — parse, validate, resolve, emit CSS, and round-trip with Tokens Studio / Penpot. AGPL-3.0.
+
+## Start here
+
+- [README](README.md): What the library does and why, with quick-start examples
+- [API Reference](docs/api-reference.md): All public functions with signatures, types, and usage patterns
+
+## Public API entry point
+
+`FnTools.DesignTokens.Api` in [src/FnTools.DesignTokens/DesignTokens.fs](src/FnTools.DesignTokens/DesignTokens.fs)
+
+Key functions:
+- `Api.import` — parse a single DTCG token file
+- `Api.importWithResolver` — parse + resolve a multi-set resolver document
+- `Api.importTokensStudio` — read Tokens Studio multi-set JSON (flat, all sets merged)
+- `Api.importTokensStudioThemed` — read Tokens Studio with per-theme resolution (for CSS multi-mode output)
+- `Api.importTokensStudioCombined` — read Tokens Studio with combined multi-group theme selection
+- `Api.importTokensStudioRaw` — read Tokens Studio and return ShimResult+ParsedSets for round-trips
+- `Api.export` — resolved tokens → DTCG JSON
+- `Api.exportTokensStudio` — resolved tokens → Tokens Studio multi-set JSON (requires ShimResult from importTokensStudioRaw)
+- `Api.toResolverDocument` — Tokens Studio $themes/$metadata → DTCG ResolverDocument
+
+## Key source files
+
+- [src/FnTools.DesignTokens/DesignTokens.fs](src/FnTools.DesignTokens/DesignTokens.fs): Public Api module and Primitives submodule — start here
+- [src/FnTools.DesignTokens.Foundation/Domain.fs](src/FnTools.DesignTokens.Foundation/Domain.fs): Core domain types (TokenValue, ResolvedToken, DimensionUnit, etc.)
+- [src/FnTools.DesignTokens.Foundation/Errors.fs](src/FnTools.DesignTokens.Foundation/Errors.fs): Error types (ParseError, ValidationError, ResolveError, ImportError)
+- [src/FnTools.DesignTokens.Css/CssEmitter.fs](src/FnTools.DesignTokens.Css/CssEmitter.fs): CSS custom-property emitter (emitBlock, emitThemedWith, emitCalcPreserving, DimensionUnitPolicy)
+- [src/FnTools.DesignTokens.Css/CssIngest.fs](src/FnTools.DesignTokens.Css/CssIngest.fs): CSS → DTCG token file ingestion
+- [src/FnTools.DesignTokens.Css/CssAudit.fs](src/FnTools.DesignTokens.Css/CssAudit.fs): CSS hardcoded-value audit
+- [src/FnTools.DesignTokens.Bindings/BindingsEmitter.fs](src/FnTools.DesignTokens.Bindings/BindingsEmitter.fs): Typed F# var() binding constants emitter
+- [src/FnTools.DesignTokens.TokensStudio/TokensStudio.fs](src/FnTools.DesignTokens.TokensStudio/TokensStudio.fs): Tokens Studio shim (type renames, math eval, HSL eval, $themes) and export
+- [src/FnTools.DesignTokens.Format/Format.fs](src/FnTools.DesignTokens.Format/Format.fs): DTCG JSON parse and serialize
+- [src/FnTools.DesignTokens.Resolver/Resolver.fs](src/FnTools.DesignTokens.Resolver/Resolver.fs): Multi-set resolver document
+
+## Common tasks
+
+**Read Tokens Studio JSON and emit themed CSS:**
+```fsharp
+let result = Api.importTokensStudioThemed ShimConfig.Default ["Light"; "Dark"] json |> Result.get
+let css = CssEmitter.emitThemedWith remPolicy (fun t -> $"[data-theme=\"{t}\"]") result.BaseTokens result.Themes
+```
+
+**Round-trip Tokens Studio → export back to Penpot:**
+```fsharp
+let raw = Api.importTokensStudioRaw ShimConfig.Default json |> Result.get
+let (penpotJson, _) = Api.exportTokensStudio raw.ShimResult raw.ParsedSets
+```
+
+**Read plain DTCG JSON and resolve:**
+```fsharp
+let tokens = Api.import json |> Result.get  // (string list * ResolvedToken) seq
+```
+
+**Emit F# binding constants:**
+```fsharp
+let fsharp = BindingsEmitter.emit tokens
+// generates: module Tokens = let ColorTextMain = "var(--color-text-main)"
+```
+
+**Migrate from CSS custom properties to DTCG:**
+```fsharp
+let ingestResult = CssIngest.ingest "cb" cssText
+let dtcgJson = Format.serialize ingestResult.TokenFile
+```
+
+## Architecture
+
+Five layered packages under `FnTools.DesignTokens` namespace, plus Css, Bindings, TokensStudio layers, and a meta-package. All layers share the same namespace — `open FnTools.DesignTokens` exposes everything.
+
+- `Foundation` — pure domain types, zero non-BCL deps
+- `Format` — JSON parse/serialize (System.Text.Json)
+- `Validation` — invariant checks (FsToolkit.ErrorHandling for error accumulation)
+- `Resolver` — multi-set merge, modifier contexts
+- `Css` — CSS emitter, CssIngest, CssAudit
+- `Bindings` — typed F# binding emitter
+- `TokensStudio` — Tokens Studio shim and export
+- `FnTools.DesignTokens` — meta-package, public Api module
+
+## Architecture decisions
+
+All significant design choices are in [LOGOS/decisions/](LOGOS/decisions/). Notable ones:
+- [ADR-003](LOGOS/decisions/003-io-belongs-to-caller.md): No file I/O in the library — callers supply content as strings
+- [ADR-013](LOGOS/decisions/013-library-scope-dtcg-interchange-boundary.md): Library scope is the DTCG interchange boundary
+- [ADR-022](LOGOS/decisions/022-tokens-studio-export-preserve-aliases.md): Export preserves aliases, not concrete values
+- [ADR-026](LOGOS/decisions/026-shim-annotation-recovery-pattern.md): Shim annotation/recovery pattern for lossless round-trips
+- [ADR-029](LOGOS/decisions/029-import-tokens-studio-raw-roundtrip-api.md): importTokensStudioRaw for discoverable round-trip
+
+## Tests
+
+[tests/FnTools.DesignTokens.Tests/](tests/FnTools.DesignTokens.Tests/) — 258 Expecto tests covering all layers. Run with:
+```
+dotnet run --project tests/FnTools.DesignTokens.Tests/FnTools.DesignTokens.Tests.fsproj
+```
