@@ -309,24 +309,31 @@ This is the correct level of interaction — not file round-trips.
 
 ## What our library can / cannot handle from this format
 
+This table reflects the state after `FnTools.DesignTokens.TokensStudio` shim was implemented
+(2026-05-03 and onwards). Use `Api.importTokensStudio` / `Api.importTokensStudioCombined` /
+`Api.importTokensStudioThemed` rather than `Format.parse` directly.
+
 | Tokens Studio feature | Our library | Notes |
 |---|---|---|
-| Standard DTCG types (color, dimension, fontFamily, etc.) | Parses OK | After stripping Tokens Studio wrapper |
-| Tokens Studio type names (`fontFamilies`, `fontSizes`, etc.) | Not parsed | Would need a TS→DTCG type-name mapping layer |
-| Math expressions (`round({base} * pow(...))`) | Not parsed | TS-only; no DTCG equivalent |
-| HSL expressions (`hsla({hue},{sat},{light},1)`) | Not parsed | TS-only dynamic color |
-| `$themes` + `$metadata` | Not parsed | Maps to DTCG resolver semantics (different syntax) |
-| Multi-set file structure | Not parsed | `Format.parse` expects DTCG top-level structure |
-| Single set content (DTCG-compatible types only) | Parses via `serializePenpot` import path | Strip set wrapper first |
-| Round-trip: DTCG → `serializePenpot` → Penpot import | Works for color/dimension/fontFamily | Confirmed working |
+| Standard DTCG types (color, dimension, fontFamily, etc.) | Handled | Shim normalises to DTCG 2025.10 |
+| TS type names (`fontFamilies`, `fontSizes`, `spacing`, etc.) | Handled | `typeRenames` map; original name preserved via `extTsTypeKey` for export round-trip |
+| Math expressions (`round({base} * pow(...))`) | Handled | `MathEval` recursive-descent evaluator; supports full operator + function set |
+| HSL expressions (`hsla({hue},{sat},{light},1)`) | Handled | Evaluated to hex at shim time; original expression preserved via `extOriginalHslKey`. Both bare-number and `%`-suffixed S/L accepted |
+| `$themes` + `$metadata` | Handled | Parsed into `ShimResult`; `toResolverDocument` converts to DTCG resolver semantics |
+| Multi-set file structure | Handled | `importTokensStudio`, `importTokensStudioCombined`, `importTokensStudioThemed` |
+| Typography composite values | Handled | Field renames (`fontWeights`→`fontWeight` etc.); combined fontWeight strings (`"400 Italic"`) preserved via `extOriginalTypographyFontWeightKey` |
+| Round-trip: DTCG → `exportToTokensStudio` → Penpot import | Works | Original TS type names, HSL expressions, combined fontWeights all restored on export |
+| Wide-gamut OKLCH colors | Partial | Round-trip via `extOriginalColorKey`; Penpot strips `$extensions` (see EXP-04 and `penpot-extensions-preservation-test.md`) |
 
 ---
 
 ## Experiments worth running
 
-1. **Parse DTCG-compatible subsets from Tokens Studio format** — write an F# function that
-   reads a Tokens Studio `tokens.json`, strips non-DTCG types and math expressions, and
-   returns parseable DTCG JSON for each set. Use Laura's file as the test input.
+1. ~~**Parse DTCG-compatible subsets from Tokens Studio format**~~ — **Done.**
+   `FnTools.DesignTokens.TokensStudio` shim handles the full TS multi-set format:
+   type renames, math evaluation, HSL evaluation, typography composite field renames,
+   `$themes`/`$metadata` extraction. Use `Api.importTokensStudio` /
+   `Api.importTokensStudioCombined` / `Api.importTokensStudioThemed`.
 
 2. **Token resolution via API** — call Penpot REST API to read the current token state of
    the imported Laura file; verify that the resolved values match what Tokens Studio
@@ -335,6 +342,8 @@ This is the correct level of interaction — not file round-trips.
 3. **MCP round-trip** — push our `ivanthegeek.tokens.json` via API, then use the Penpot MCP
    server to verify that the shapes in a test frame have the correct applied tokens.
 
-4. **Theme-aware CSS emitter** — given a set of active theme names (e.g. `["Dark", "Mobile"]`),
-   resolve the token merge in our library and emit two CSS blocks (`:root` base + media query
-   override). Tests: same output as Penpot's resolved values for those themes.
+4. ~~**Theme-aware CSS emitter**~~ — **Done.**
+   `CssEmitter.emitThemed` / `emitThemedWith` emit `:root` + per-theme diff blocks.
+   `emitMultiMode` / `emitMultiModeWith` emit two-block base + override output.
+   `DimensionUnitPolicy` allows per-path unit overrides (e.g. rem for font-size).
+   `LauraExperiment/scripts/convert-tokens.fsx` uses `emitThemedWith` with all 9 axes.

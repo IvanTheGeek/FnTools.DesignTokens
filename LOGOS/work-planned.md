@@ -42,10 +42,10 @@ Primary test case: LaundryLog HTML design system + ivanthegeek.com.
 
 `FnTools.DesignTokens.Css` — resolved token tree → CSS custom properties in `:root {}` block.
 All 13 token types supported. Path segments → hyphen-delimited CSS var names.
-
-Remaining gap: dark-mode override block (`[data-theme="dark"]`) is manually maintained in
-`tokens.css` — the emitter only produces light-mode `:root {}`. Needs a second resolver pass
-for multi-mode output when the emitter is extended.
+Multi-mode output: `emitThemed`/`emitThemedWith` emit `:root` + per-theme diff blocks;
+`emitMultiMode`/`emitMultiModeWith` emit two-block base + override output.
+`DimensionUnitPolicy` allows per-path unit selection (e.g. rem for font-size tokens).
+`emitCalcPreserving` for design-tool workbench slider (ADR-027).
 
 ## ~~Typed F# bindings emitter~~ ✓ done 2026-05-02
 
