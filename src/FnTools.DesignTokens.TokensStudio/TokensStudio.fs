@@ -149,7 +149,8 @@ module TokensStudio =
     let private extOriginalColorKey      = "originalColor"      // export → TS (wide-gamut recovery)
     let private extOriginalHslKey        = "originalHsl"        // shim → DTCG (HSL expression)
     let private extTsTypeKey             = "tsType"             // shim → DTCG (TS type name)
-    let private extOriginalFontWeightKey = "originalFontWeight" // shim → DTCG (combined weight+style)
+    let private extOriginalFontWeightKey             = "originalFontWeight"             // shim → DTCG (combined weight+style, standalone)
+    let private extOriginalTypographyFontWeightKey   = "originalTypographyFontWeight"   // shim → DTCG (combined weight+style, composite)
 
     /// Keys written by the shim into DTCG $extensions. Stripped from TS input on
     /// re-import (cloneExtensionsForOutput) and from DTCG output on export
@@ -159,12 +160,12 @@ module TokensStudio =
     /// writes it as a TS-side recovery payload — ADR-023).
     let private shimAllInternalKeys =
         Set.ofList [ extOriginalColorKey; extOriginalHslKey
-                     extTsTypeKey; extOriginalFontWeightKey ]
+                     extTsTypeKey; extOriginalFontWeightKey; extOriginalTypographyFontWeightKey ]
 
     /// Keys stripped from DTCG Metadata.Extensions when writing TS output.
     /// extOriginalColorKey is excluded: the export adds it as an ADR-023 payload.
     let private shimExportStripKeys =
-        Set.ofList [ extOriginalHslKey; extTsTypeKey; extOriginalFontWeightKey ]
+        Set.ofList [ extOriginalHslKey; extTsTypeKey; extOriginalFontWeightKey; extOriginalTypographyFontWeightKey ]
 
     let private tryGetNode (key: string) (obj: JsonObject) : JsonNode option =
         let mutable node : JsonNode | null = null
@@ -427,9 +428,10 @@ module TokensStudio =
 
     // Matches: hsla({alias},{alias},{alias},N) or hsla(N,N,N,N)
     // Also matches hsl(...) without alpha.
+    // S and L accept an optional % suffix (e.g. "50%" or "60%") — the % is stripped before evaluation.
     let private hslRx =
         Regex(
-            @"^hsla?\(\s*(\{[^}]+\}|[\d.]+)\s*,\s*(\{[^}]+\}|[\d.]+)\s*,\s*(\{[^}]+\}|[\d.]+)\s*(?:,\s*([\d.]+)\s*)?\)$",
+            @"^hsla?\(\s*(\{[^}]+\}|[\d.]+)\s*,\s*(\{[^}]+\}|[\d.]+%?)\s*,\s*(\{[^}]+\}|[\d.]+%?)\s*(?:,\s*([\d.]+)\s*)?\)$",
             RegexOptions.Compiled ||| RegexOptions.IgnoreCase)
 
     let private hslToHex (h: float) (s: float) (l: float) (alpha: float) : string =
@@ -649,7 +651,7 @@ module TokensStudio =
                 let m = hslRx.Match(rawValue)
                 if m.Success then
                     let resolve (token: string) =
-                        let t = token.Trim()
+                        let t = token.Trim().TrimEnd('%')
                         match resolveToFloat index t with
                         | Some f -> Ok f
                         | None ->
@@ -936,9 +938,19 @@ module TokensStudio =
                             if dtcgType = "color" && not (isAlias origRawValue) && hslRx.IsMatch(origRawValue) then
                                 addVendorExtension leaf extOriginalHslKey (jv origRawValue)
                             // (3) FontWeight combined value — record "400 Italic" style strings
-                            //     before the numeric part was extracted.
+                            //     before the numeric part was extracted (standalone fontWeights token).
                             if tsType = "fontWeights" && not (isAlias origRawValue) && origRawValue.Contains(" ") then
                                 addVendorExtension leaf extOriginalFontWeightKey (jv origRawValue)
+                            // (4) Typography composite fontWeight — record combined value (e.g. "400 Italic")
+                            //     from the composite $value.fontWeights field before stripping the style suffix.
+                            if tsType = "typography" then
+                                match origValueNode with
+                                | :? JsonObject as origObj ->
+                                    match tryGetString "fontWeights" origObj with
+                                    | Some fw when not (isAlias fw) && fw.Contains(" ") ->
+                                        addVendorExtension leaf extOriginalTypographyFontWeightKey (jv fw)
+                                    | _ -> ()
+                                | _ -> ()
                             result.Add(kvp.Key, leaf)
                     elif isTypelessAlias then
                         // Typeless alias leaf — emit $value only; $type is inferred later
@@ -1586,7 +1598,18 @@ module TokensStudio =
                         | None ->
                             match tryReadVendorString extOriginalFontWeightKey t.Metadata.Extensions with
                             | Some fw -> jv fw
-                            | None    -> vn
+                            | None ->
+                                match tryReadVendorString extOriginalTypographyFontWeightKey t.Metadata.Extensions with
+                                | Some fw ->
+                                    // Patch fontWeight inside the composite $value object.
+                                    match vn with
+                                    | :? JsonObject as obj ->
+                                        let cloned = obj.DeepClone() :?> JsonObject
+                                        cloned.Remove("fontWeight") |> ignore
+                                        cloned.Add("fontWeight", jv fw)
+                                        cloned :> JsonNode | null
+                                    | _ -> vn
+                                | None -> vn
                     leaf.Add("$value", recoveredValue)
                     let desc =
                         match t.Metadata.Description, descAnn with

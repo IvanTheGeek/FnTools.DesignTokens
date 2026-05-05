@@ -49,6 +49,7 @@ Under `$extensions["com.fntools.designtokens"]` on DTCG token leaves:
 | `tsType` | shim `walkObj` | export `addTokensToObj` | Original TS type name before rename |
 | `originalHsl` | shim `walkObj` | export `addTokensToObj` | Original HSL expression before hex conversion |
 | `originalFontWeight` | shim `walkObj` | export `addTokensToObj` | Original combined fontWeight string (standalone tokens only) |
+| `originalTypographyFontWeight` | shim `walkObj` | export `addTokensToObj` | Original combined fontWeight from typography composite `$value.fontWeights` |
 
 `originalColor` (ADR-023) is unchanged and remains in the namespace.
 
@@ -68,7 +69,12 @@ Under `$extensions["com.fntools.designtokens"]` on DTCG token leaves:
 - **`originalFontWeight`**: written when `tsType = "fontWeights"`, the raw
   value is not an alias ref, and the value contains a space (e.g.
   `"400 Italic"`). This handles standalone `$type: "fontWeights"` tokens only.
-  Typography-composite fontWeight fields are a separate, deferred case.
+
+- **`originalTypographyFontWeight`** *(added 2026-05-04)*: written when
+  `tsType = "typography"` and the composite `$value.fontWeights` field is a
+  non-alias string containing a space (e.g. `"400 Italic"`). Stored on the
+  token leaf's vendor namespace. Recovery patches the `fontWeight` field inside
+  the exported composite object rather than replacing the whole `$value`.
 
 ### Recovery rules (export side)
 
@@ -82,8 +88,8 @@ In `addTokensToObj`:
 
 ### Stripping rules
 
-`shimAllInternalKeys = { originalColor, originalHsl, tsType, originalFontWeight }`  
-`shimExportStripKeys = { originalHsl, tsType, originalFontWeight }`
+`shimAllInternalKeys = { originalColor, originalHsl, tsType, originalFontWeight, originalTypographyFontWeight }`  
+`shimExportStripKeys = { originalHsl, tsType, originalFontWeight, originalTypographyFontWeight }`
 
 - **On TS import (`cloneExtensionsForOutput`)**: all four keys are stripped from
   the `com.fntools.designtokens` vendor object. These keys are DTCG-only
@@ -110,16 +116,18 @@ present). The vendor namespace already exists; adding keys is free.
   authored with `$type: "spacing"` round-trips back to `"spacing"` instead of
   `"dimension"`. The existing test assertion was updated to reflect this.
 
-- **Typography `fontWeights` combined values are deferred**: the loss in
-  `transformTypographyValue` (field-level stripping inside a `typography`
-  composite's `$value`) is not addressed here. It requires annotating the
-  composite value object, not the token leaf. Tracked as future work.
+- **Typography `fontWeights` combined values** *(resolved 2026-05-04)*: the
+  `originalTypographyFontWeight` key (see table above) annotates the composite
+  token leaf when `$value.fontWeights` contains a combined value like
+  `"400 Italic"`. On export, `addTokensToObj` patches the composite's
+  `fontWeight` field. The annotation lives on the leaf, not inside the composite
+  value object, which keeps recovery consistent with the other three keys.
 
-- **hslRx `%`-suffix limitation documented**: HSL expressions using `%`-suffixed
-  saturation/lightness (e.g. `hsl(240, 50%, 60%)`) do not match `hslRx` and are
-  passed through unchanged by the shim, resulting in a parse error on the DTCG
-  side. Tokens Studio convention is bare numbers; this is not a new limitation.
-  Documented in `penpot-tokens-studio-format.md`.
+- **hslRx `%`-suffix limitation** *(resolved 2026-05-04)*: `hslRx` updated to
+  accept optional `%` after S and L arguments (groups 2 and 3 changed from
+  `[\d.]+` to `[\d.]+%?`). The `resolve` lambda strips trailing `%` before
+  passing to `resolveToFloat`. Round-trips correctly for both bare-number and
+  `%`-suffixed forms.
 
 - **No public API changes**: `Api.exportTokensStudio`, `Api.importTokensStudio`,
   and all combinator variants are unchanged. The extension keys are internal.

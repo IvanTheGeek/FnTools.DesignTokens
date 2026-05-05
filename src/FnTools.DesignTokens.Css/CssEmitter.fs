@@ -434,6 +434,44 @@ module CssEmitter =
         sb.ToString()
 
 
+    /// <summary>
+    /// Emits a two-block CSS file applying the given <see cref="DimensionUnitPolicy"/>
+    /// to all dimension tokens in both blocks.
+    /// </summary>
+    /// <remarks>
+    /// Behaves identically to <see cref="emitMultiMode"/> when <paramref name="policy"/>
+    /// is <see cref="DimensionUnitPolicy.identity"/>.
+    /// </remarks>
+    /// <param name="policy">Unit selection policy, e.g. emit <c>rem</c> for font-size paths.</param>
+    /// <param name="baseTokens">Tokens resolved for the default context; goes in <c>:root</c>.</param>
+    /// <param name="overrideTokens">Tokens resolved for the override context.</param>
+    /// <param name="overrideSelector">CSS selector for the override block.</param>
+    let emitMultiModeWith
+        (policy           : DimensionUnitPolicy)
+        (baseTokens       : (string list * ResolvedToken) seq)
+        (overrideTokens   : (string list * ResolvedToken) seq)
+        (overrideSelector : string)
+        : string =
+        let baseDecls =
+            baseTokens
+            |> Seq.map (fun (path, token) -> String.concat "." path, tokenToCssDeclsWith policy path token)
+            |> dict
+        let diffs =
+            overrideTokens
+            |> Seq.filter (fun (path, token) ->
+                let key = String.concat "." path
+                match baseDecls.TryGetValue key with
+                | false, _        -> true
+                | true,  baseDecl -> tokenToCssDeclsWith policy path token <> baseDecl)
+            |> Array.ofSeq
+        let sb = StringBuilder()
+        sb.Append (emitBlockWith policy ":root" baseTokens) |> ignore
+        if diffs.Length > 0 then
+            sb.AppendLine "" |> ignore
+            sb.Append (emitBlockWith policy overrideSelector diffs) |> ignore
+        sb.ToString()
+
+
     // ─── Calc-preserving emitter (Gap 1 — design-tool workbench) ─────────────
 
     /// Returns Some n when dimVal ≈ baseVal × multVal^n for an integer n, else None.

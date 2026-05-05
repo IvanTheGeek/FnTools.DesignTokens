@@ -135,7 +135,12 @@ import/export. See `penpot-api.md` for the three-surface comparison.
   (combined fontWeight string). `walkObj` annotates losses; `addTokensToObj` recovers on
   export; `buildExtensionsObject` strips `shimExportStripKeys` from TS output.
   `tryReadVendorString` helper. 4 new tests + 1 test assertion updated. 258/258 pass.
-  2026-05-04. Typography-composite fontWeight deferred (ADR-026 §Consequences).
+  2026-05-04.
+- [x] **ADR-026 deferred items resolved (2026-05-04)** — (1) typography-composite
+  fontWeight: `originalTypographyFontWeight` key added; `walkObj` annotation (4) checks
+  `$value.fontWeights` in composite; `addTokensToObj` patches `fontWeight` field in exported
+  object. (2) hslRx `%`-suffix: regex groups 2/3 changed to `[\d.]+%?`; `resolve` lambda
+  strips `%` before `resolveToFloat`. ADR-026 §Consequences updated; key sets extended.
 - [x] **PATHS state mapping (Phase 7)** — read prototype connections on all mock pages;
   map each screen to a PATHS state and each connection to a transition; document what
   information Penpot carries vs what PATHS needs.
@@ -145,6 +150,20 @@ import/export. See `penpot-api.md` for the three-surface comparison.
   prototyping is a partial documentation layer — supplies happy-path graph skeleton if
   restructured, but cannot supply guards, data binding, or error paths. Findings →
   `LauraExperiment/phase7-findings.md`. 2026-05-04.
+
+- [x] **Em dimension unit (ADR-028, 2026-05-04)** — `DimensionUnit.Em` added as deliberate
+  spec extension for TS/Penpot round-trip fidelity (letter-spacing tokens). `parseDimensionUnit`
+  accepts `"em"`; `dimensionUnitToString` emits `"em"`; all pattern-match sites updated;
+  0 warnings. CssIngest still emits `Skipped` for em CSS values (authoring direction correct).
+  `insights.md` updated. ADR-028 created.
+- [x] **DimensionUnitPolicy + policy-aware emitters (2026-05-04)** — `type DimensionUnitPolicy =
+  string list -> DimensionUnit -> DimensionUnit`; `emitWith`, `emitThemedWith`,
+  `emitMultiModeWith` added to `CssEmitter`. `LauraExperiment/convert-tokens.fsx` updated to
+  use `emitThemedWith` with a rem policy for `font-size.*` tokens.
+- [x] **emitCalcPreserving (ADR-027, 2026-05-04)** — mathematical reverse-engineering emitter
+  for design-tool workbench slider. `tryInferCalcN` + `buildCalcExpr`; dimension tokens matching
+  `value = base × mult^N` emit `calc(var(--base) * var(--multiplier) * 1px)`; non-matching
+  tokens fall back to concrete values.
 
 ### CSS ingestion — non-standard unit handling
 

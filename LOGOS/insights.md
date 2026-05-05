@@ -249,15 +249,17 @@ When classifying CSS property values, dispatch on property name first (e.g., `bo
 
 Running `CssIngest + CssAudit` against `ivanthegeek.com` revealed a gap immediately: the audit needed property-name dispatch for `box-shadow`. These gaps would not have appeared in synthetic test fixtures. Maintaining a real-world sample file (`samples/ivanthegeek.tokens.json`) that must parse and round-trip is a cheap regression net for the codec.
 
-## DTCG dimension units are `px` and `rem` only — `em` belongs at the component layer
+## DTCG dimension units are `px` and `rem` — `em` is a deliberate spec extension
 
 The DTCG 2025.10 spec explicitly limits `$value.unit` for dimension tokens to `"px"` and `"rem"`. These two units are intentionally chosen for platform portability: `px` maps to Android `dp`/iOS `pt`; `rem` maps to a system font-size multiple. `em` is CSS-specific — it means "relative to the current element's font-size" and has no cross-platform equivalent. The spec authors excluded it deliberately.
 
-**Consequence for CSS bootstrap**: when CssIngest encounters `letter-spacing: 0.22em`, it cannot produce a valid DTCG dimension token. It currently strips the unit and emits `"$type": "number", "$value": 0.22` (losing the original unit — a known gap). `em`-unit values in CSS are component-level styling details, not portable design decisions. They belong in Fun.Blazor component code, not in token files.
+**Library extension (ADR-028)**: `DimensionUnit.Em` is supported in the domain as a deliberate, documented extension beyond the spec. The motivation is TS/Penpot round-trip fidelity: Tokens Studio and Penpot letter-spacing tokens commonly use `em` units, and lossless round-trip requires preserving the original unit. `Em` is valid inside the domain and in TS/Penpot export; it is not valid in strict DTCG 2025.10 output.
+
+**CssIngest behavior**: when CssIngest encounters `letter-spacing: 0.22em`, it emits an explicit `Skipped` warning and produces no token. This is correct for the authoring direction — `em` is a component-level CSS detail, not a portable design decision. The domain supporting `Em` does not change this: ingest is about creating portable tokens from scratch, not about replicating CSS with its relative units.
 
 **Rule of thumb**: if a CSS value is relative to font-size (`em`) or viewport (`vw`, `vh`, `%`), ask whether it is a design decision or a layout/sizing implementation. Design decisions (spacing scale, type scale in `rem`) go in tokens. Layout implementations stay in component code.
 
-`CssAudit` reflects this: `isDimensionValue` matches only `px` and `rem`. Values in other units are classified as `Unknown` and excluded from audit output — they surface as a hint that the value is component-specific and should not be tokenised.
+`CssAudit` reflects this: `isDimensionValue` matches only `px` and `rem`. Values in `em` and other relative units are classified as `CssNative` and surfaced explicitly so the bootstrap workflow can route them to the component layer rather than silently discarding them.
 
 ## LaundryLog existing components use hard-coded CSS class names
 
