@@ -11,6 +11,7 @@
     <PackageLicenseExpression>AGPL-3.0-or-later</PackageLicenseExpression>
     <RepositoryUrl>https://forgejo.ivanthegeek.com/FnTools/FnTools.DesignTokens</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
+    <IsPackable>false</IsPackable>
     <Nullable>enable</Nullable>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>

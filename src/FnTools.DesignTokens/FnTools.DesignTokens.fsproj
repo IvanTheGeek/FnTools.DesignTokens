@@ -18,12 +18,12 @@
     <Compile Include="DesignTokens.fs" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\FnTools.DesignTokens.Foundation\FnTools.DesignTokens.Foundation.fsproj" />
-    <ProjectReference Include="..\FnTools.DesignTokens.Format\FnTools.DesignTokens.Format.fsproj" />
-    <ProjectReference Include="..\FnTools.DesignTokens.Validation\FnTools.DesignTokens.Validation.fsproj" />
-    <ProjectReference Include="..\FnTools.DesignTokens.Resolver\FnTools.DesignTokens.Resolver.fsproj" />
-    <ProjectReference Include="..\FnTools.DesignTokens.Css\FnTools.DesignTokens.Css.fsproj" />
-    <ProjectReference Include="..\FnTools.DesignTokens.Bindings\FnTools.DesignTokens.Bindings.fsproj" />
-    <ProjectReference Include="..\FnTools.DesignTokens.TokensStudio\FnTools.DesignTokens.TokensStudio.fsproj" />
+    <ProjectReference Include="..\FnTools.DesignTokens.Foundation\FnTools.DesignTokens.Foundation.fsproj" PrivateAssets="All" />
+    <ProjectReference Include="..\FnTools.DesignTokens.Format\FnTools.DesignTokens.Format.fsproj" PrivateAssets="All" />
+    <ProjectReference Include="..\FnTools.DesignTokens.Validation\FnTools.DesignTokens.Validation.fsproj" PrivateAssets="All" />
+    <ProjectReference Include="..\FnTools.DesignTokens.Resolver\FnTools.DesignTokens.Resolver.fsproj" PrivateAssets="All" />
+    <ProjectReference Include="..\FnTools.DesignTokens.Css\FnTools.DesignTokens.Css.fsproj" PrivateAssets="All" />
+    <ProjectReference Include="..\FnTools.DesignTokens.Bindings\FnTools.DesignTokens.Bindings.fsproj" PrivateAssets="All" />
+    <ProjectReference Include="..\FnTools.DesignTokens.TokensStudio\FnTools.DesignTokens.TokensStudio.fsproj" PrivateAssets="All" />
   </ItemGroup>
 </Project>
