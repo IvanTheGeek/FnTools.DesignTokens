@@ -5,7 +5,7 @@
     <RootNamespace>FnTools.DesignTokens</RootNamespace>
     <AssemblyName>FnTools.DesignTokens.Foundation</AssemblyName>
     <PackageId>FnTools.DesignTokens.Foundation</PackageId>
-    <Version>0.1.0</Version>
+    <Version>0.2.0</Version>
     <Authors>FnTools</Authors>
     <Description>DTCG 2025.10 design token domain types and smart constructors</Description>
     <PackageLicenseExpression>AGPL-3.0-or-later</PackageLicenseExpression>
