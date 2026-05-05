@@ -33,7 +33,7 @@ This library handles all of that.
 
 **Emit CSS** from resolved tokens — `:root {}` blocks, per-theme override blocks (`[data-theme="dark"] {}`), responsive `@media` blocks, `calc()` expressions that preserve mathematical relationships, per-path unit policy (e.g. `font-size.*` tokens in `rem`).
 
-**Emit typed F# bindings** — a `Tokens` module of `string` constants with `var(--token-name)` values, usable directly in Fun.Css.
+**Emit typed F# bindings** — a `Tokens` module of `string` constants with `var(--token-name)` values, usable directly in [Fun.Css](https://github.com/slaveOftime/Fun.Css).
 
 **Export back to Tokens Studio** — preserve aliases, TS type names, HSL expressions, and combined fontWeight strings. The round-trip is lossless for everything the format can represent.
 
@@ -43,10 +43,43 @@ This library handles all of that.
 
 ---
 
+## Install
+
+The package is hosted on a self-managed Forgejo feed, not NuGet.org. Add the source first:
+
+**`nuget.config`** (place alongside your `.sln` / `.fsproj` / `.fsx`):
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<configuration>
+  <packageSources>
+    <add key="FnTools" value="https://forgejo.ivanthegeek.com/api/packages/FnTools/nuget/index.json" />
+  </packageSources>
+</configuration>
+```
+
+**.NET CLI**
+```bash
+dotnet add package FnTools.DesignTokens --version 0.3.0
+```
+
+**PackageReference**
+```xml
+<PackageReference Include="FnTools.DesignTokens" Version="0.3.0" />
+```
+
+**F# script (`#r`)**
+```fsharp
+#r "nuget: FnTools.DesignTokens, 0.3.0"
+```
+
+One reference gets everything. The sub-packages (`Foundation`, `Format`, `Validation`, `Resolver`, `Css`, `Bindings`, `TokensStudio`) are published separately if you need only specific layers.
+
+---
+
 ## Quick start
 
 ```fsharp
-#r "nuget: FnTools.DesignTokens, 0.3.0"
 open FnTools.DesignTokens
 
 // Tokens Studio JSON → themed CSS
@@ -72,22 +105,8 @@ let (penpotJson, warnings) = Api.exportTokensStudio raw.ShimResult raw.ParsedSet
 // Plain DTCG JSON → F# binding constants
 let tokens = Api.import (System.IO.File.ReadAllText "tokens.dtcg.json") |> Result.get
 let bindings = BindingsEmitter.emit tokens
-// Writes: module Tokens = let ColorTextMain = "var(--color-text-main)"
+// generates: module Tokens = let ColorTextMain = "var(--color-text-main)"
 ```
-
----
-
-## Package
-
-One reference gets everything:
-
-```xml
-<PackageReference Include="FnTools.DesignTokens" Version="0.3.0" />
-```
-
-Source: `https://forgejo.ivanthegeek.com/api/packages/FnTools/nuget/index.json`
-
-The sub-packages (`Foundation`, `Format`, `Validation`, `Resolver`, `Css`, `Bindings`, `TokensStudio`) are published separately if you need only specific layers.
 
 ---
 

@@ -19,24 +19,63 @@ dotnet run --project tests/FnTools.DesignTokens.Tests/FnTools.DesignTokens.Tests
 
 The test runner is [Expecto](https://github.com/haf/expecto). Output ends with a pass/fail summary; all 258 tests should pass.
 
-## Publish
+## Reproducing CI locally with Docker
 
-### Dev pre-release (local manual)
-
-Pushes a `0.x.y-dev.<sha>` package to the Forgejo NuGet feed. Requires `~/.config/forgejo-claude.token` or `FORGEJO_TOKEN` env var.
+CI runs inside `mcr.microsoft.com/dotnet/sdk:10.0.203`. If you want to verify in the exact same environment before pushing:
 
 ```bash
-./publish.sh --dev
+# Build
+docker run --rm \
+  -v "$(pwd):/repo" \
+  -w /repo \
+  mcr.microsoft.com/dotnet/sdk:10.0.203 \
+  dotnet build FnTools.DesignTokens.slnx -c Release --nologo
+
+# Test
+docker run --rm \
+  -v "$(pwd):/repo" \
+  -w /repo \
+  mcr.microsoft.com/dotnet/sdk:10.0.203 \
+  dotnet run --project tests/FnTools.DesignTokens.Tests/FnTools.DesignTokens.Tests.fsproj -c Release
+
+# Pack (produces artifacts/*.nupkg)
+docker run --rm \
+  -v "$(pwd):/repo" \
+  -w /repo \
+  mcr.microsoft.com/dotnet/sdk:10.0.203 \
+  dotnet pack FnTools.DesignTokens.slnx -c Release --nologo --no-build -o artifacts/
 ```
 
-### Stable release
+The workflows in `.forgejo/workflows/` are plain shell — no JavaScript actions — so the Docker environment is the full picture: the SDK container plus bash.
+
+## CI
+
+Three Forgejo Actions workflows run on the VPS-hosted runner (label `ubuntu-latest`, Docker executor using `mcr.microsoft.com/dotnet/sdk:10.0.203`):
+
+| Workflow | Trigger | What it does |
+|---|---|---|
+| `ci.yml` | push to `main`, PRs | build + test |
+| `publish-dev.yml` | push to `main` | build + test + pack `0.x.y-dev.<sha>` + push to feed |
+| `publish-stable.yml` | push of `v*` tag | build + test + pack with tag version + push to feed |
+
+The NuGet feed is `https://forgejo.ivanthegeek.com/api/packages/FnTools/nuget/index.json`. The `FORGEJO_NUGET_TOKEN` secret is set in the repo settings on Forgejo.
+
+## Manual publish
+
+If CI is unavailable, `publish.sh` does the same thing locally. It reads the token from `~/.config/forgejo-claude.token` or `FORGEJO_TOKEN` env var.
+
+```bash
+./publish.sh        # stable — version from .fsproj files
+./publish.sh --dev  # pre-release — appends -dev.<shortsha>
+```
+
+## Stable release process
 
 1. Bump `<Version>` in all eight `.fsproj` files under `src/`
-2. Commit: `git commit -m "chore: bump version to X.Y.Z"`
-3. Tag: `git tag vX.Y.Z && git push && git push origin vX.Y.Z`
-4. Pack and push: `./publish.sh`
+2. `git commit -m "chore: bump version to X.Y.Z"`
+3. `git tag vX.Y.Z && git push && git push origin vX.Y.Z`
 
-The `publish-stable.yml` Forgejo Actions workflow also triggers on `v*` tags and pushes to the feed automatically once a runner is configured on the VPS.
+The `publish-stable.yml` workflow fires on the tag push and handles the rest. The `.fsproj` version is what appears in `dev` builds; the tag version overrides it for stable builds.
 
 ## Project structure
 
@@ -56,6 +95,7 @@ docs/                                — API reference, spec context
 LOGOS/                               — architecture decisions (ADRs), insights, open tasks
 samples/                             — example token files (DTCG and Tokens Studio format)
 scripts/                             — fsx experiment scripts
+.forgejo/workflows/                  — CI/CD workflow definitions
 ```
 
 ## Git conventions

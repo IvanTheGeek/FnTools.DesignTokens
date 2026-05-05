@@ -272,7 +272,7 @@ module Tokens =
             let Main = "var(--color-text-main)"
 ```
 
-Numeric path segments are prefixed with `N` (e.g. `scale.400` → `Scale.N400`). Typography tokens expand to five sub-constants (`FontFamily`, `FontSize`, `FontWeight`, `LetterSpacing`, `LineHeight`). No runtime dependencies — values work directly in Fun.Css property builders.
+Numeric path segments are prefixed with `N` (e.g. `scale.400` → `Scale.N400`). Typography tokens expand to five sub-constants (`FontFamily`, `FontSize`, `FontWeight`, `LetterSpacing`, `LineHeight`). No runtime dependencies — values work directly in [Fun.Css](https://github.com/slaveOftime/Fun.Css) property builders.
 
 ---
 
