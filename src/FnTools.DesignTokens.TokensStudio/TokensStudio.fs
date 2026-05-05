@@ -1300,7 +1300,7 @@ module TokensStudio =
         | Keyword k -> jv (fwKeywordStr k)
 
     let private dimStr (d: DimensionValue) : string =
-        let u = match d.Unit with Px -> "px" | Rem -> "rem"
+        let u = match d.Unit with Px -> "px" | Rem -> "rem" | Em -> "em"
         sprintf "%g%s" d.Value u
 
     let private durStr (d: DurationValue) : string =

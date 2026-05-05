@@ -328,7 +328,7 @@ let private tokenValueToCssStrings (v: TokenValue) : string list =
                 | _ -> []
             | _ -> []
     | TokenValue.Dimension d ->
-        let u = match d.Unit with Px -> "px" | Rem -> "rem"
+        let u = match d.Unit with Px -> "px" | Rem -> "rem" | Em -> "em"
         [sprintf "%g%s" d.Value u]
     | TokenValue.FontFamily f ->
         let q (s: string) = if s.Contains ' ' then sprintf "'%s'" s else s

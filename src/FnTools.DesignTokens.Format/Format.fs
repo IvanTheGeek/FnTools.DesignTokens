@@ -89,10 +89,11 @@ let private parseDimensionUnit (path: string) (raw: string) : Result<DimensionUn
     match raw with
     | "px"  -> Ok Px
     | "rem" -> Ok Rem
+    | "em"  -> Ok Em
     | _     -> Error (InvalidValue (path, sprintf "unknown dimension unit '%s'" raw))
 
 let private dimensionUnitToString (u: DimensionUnit) : string =
-    match u with Px -> "px" | Rem -> "rem"
+    match u with Px -> "px" | Rem -> "rem" | Em -> "em"
 
 let private parseDurationUnit (path: string) (raw: string) : Result<DurationUnit, ParseError> =
     match raw with

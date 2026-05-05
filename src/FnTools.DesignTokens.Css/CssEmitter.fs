@@ -60,7 +60,7 @@ let colorToCss (c: ColorValue) : string =
 
 /// Converts a <see cref="DimensionValue"/> to a CSS length string (e.g. <c>"4px"</c>, <c>"0.6875rem"</c>).
 let dimensionToCss (d: DimensionValue) : string =
-    let u = match d.Unit with Px -> "px" | Rem -> "rem"
+    let u = match d.Unit with Px -> "px" | Rem -> "rem" | Em -> "em"
     sprintf "%g%s" d.Value u
 
 /// Converts a <see cref="DurationValue"/> to a CSS time string (e.g. <c>"200ms"</c>).
@@ -168,21 +168,37 @@ let gradientToCss (g: ResolvedGradientValue) : string =
     sprintf "linear-gradient(to right, %s)" stops
 
 
-// ─── Token → CSS declaration(s) ───────────────────────────────────────────────
+// ─── Dimension unit policy ────────────────────────────────────────────────────
 
 /// <summary>
-/// Converts a single resolved token to one or more CSS custom property declarations.
+/// Determines the CSS unit to emit for a dimension token.
+/// Receives the token's path and its declared unit; returns the unit to emit.
 /// </summary>
 /// <remarks>
-/// Most token types produce exactly one declaration. <see cref="ResolvedTokenValue.ResolvedTypography"/>
-/// expands to five sub-property declarations (<c>-font-family</c>, <c>-font-size</c>,
-/// <c>-font-weight</c>, <c>-letter-spacing</c>, <c>-line-height</c>).
+/// The default policy (<see cref="DimensionUnitPolicy.identity"/>) passes through the
+/// token's declared unit unchanged. Override for accessibility — for example, emitting
+/// <c>rem</c> for font-size tokens while keeping layout tokens as <c>px</c>.
+/// For composite tokens (shadow, border, transition), the policy applies to each
+/// dimension sub-property using the composite token's own path.
 /// </remarks>
-let tokenToCssDecls (path: string list) (token: ResolvedToken) : (string * string) list =
-    let v = cssVarName path
+type DimensionUnitPolicy = string list -> DimensionUnit -> DimensionUnit
+
+/// Predefined <see cref="DimensionUnitPolicy"/> values.
+module DimensionUnitPolicy =
+    /// Passes through the token's declared unit unchanged. This is the default
+    /// for all existing emitter functions.
+    let identity : DimensionUnitPolicy = fun _ u -> u
+
+let private dimensionWithPolicy (policy: DimensionUnitPolicy) (path: string list) (d: DimensionValue) : string =
+    let u = match policy path d.Unit with Px -> "px" | Rem -> "rem" | Em -> "em"
+    sprintf "%g%s" d.Value u
+
+let private tokenToCssDeclsWith (policy: DimensionUnitPolicy) (path: string list) (token: ResolvedToken) : (string * string) list =
+    let v   = cssVarName path
+    let dim = dimensionWithPolicy policy path
     match token.Value with
     | ResolvedColor       c  -> [ v, colorToCss c ]
-    | ResolvedDimension   d  -> [ v, dimensionToCss d ]
+    | ResolvedDimension   d  -> [ v, dim d ]
     | ResolvedFontFamily  f  -> [ v, fontFamilyToCss f ]
     | ResolvedFontWeight  fw -> [ v, fontWeightToCss fw ]
     | ResolvedDuration    d  -> [ v, durationToCss d ]
@@ -195,10 +211,27 @@ let tokenToCssDecls (path: string list) (token: ResolvedToken) : (string * strin
     | ResolvedGradient    g  -> [ v, gradientToCss g ]
     | ResolvedTypography  ty ->
         [ v + "-font-family",    fontFamilyToCss ty.FontFamily
-          v + "-font-size",      dimensionToCss  ty.FontSize
+          v + "-font-size",      dim ty.FontSize
           v + "-font-weight",    fontWeightToCss ty.FontWeight
-          v + "-letter-spacing", dimensionToCss  ty.LetterSpacing
+          v + "-letter-spacing", dim ty.LetterSpacing
           v + "-line-height",    sprintf "%g"    ty.LineHeight ]
+
+
+// ─── Token → CSS declaration(s) ───────────────────────────────────────────────
+
+/// <summary>
+/// Converts a single resolved token to one or more CSS custom property declarations.
+/// </summary>
+/// <remarks>
+/// Most token types produce exactly one declaration. <see cref="ResolvedTokenValue.ResolvedTypography"/>
+/// expands to five sub-property declarations (<c>-font-family</c>, <c>-font-size</c>,
+/// <c>-font-weight</c>, <c>-letter-spacing</c>, <c>-line-height</c>).
+/// Dimension units are emitted as declared. To override units per path, use
+/// <see cref="emitWith"/> or <see cref="emitThemedWith"/> with a
+/// <see cref="DimensionUnitPolicy"/>.
+/// </remarks>
+let tokenToCssDecls (path: string list) (token: ResolvedToken) : (string * string) list =
+    tokenToCssDeclsWith DimensionUnitPolicy.identity path token
 
 
 // ─── Top-level emitter ────────────────────────────────────────────────────────
@@ -328,4 +361,153 @@ module CssEmitter =
         if diffs.Length > 0 then
             sb.AppendLine "" |> ignore
             sb.Append (emitBlock overrideSelector diffs) |> ignore
+        sb.ToString()
+
+
+    // ─── Policy-aware emitters (Gap 2 — rem per token type) ──────────────────
+
+    let private emitBlockWith (policy: DimensionUnitPolicy) (selector: string) (tokens: (string list * ResolvedToken) seq) : string =
+        let sb = StringBuilder()
+        let isAtRule = selector.TrimStart().StartsWith "@"
+        if isAtRule then
+            sb.AppendLine (selector + " {") |> ignore
+            sb.AppendLine "  :root {" |> ignore
+            for (path, token) in tokens do
+                for (name, value) in tokenToCssDeclsWith policy path token do
+                    sb.AppendLine (sprintf "    %s: %s;" name value) |> ignore
+            sb.AppendLine "  }" |> ignore
+            sb.AppendLine "}" |> ignore
+        else
+            sb.AppendLine (selector + " {") |> ignore
+            for (path, token) in tokens do
+                for (name, value) in tokenToCssDeclsWith policy path token do
+                    sb.AppendLine (sprintf "  %s: %s;" name value) |> ignore
+            sb.AppendLine "}" |> ignore
+        sb.ToString()
+
+    /// <summary>
+    /// Emits all resolved tokens as a CSS <c>:root { }</c> block, applying the given
+    /// <see cref="DimensionUnitPolicy"/> to choose the CSS unit for each dimension token.
+    /// </summary>
+    /// <param name="policy">Unit selection policy. Use <see cref="DimensionUnitPolicy.identity"/>
+    /// for the same behaviour as <see cref="emit"/>.</param>
+    /// <param name="tokens">Flat sequence of <c>(path, token)</c> pairs.</param>
+    let emitWith (policy: DimensionUnitPolicy) (tokens: (string list * ResolvedToken) seq) : string =
+        emitBlockWith policy ":root" tokens
+
+    /// <summary>
+    /// Emits a multi-theme CSS file applying the given <see cref="DimensionUnitPolicy"/>
+    /// to all dimension tokens in every block.
+    /// </summary>
+    /// <remarks>
+    /// Behaves identically to <see cref="emitThemed"/> when <paramref name="policy"/>
+    /// is <see cref="DimensionUnitPolicy.identity"/>.
+    /// </remarks>
+    /// <param name="policy">Unit selection policy, e.g. emit <c>rem</c> for font-size paths.</param>
+    /// <param name="selectorForTheme">Maps a theme name to a CSS selector or at-rule.</param>
+    /// <param name="baseTokens">Tokens for the default context; goes in <c>:root</c>.</param>
+    /// <param name="themes">Override themes; each emits a diff block.</param>
+    let emitThemedWith
+        (policy           : DimensionUnitPolicy)
+        (selectorForTheme : string -> string)
+        (baseTokens       : (string list * ResolvedToken) seq)
+        (themes           : (string * (string list * ResolvedToken) seq) seq)
+        : string =
+        let baseDecls =
+            baseTokens
+            |> Seq.map (fun (path, token) -> String.concat "." path, tokenToCssDeclsWith policy path token)
+            |> dict
+        let sb = StringBuilder()
+        sb.Append (emitBlockWith policy ":root" baseTokens) |> ignore
+        for (themeName, themeTokens) in themes do
+            let diffs =
+                themeTokens
+                |> Seq.filter (fun (path, token) ->
+                    let key = String.concat "." path
+                    match baseDecls.TryGetValue key with
+                    | false, _        -> true
+                    | true,  baseDecl -> tokenToCssDeclsWith policy path token <> baseDecl)
+                |> Array.ofSeq
+            if diffs.Length > 0 then
+                sb.AppendLine "" |> ignore
+                sb.Append (emitBlockWith policy (selectorForTheme themeName) diffs) |> ignore
+        sb.ToString()
+
+
+    // ─── Calc-preserving emitter (Gap 1 — design-tool workbench) ─────────────
+
+    /// Returns Some n when dimVal ≈ baseVal × multVal^n for an integer n, else None.
+    /// Uses relative tolerance 1e-6 to guard against floating-point drift.
+    let private tryInferCalcN (baseVal: float) (multVal: float) (dimVal: float) : int option =
+        if baseVal < 1e-9 || abs(multVal - 1.0) < 1e-9 || dimVal < 1e-9 then None
+        else
+            let n    = Math.Round(Math.Log(dimVal / baseVal) / Math.Log(multVal))
+            let nInt = int n
+            let reconstructed = baseVal * (pown multVal nInt)
+            if abs(reconstructed - dimVal) / dimVal < 1e-6 then Some nInt
+            else None
+
+    /// Builds a CSS calc() expression for a dimension that equals base × mult^n.
+    let private buildCalcExpr (baseVarName: string) (multVarName: string) (n: int) : string =
+        let bv = sprintf "var(%s)" baseVarName
+        let mv = sprintf "var(%s)" multVarName
+        match n with
+        | 0 ->
+            sprintf "calc(%s * 1px)" bv
+        | n when n > 0 ->
+            let mults = List.replicate n mv |> String.concat " * "
+            sprintf "calc(%s * %s * 1px)" bv mults
+        | n ->
+            let divs = List.replicate (abs n) mv |> String.concat " / "
+            sprintf "calc(%s / %s * 1px)" bv divs
+
+    /// <summary>
+    /// Emits a CSS <c>:root</c> block for the design-tool workbench.
+    /// </summary>
+    /// <remarks>
+    /// Base and multiplier tokens are emitted as plain numbers — live CSS variables that
+    /// a slider can change at runtime. All <c>dimension</c> tokens whose resolved value
+    /// satisfies <c>value = base × multiplier^n</c> for an integer n are emitted as
+    /// <c>calc()</c> expressions referencing those variables, so the entire scale
+    /// recomputes in the browser without a rebuild.
+    /// Dimension tokens that do not fit the pattern (fixed radii, border widths,
+    /// breakpoints) fall back to their concrete resolved values.
+    /// </remarks>
+    /// <param name="baseVarName">CSS variable name for the base size, e.g. <c>"--base"</c>.</param>
+    /// <param name="multiplierVarName">CSS variable name for the scale step, e.g. <c>"--multiplier"</c>.</param>
+    /// <param name="tokens">Flat sequence of <c>(path, token)</c> pairs.</param>
+    let emitCalcPreserving
+        (baseVarName       : string)
+        (multiplierVarName : string)
+        (tokens            : (string list * ResolvedToken) seq)
+        : string =
+        let tokenList = tokens |> List.ofSeq
+        let varToPath (v: string) = v.TrimStart('-').Split('-') |> Array.toList
+        let basePath  = varToPath baseVarName
+        let multPath  = varToPath multiplierVarName
+        let findNumber path =
+            tokenList |> List.tryPick (fun (p, t) ->
+                if p = path then match t.Value with ResolvedNumber n -> Some n | _ -> None
+                else None)
+        let baseOpt = findNumber basePath
+        let multOpt = findNumber multPath
+        let sb = StringBuilder()
+        sb.AppendLine ":root {" |> ignore
+        for (path, token) in tokenList do
+            if path = basePath || path = multPath then
+                match token.Value with
+                | ResolvedNumber n ->
+                    sb.AppendLine (sprintf "  %s: %g;" (cssVarName path) n) |> ignore
+                | _ -> ()
+            else
+                let decls =
+                    match token.Value, baseOpt, multOpt with
+                    | ResolvedDimension d, Some bv, Some mv ->
+                        match tryInferCalcN bv mv d.Value with
+                        | Some n -> [ cssVarName path, buildCalcExpr baseVarName multiplierVarName n ]
+                        | None   -> tokenToCssDecls path token
+                    | _ -> tokenToCssDecls path token
+                for (name, value) in decls do
+                    sb.AppendLine (sprintf "  %s: %s;" name value) |> ignore
+        sb.AppendLine "}" |> ignore
         sb.ToString()
