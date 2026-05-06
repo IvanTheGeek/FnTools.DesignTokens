@@ -1,8 +1,10 @@
 ---
 id: 022
 title: Tokens Studio export uses preserve-aliases path; $description carries lossy metadata
-status: superseded by 023
+status: superseded
 date: 2026-05-04
+superseded-by: ADR-023
+superseded-date: 2026-05-04
 ---
 
 > **Status update (2026-05-04):** the lossy-metadata carrier choice is superseded by
