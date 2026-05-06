@@ -1,4 +1,5 @@
 @../AGENTS.md
+@../WORKFLOW.md
 
 ## FnTools.DesignTokens
 
