@@ -2,7 +2,7 @@
 id: 023
 title: Tokens Studio export uses $extensions as the primary lossy-metadata carrier
 status: accepted
-supersedes: 022 (lossy-metadata carrier choice only; preserve-aliases stands)
+supersedes: ADR-022
 date: 2026-05-04
 ---
 
