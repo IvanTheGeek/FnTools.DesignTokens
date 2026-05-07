@@ -5,7 +5,7 @@
     <RootNamespace>FnTools.DesignTokens</RootNamespace>
     <AssemblyName>FnTools.DesignTokens.Validation</AssemblyName>
     <PackageId>FnTools.DesignTokens.Validation</PackageId>
-    <Version>0.3.0</Version>
+    <Version>0.4.0</Version>
     <Authors>FnTools</Authors>
     <Description>DTCG 2025.10 token validation — ranges, alias cycles, hex consistency</Description>
     <PackageLicenseExpression>AGPL-3.0-or-later</PackageLicenseExpression>
