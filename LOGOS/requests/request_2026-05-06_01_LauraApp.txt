@@ -1,0 +1,48 @@
+Here's a draft prompt for the library session:
+
+---
+
+**Context**
+
+`FnTools.DesignTokens` has a high-level API function `Api.importTokensStudioCombined` that takes a Tokens Studio JSON file and a list of theme names, shims the TS format, resolves the selected sets, and returns a flat token list. The internals (shim → per-set parse → `ResolverDocument` → `Resolver.resolve`) are hidden behind this function.
+
+A consumer may have token sources in two formats:
+1. A Tokens Studio file (designer export — the typical case)
+2. One or more native DTCG 2025.10 files (tokens authored directly in spec format, not via a design tool)
+
+Right now, including a native DTCG source in the resolution requires bypassing `importTokensStudioCombined` and assembling the `ResolverDocument` manually from internal types. That's a library gap: the high-level API hides the internals but provides no extension point at the same level.
+
+**Request**
+
+Add a variant of `importTokensStudioCombined` that accepts additional named DTCG 2025.10 sources to merge into the resolution alongside the shimmed TS sets.
+
+Suggested signature (adjust naming/shape as appropriate):
+
+```fsharp
+Api.importTokensStudioCombinedWith
+    (config      : ShimConfig)
+    (themes      : string list)
+    (tsJson      : string)
+    (extraSets   : (string * string) list)   // (setName, dtcgJson) pairs
+    : Result<TokensStudioImport, ImportError list>
+```
+
+Behaviour:
+- `extraSets` are parsed with `Format.parse`. A parse failure should surface as a warning (`SetSkipped` or equivalent) — same treatment as a TS set that fails to parse.
+- Extra sets are always included in resolution regardless of the `themes` filter. They are not part of the TS theme machinery.
+- Resolution priority: extra sets should be treated as lowest priority — they provide base values that TS theme sets can override. Concretely, they appear before the themed TS sets in the resolution order.
+- The existing `importTokensStudioCombined` remains unchanged (calls the new function with `extraSets = []` or stays as-is).
+- `importTokensStudioRaw` may or may not need a parallel variant — leave that to your judgment based on the implementation shape.
+
+**Where to look**
+
+- `src/FnTools.DesignTokens/DesignTokens.fs` — `importTokensStudioCombined` implementation, around line 500
+- `src/FnTools.DesignTokens.TokensStudio/TokensStudio.fs` — `shimSingleFile`, the shim entry point
+- `src/FnTools.DesignTokens.Format/Format.fs` — `Format.parse`, the DTCG parser
+- `src/FnTools.DesignTokens.Resolver/Resolver.fs` — `Resolver.resolve`, takes a `ResolverDocument`
+
+The `ResolverDocument` type (in `Domain.fs`) already supports multiple sets — the new function only needs to build it with both the shimmed TS sets and the parsed DTCG sets before calling resolve.
+
+---
+
+That's the core of it. You can pass this as-is or trim/adjust the signature suggestion if you have a preference.
