@@ -1,3 +1,17 @@
+## Named warning DU cases per source type
+
+`SetSkipped` (TS set failed after shimming) and `DtcgSetSkipped` (native DTCG set failed to parse) are separate DU cases even though the behavior is identical. Keeping them distinct means a caller reading a warning log can tell immediately which format caused the skip — without inspecting the set name for naming conventions. General rule: when the same behavior can arise from structurally different sources, prefer a case per source over a shared case with a tag field.
+
+## Mixed-format APIs need a structural role marker, not just parameter naming
+
+`importTokensStudioCombinedWith` adds DTCG sets to a TS-driven resolution. The key constraint — DTCG sets are always lowest priority and always theme-agnostic — is not visible from the type `(string * string) list`. A `DtcgSetRole = | AsBasePrimitives` single-case DU as a required final argument makes the call site self-documenting:
+
+```fsharp
+importTokensStudioCombinedWith config themes tsJson myDtcgSets AsBasePrimitives
+```
+
+An AI or reviewer reading this line knows the role and constraint without looking up docs. The pattern is extensible: `DtcgSetRole` can add cases (e.g. `AsHighPriorityOverrides`) later without breaking existing callers, unlike a positional boolean or a string tag.
+
 ## `"none"` is not null — it is a semantic keyword
 
 In CSS Color Level 4 (which DTCG Color module is based on), the `none` keyword in color components means "missing" or "inapplicable" — it participates in color interpolation differently from `0`. For example, in `oklch(0.5 0.2 none)`, the missing hue means the hue channel is powerless during interpolation and can adopt the other color's hue. Modeling this as `float option` or `0.0` would be semantically wrong. It must be a distinct DU case.

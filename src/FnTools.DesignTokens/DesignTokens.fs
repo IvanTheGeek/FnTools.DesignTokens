@@ -825,6 +825,118 @@ let importTokensStudioCombined
                 Ok { Tokens = tokens; Warnings = List.ofSeq warnings }
 
 
+/// Identical to <see cref="importTokensStudioCombined"/> but also includes one or more
+/// native DTCG 2025.10 token files in the resolution as lowest-priority base sets.
+///
+/// <paramref name="sets"/> — a list of (setName, dtcgJson) pairs. Each is parsed with
+/// <see cref="Format.parse"/>; a parse failure emits a <see cref="DtcgSetSkipped"/> warning
+/// and excludes that set from the merge (other sets continue).
+///
+/// The <c>AsBasePrimitives</c> argument is required at every call site to confirm that the
+/// extra sets are theme-agnostic base layers: they are always included regardless of the
+/// <paramref name="themeNames"/> filter, and TS theme sets always override them. If you need
+/// theme-conditional DTCG sets, assemble a <see cref="ResolverDocument"/> manually.
+///
+/// Resolution order: DTCG base sets (in list order) → TS base sets → TS active-theme sets.
+let importTokensStudioCombinedWith
+    (config     : ShimConfig)
+    (themeNames : string list)
+    (tsJson     : string)
+    (sets       : (string * string) list)
+    (_          : DtcgSetRole)
+    : Result<TokensStudioImportResult, ImportError list> =
+    match TokensStudio.shimSingleFile config tsJson with
+    | Error msg -> Error [ParseFailed [InvalidJson msg]]
+    | Ok shimResult ->
+        let warnings = ResizeArray<TokensStudioImportWarning>()
+
+        // Parse extra DTCG sets first; warn and skip on failure.
+        let parsedExtra =
+            sets |> List.choose (fun (name, json) ->
+                match Format.parse json with
+                | Ok file -> Some (name, file)
+                | Error _ ->
+                    warnings.Add (DtcgSetSkipped name)
+                    None)
+
+        let allSetOrder = shimResult.Metadata.TokenSetOrder
+
+        let activeThemes =
+            themeNames
+            |> List.choose (fun name ->
+                match shimResult.Themes |> List.tryFind (fun t -> t.Name = name) with
+                | Some t -> Some t
+                | None ->
+                    warnings.Add (ThemeNotFound name)
+                    None)
+
+        let allThemeSets =
+            shimResult.Themes
+            |> List.collect (fun t -> t.SelectedTokenSets |> Map.toList |> List.map fst)
+            |> Set.ofList
+
+        let combinedOwn =
+            activeThemes
+            |> List.collect (fun t ->
+                t.SelectedTokenSets
+                |> Map.toList
+                |> List.choose (fun (name, status) ->
+                    match status with
+                    | "enabled" | "source" -> Some name
+                    | _ -> None))
+            |> Set.ofList
+
+        let combinedSets =
+            allSetOrder |> List.filter (fun s ->
+                not (allThemeSets.Contains s) || combinedOwn.Contains s)
+
+        let parsedTs =
+            match TokensStudio.shimSingleFileWithMathIndex config combinedSets tsJson with
+            | Error _ -> Map.empty
+            | Ok perShim ->
+                perShim.Sets
+                |> Map.toList
+                |> List.choose (fun (name, setJson) ->
+                    match Format.parse setJson with
+                    | Ok file -> Some (name, file)
+                    | Error _ ->
+                        warnings.Add (SetSkipped name)
+                        None)
+                |> Map.ofList
+
+        let orderedTs =
+            combinedSets
+            |> List.choose (fun n ->
+                parsedTs |> Map.tryFind n |> Option.map (fun f -> n, f))
+
+        // DTCG base sets first (lowest priority), then TS sets (they override).
+        let allOrdered = parsedExtra @ orderedTs
+
+        if allOrdered.IsEmpty then
+            Ok { Tokens = []; Warnings = List.ofSeq warnings }
+        else
+            let setDefs =
+                allOrdered
+                |> List.map (fun (n, f) ->
+                    n, { Sources = [Inline f]; Description = None; Extensions = [] })
+            let resOrder = allOrdered |> List.map (fun (n, _) -> SetRef n)
+            let doc = {
+                Name            = None
+                Version         = V2025_10
+                Description     = None
+                Sets            = setDefs
+                Modifiers       = []
+                ResolutionOrder = resOrder
+            }
+            match Resolver.resolve (fun _ -> Error "inline-only") Map.empty doc with
+            | Error es -> Error [ResolveFailed es]
+            | Ok merged ->
+                let tokens, unresolved = partialFlattenResolvedFile merged
+                for (p, r) in unresolved do
+                    warnings.Add (TokenUnresolved (p, r))
+                Ok { Tokens = tokens; Warnings = List.ofSeq warnings }
+
+
 /// Round-trip a resolved-token sequence back to JSON.
 /// Builds a flat TokenFile (no groups beyond what dot-paths require) and serializes.
 let export (tokens: (string list * ResolvedToken) seq) : string =
@@ -997,9 +1109,10 @@ module Primitives =
     let shimWithConfig              = TokensStudio.shimSingleFile
     let formatShimWarning           = TokensStudio.formatWarning
     let formatImportWarning         = TokensStudio.formatImportWarning
-    let importTokensStudioRaw       = importTokensStudioRaw
-    let importTokensStudioThemed    = importTokensStudioThemed
-    let importTokensStudioCombined  = importTokensStudioCombined
+    let importTokensStudioRaw            = importTokensStudioRaw
+    let importTokensStudioThemed         = importTokensStudioThemed
+    let importTokensStudioCombined       = importTokensStudioCombined
+    let importTokensStudioCombinedWith   = importTokensStudioCombinedWith
     let toResolverDocument          = TokensStudio.toResolverDocument
     let exportTokensStudio          = TokensStudio.exportToTokensStudio
     let formatExportWarning         = TokensStudio.formatExportWarning

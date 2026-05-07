@@ -68,11 +68,23 @@ type TokensStudioImportWarning =
     /// A set could not be parsed after shimming (typically: math expressions left as strings
     /// with PreserveMath, or other unsupported syntax) and was excluded from the merge.
     | SetSkipped      of setName: string
+    /// A native DTCG 2025.10 set passed to importTokensStudioCombinedWith failed to parse
+    /// and was excluded from the merge. The set name is the key from the (name, json) pair.
+    | DtcgSetSkipped  of setName: string
     /// A token's alias could not be resolved in the merged file — usually because the set
-    /// that contained the referenced token was excluded via SetSkipped.
+    /// that contained the referenced token was excluded via SetSkipped or DtcgSetSkipped.
     | TokenUnresolved of path: string * ref: string
     /// A theme name passed to importTokensStudioThemed was not found in the $themes array.
     | ThemeNotFound   of name: string
+
+
+/// Required argument on <see cref="importTokensStudioCombinedWith"/> confirming the role of
+/// the extra DTCG sets. Write <c>AsBasePrimitives</c> at the call site.
+///
+/// Extra sets are always included regardless of theme selection and always resolve at the
+/// lowest priority (TS theme sets override them). They cannot be scoped to a specific theme.
+/// If theme-conditional DTCG sets are needed, assemble the ResolverDocument manually.
+type DtcgSetRole = | AsBasePrimitives
 
 /// Result of a Tokens Studio multi-set import. Partial-success: tokens that resolved are
 /// returned alongside warnings for sets that could not parse and tokens that could not resolve.
@@ -1186,6 +1198,8 @@ module TokensStudio =
         match w with
         | SetSkipped name ->
             sprintf "SKIP  set '%s' — parse failed (contains math expressions or unsupported syntax)" name
+        | DtcgSetSkipped name ->
+            sprintf "SKIP  dtcg '%s' — Format.parse failed; set excluded from merge" name
         | TokenUnresolved (path, ref) ->
             sprintf "UNRESOLVED  %s → %s" path ref
         | ThemeNotFound name ->
