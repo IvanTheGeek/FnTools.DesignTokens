@@ -1,3 +1,11 @@
+## `JsonNode.ToString()` returns the raw value, not the JSON encoding
+
+`System.Text.Json.Nodes.JsonValue.Create("test").ToString()` returns `test` — the raw string value — not `"test"` (the JSON-encoded form with quotes). To get the JSON encoding, use `.ToJsonString()`. The distinction matters in tests and anywhere you compare a `JsonNode` value to a JSON-formatted string. Rule: use `.ToString()` when you want the semantic value (e.g. to compare against an F# string); use `.ToJsonString()` when you want the serialized form (e.g. to check that a key appears in a JSON output).
+
+## Annotate shim losses at the point of transformation, not at the parse boundary
+
+The math-expression round-trip (ADR-031) and color/type annotation patterns (ADR-023/026) share a structure: the loss site (inside `transformToken` / `walkObj`) is the right place to record the original value, not the input parser or the output emitter. By the time the emitter runs, the original is gone. Annotation at the loss site keeps recovery data in `$extensions` alongside the transformed token — always present, always co-located, never needs threading through intermediate structures.
+
 ## Named warning DU cases per source type
 
 `SetSkipped` (TS set failed after shimming) and `DtcgSetSkipped` (native DTCG set failed to parse) are separate DU cases even though the behavior is identical. Keeping them distinct means a caller reading a warning log can tell immediately which format caused the skip — without inspecting the set name for naming conventions. General rule: when the same behavior can arise from structurally different sources, prefer a case per source over a shared case with a tag field.

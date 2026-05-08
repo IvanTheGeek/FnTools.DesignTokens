@@ -22,9 +22,10 @@ See `design-system-app-vision.md` for full scope.
 - [ ] ADR list + create form backed by git write-back
 - [ ] PATH walkthrough prototype mode
 
-## NuGet packaging
+## ~~NuGet packaging~~ ✓ done 2026-05-08
 
-- [ ] CI publish on tag (deferred until first stable release)
+- [x] CI publish on tag — `publish-stable.yml` active; 0.5.0 first stable release pushed via tag.
+  To replace an existing version: delete from Forgejo packages API, then run `./publish.sh`.
 
 ## ~~CSS ingestion tool~~ ✓ done 2026-05-02
 

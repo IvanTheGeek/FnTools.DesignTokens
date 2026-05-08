@@ -201,4 +201,6 @@ import/export. See `penpot-api.md` for the three-surface comparison.
 
 ### NuGet
 
-- [ ] CI publish on tag (deferred until first stable release)
+- [x] CI publish on tag — `publish-stable.yml` triggers on `v*` tags; 0.5.0 was the first stable
+  release. Active. Manual delete + re-publish required when replacing an existing version
+  (CI uses `--skip-duplicate` which skips, not overwrites).
