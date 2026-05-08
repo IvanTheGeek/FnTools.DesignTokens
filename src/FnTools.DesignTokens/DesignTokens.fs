@@ -1085,6 +1085,15 @@ let exportTokensStudio
     : string * ExportWarning list =
     TokensStudio.exportToTokensStudio shimResult parsedSets
 
+/// Serialize a <see cref="ResolverDocument"/> to JSON.
+///
+/// Produces output that <c>parseResolver</c> / <c>importWithResolver</c> can read back.
+/// Round-trip guarantee: <c>parseResolver (serializeResolver doc)</c> returns a
+/// structurally equivalent document. <c>$ref</c> pointers are never emitted — all
+/// sources are written as concrete <c>inline</c> or <c>path</c> objects.
+let serializeResolver (doc: ResolverDocument) : string =
+    Resolver.serializeResolver doc
+
 
 // ─── Primitives module ───────────────────────────────────────────────────────
 
@@ -1100,9 +1109,10 @@ module Primitives =
     let flatten      = flattenFile
     let tryFind      = tryFindIn
     let tryResolveAlias = tryResolveAliasIn
-    let parseResolver = Resolver.parseResolver
-    let resolve      = Resolver.resolve
-    let resolveAll   = Resolver.resolveAll
+    let parseResolver    = Resolver.parseResolver
+    let serializeResolver = Resolver.serializeResolver
+    let resolve          = Resolver.resolve
+    let resolveAll       = Resolver.resolveAll
     let flattenResolved = flattenResolvedFile
 
     let shimTokensStudio            = TokensStudio.shim

@@ -146,4 +146,95 @@ let allTests =
                 let msg = es |> List.map (sprintf "%A") |> String.concat "; "
                 Expect.stringContains msg "same-document" "error explains same-document restriction"
             | Ok _ -> failtest "expected parse error for external $ref"
+
+        // ─── serializeResolver ────────────────────────────────────────────────
+
+        testCase "serializeResolver: round-trip preserves sets, modifiers, resolution order" <| fun () ->
+            match Resolver.parseResolver Resolver.basicResolverJson with
+            | Error es -> failtestf "initial parse failed: %A" es
+            | Ok doc ->
+                let json2 = Resolver.serializeResolver doc
+                match Resolver.parseResolver json2 with
+                | Error es -> failtestf "re-parse failed: %A" es
+                | Ok doc2 ->
+                    Expect.equal doc2.Name               doc.Name               "name preserved"
+                    Expect.equal doc2.Version            doc.Version            "version preserved"
+                    Expect.equal (List.length doc2.Sets) (List.length doc.Sets) "set count preserved"
+                    let setNames1 = doc.Sets  |> List.map fst |> List.sort
+                    let setNames2 = doc2.Sets |> List.map fst |> List.sort
+                    Expect.equal setNames2 setNames1 "set names preserved"
+                    Expect.equal (List.length doc2.Modifiers) (List.length doc.Modifiers) "modifier count preserved"
+                    let modNames1 = doc.Modifiers  |> List.map fst |> List.sort
+                    let modNames2 = doc2.Modifiers |> List.map fst |> List.sort
+                    Expect.equal modNames2 modNames1 "modifier names preserved"
+                    let (_, theme2) = doc2.Modifiers |> List.find (fun (n, _) -> n = "theme")
+                    Expect.equal theme2.Default (Some "light") "modifier default preserved"
+                    let ctxNames = theme2.Contexts |> List.map fst |> List.sort
+                    Expect.equal ctxNames ["dark"; "light"] "modifier contexts preserved"
+                    Expect.equal (List.length doc2.ResolutionOrder) 2 "resolution order length preserved"
+
+        testCase "serializeResolver: Inline sources embedded without $ref" <| fun () ->
+            match Resolver.parseResolver Resolver.basicResolverJson with
+            | Error es -> failtestf "parse failed: %A" es
+            | Ok doc ->
+                let json = Resolver.serializeResolver doc
+                Expect.stringContains json "\"inline\"" "inline key present"
+                Expect.isFalse (json.Contains "\"$ref\"") "$ref not emitted"
+
+        testCase "serializeResolver: FileRef source round-trips as path object" <| fun () ->
+            let json = """
+{
+  "version": "2025.10",
+  "sets": {
+    "base": { "sources": [{ "path": "tokens/base.json" }] }
+  },
+  "resolutionOrder": [{ "set": "base" }]
+}"""
+            match Resolver.parseResolver json with
+            | Error es -> failtestf "parse failed: %A" es
+            | Ok doc ->
+                let serialized = Resolver.serializeResolver doc
+                match Resolver.parseResolver serialized with
+                | Error es -> failtestf "re-parse failed: %A" es
+                | Ok doc2 ->
+                    let (_, sd) = doc2.Sets.[0]
+                    match sd.Sources.[0] with
+                    | FileRef p -> Expect.equal p "tokens/base.json" "path preserved"
+                    | Inline _  -> failtest "expected FileRef"
+
+        testCase "serializeResolver: optional name/description omitted when None" <| fun () ->
+            let json = """
+{
+  "version": "2025.10",
+  "sets": { "s": { "sources": [{ "inline": {} }] } },
+  "resolutionOrder": [{ "set": "s" }]
+}"""
+            match Resolver.parseResolver json with
+            | Error es -> failtestf "parse failed: %A" es
+            | Ok doc ->
+                Expect.isNone doc.Name "no name"
+                let serialized = Resolver.serializeResolver doc
+                Expect.isFalse (serialized.Contains "\"name\"")        "name key absent"
+                Expect.isFalse (serialized.Contains "\"description\"") "description key absent"
+
+        testCase "serializeResolver: set and modifier extensions round-trip" <| fun () ->
+            // Build a document with extensions directly and verify they survive
+            // serialize → parse. Extensions are (string * JsonNode) list.
+            match Resolver.parseResolver Resolver.basicResolverJson with
+            | Error es -> failtestf "parse failed: %A" es
+            | Ok doc ->
+                // Inject an extension onto the "core" set
+                let (coreName, coreDef) = doc.Sets.[0]
+                let coreWithExt = { coreDef with Extensions = ["x-tag", System.Text.Json.Nodes.JsonValue.Create("test") :> System.Text.Json.Nodes.JsonNode] }
+                let docWithExt  = { doc with Sets = [(coreName, coreWithExt)] }
+                let serialized  = Resolver.serializeResolver docWithExt
+                match Resolver.parseResolver serialized with
+                | Error es -> failtestf "re-parse failed: %A" es
+                | Ok doc2  ->
+                    let (_, sd) = doc2.Sets.[0]
+                    let extVal = sd.Extensions |> List.tryFind (fun (k, _) -> k = "x-tag")
+                    Expect.isSome extVal "extension key present after round-trip"
+                    match extVal with
+                    | Some (_, v) -> Expect.equal (v.ToString()) "test" "extension value preserved"
+                    | None -> ()
     ]

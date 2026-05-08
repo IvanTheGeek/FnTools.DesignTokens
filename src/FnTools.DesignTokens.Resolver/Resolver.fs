@@ -1,6 +1,7 @@
 module FnTools.DesignTokens.Resolver
 
 open System
+open System.Text.Json
 open System.Text.Json.Nodes
 open FnTools.DesignTokens
 open FnTools.DesignTokens.Json
@@ -506,3 +507,81 @@ let resolveAll
     (doc: ResolverDocument)
     : Result<TokenFile, ResolveError list> =
     resolve loadFile input doc >>= flattenAliases
+
+
+// ─── serializeResolver ───────────────────────────────────────────────────────
+
+let private writeExtensionsObj (xs: Extensions) : JsonObject =
+    let o = JsonObject()
+    for (k, v) in xs do
+        o.Add(k, if isNull v then null else v.DeepClone())
+    o
+
+let private tokenSourceToNode (src: TokenSource) : JsonNode =
+    match src with
+    | FileRef path ->
+        let o = JsonObject()
+        o.Add("path", JsonValue.Create(path))
+        o :> JsonNode
+    | Inline file ->
+        let o = JsonObject()
+        o.Add("inline", JsonNode.Parse(Format.serialize file))
+        o :> JsonNode
+
+let private sourcesToArray (sources: TokenSource list) : JsonArray =
+    let arr = JsonArray()
+    for src in sources do arr.Add(tokenSourceToNode src)
+    arr
+
+/// Serialize a <see cref="ResolverDocument"/> to the JSON format that
+/// <see cref="parseResolver"/> can read back.
+///
+/// Round-trip guarantee: <c>parseResolver (serializeResolver doc)</c> returns
+/// a structurally equivalent document. <c>$ref</c> pointers are never emitted —
+/// all sources are written as concrete <c>inline</c> or <c>path</c> objects.
+let serializeResolver (doc: ResolverDocument) : string =
+    let root = JsonObject()
+
+    match doc.Name        with Some n -> root.Add("name",        JsonValue.Create n) | None -> ()
+    root.Add("version", JsonValue.Create "2025.10")
+    match doc.Description with Some d -> root.Add("description", JsonValue.Create d) | None -> ()
+
+    if doc.Sets <> [] then
+        let setsObj = JsonObject()
+        for (name, sd) in doc.Sets do
+            let setNode = JsonObject()
+            setNode.Add("sources", sourcesToArray sd.Sources)
+            match sd.Description with Some d -> setNode.Add("description", JsonValue.Create d) | None -> ()
+            match sd.Extensions  with [] -> () | xs -> setNode.Add("$extensions", writeExtensionsObj xs)
+            setsObj.Add(name, setNode)
+        root.Add("sets", setsObj)
+
+    if doc.Modifiers <> [] then
+        let modObj = JsonObject()
+        for (name, md) in doc.Modifiers do
+            let modNode = JsonObject()
+            let ctxObj  = JsonObject()
+            for (ctxName, ctx) in md.Contexts do
+                let ctxNode = JsonObject()
+                ctxNode.Add("sources", sourcesToArray ctx.Sources)
+                ctxObj.Add(ctxName, ctxNode)
+            modNode.Add("contexts", ctxObj)
+            match md.Default     with Some d -> modNode.Add("default",     JsonValue.Create d) | None -> ()
+            match md.Description with Some d -> modNode.Add("description", JsonValue.Create d) | None -> ()
+            match md.Extensions  with [] -> () | xs -> modNode.Add("$extensions", writeExtensionsObj xs)
+            modObj.Add(name, modNode)
+        root.Add("modifiers", modObj)
+
+    let orderArr = JsonArray()
+    for item in doc.ResolutionOrder do
+        let o = JsonObject()
+        match item with
+        | SetRef name ->
+            o.Add("set", JsonValue.Create name)
+        | ModifierRef (name, ctx) ->
+            o.Add("modifier", JsonValue.Create name)
+            o.Add("context",  JsonValue.Create ctx)
+        orderArr.Add(o)
+    root.Add("resolutionOrder", orderArr)
+
+    root.ToJsonString(JsonSerializerOptions(WriteIndented = true))

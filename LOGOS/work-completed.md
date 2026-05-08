@@ -1,3 +1,13 @@
+## serializeResolver (ADR-032, completed 2026-05-08)
+
+- [x] `Resolver.serializeResolver (doc: ResolverDocument) : string` added to `Resolver.fs`
+- [x] Inline sources via `Format.serialize` embedded as `JsonNode`; FileRef as `{"path":"..."}`
+- [x] SetRef → `{"set":"..."}`, ModifierRef → `{"modifier":"...","context":"..."}`
+- [x] Optional fields omitted when None; empty sets/modifiers omit the key; extensions written when non-empty
+- [x] Exposed as `Api.serializeResolver` (top-level) and `Primitives.serializeResolver`
+- [x] 5 new tests covering round-trip, FileRef, Inline, optional fields, extensions; 265/265 pass
+- [x] ADR-032 written
+
 ## Math expression round-trip (ADR-031, completed 2026-05-08)
 
 - [x] `extMathExpressionKey = "tsMathExpression"` added to vendor namespace constants

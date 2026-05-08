@@ -186,6 +186,12 @@ import/export. See `penpot-api.md` for the three-surface comparison.
   Fix: `TokensStudioRawImport` record + `importTokensStudioRaw` added to top-level `Api`;
   `importTokensStudio` refactored to delegate. Round-trip is now three lines from `Api` alone.
   258/258 pass. ADR-029 created.
+- [x] **`serializeResolver` (ADR-032, 2026-05-08)** — `ResolverDocument` serialization was the
+  only missing piece in the parse/validate/resolve/serialize lifecycle. `serializeResolver`
+  in `Resolver.fs` writes all fields: `Inline` sources via `Format.serialize`, `FileRef` as
+  `{"path":"..."}`, `SetRef`/`ModifierRef` as object form, optional fields omitted when None,
+  `$extensions` on sets and modifiers when non-empty. Exposed at top-level API + `Primitives`.
+  5 new tests. 265/265 pass. Unlocks the resolver-document-as-SoT workflow.
 - [x] **Math expression round-trip (ADR-031, 2026-05-08)** — `exportToTokensStudio` previously
   emitted evaluated floats for math tokens (e.g. `25.6` instead of `"round({base} * pow({multiplier}, 2))"`).
   Fix: shim annotation (5) writes `extMathExpressionKey` (`tsMathExpression`) into
