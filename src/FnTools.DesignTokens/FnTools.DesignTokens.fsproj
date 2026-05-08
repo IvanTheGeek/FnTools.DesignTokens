@@ -5,7 +5,7 @@
     <RootNamespace>FnTools.DesignTokens</RootNamespace>
     <AssemblyName>FnTools.DesignTokens</AssemblyName>
     <PackageId>FnTools.DesignTokens</PackageId>
-    <Version>0.5.0</Version>
+    <Version>0.5.1</Version>
     <Authors>FnTools</Authors>
     <Description>DTCG 2025.10 design token library — meta-package combining all layers</Description>
     <PackageLicenseExpression>AGPL-3.0-or-later</PackageLicenseExpression>

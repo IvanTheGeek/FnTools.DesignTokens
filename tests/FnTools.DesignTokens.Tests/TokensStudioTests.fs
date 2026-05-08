@@ -715,6 +715,27 @@ let allTests =
                         |> Map.ofList
                     sr, sets
 
+            testCase "toResolverDocument: single-theme group → varying set gets non-empty sources" <| fun () ->
+                let json = """
+{
+  "base": { "x": { "$type": "number", "$value": "1" } },
+  "motion/reduced": { "dur": { "$type": "number", "$value": "1" } },
+  "$themes": [
+    {
+      "id": "1", "name": "Motion/Reduced", "group": "Motion",
+      "selectedTokenSets": { "motion/reduced": "enabled" }
+    }
+  ],
+  "$metadata": { "tokenSetOrder": ["base", "motion/reduced"] }
+}"""
+                let sr, sets = shimAndParse json
+                let doc = TokensStudio.toResolverDocument sr sets
+                Expect.equal (List.length doc.Modifiers) 1 "one modifier"
+                let (_, mDef) = doc.Modifiers.[0]
+                Expect.equal (List.length mDef.Contexts) 1 "one context"
+                let (_, ctx) = mDef.Contexts.[0]
+                Expect.isNonEmpty ctx.Sources "Reduced context has non-empty sources"
+
             testCase "toResolverDocument: two-theme group → one modifier, primitives in base" <| fun () ->
                 let sr, sets = shimAndParse twoThemeJson
                 let doc = TokensStudio.toResolverDocument sr sets

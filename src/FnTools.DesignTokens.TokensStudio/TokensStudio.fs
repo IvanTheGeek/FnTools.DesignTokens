@@ -1719,7 +1719,7 @@ module TokensStudio =
                                 |> Map.tryFind setName
                                 |> Option.defaultValue "disabled")
                         statuses |> List.exists (fun s -> s = "enabled") &&
-                        statuses |> List.exists (fun s -> s <> "enabled"))
+                        (themes.Length = 1 || statuses |> List.exists (fun s -> s <> "enabled")))
                     |> Set.ofList
                 gName, varying)
             |> Map.ofList
