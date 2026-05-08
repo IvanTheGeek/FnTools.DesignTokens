@@ -1,3 +1,12 @@
+## Math expression round-trip (ADR-031, completed 2026-05-08)
+
+- [x] `extMathExpressionKey = "tsMathExpression"` added to vendor namespace constants
+- [x] Added to `shimAllInternalKeys` (stripped on TS re-import) and `shimExportStripKeys` (stripped after recovery on TS export)
+- [x] Annotation (5) in `walkObj`: written when `tsType = "number"` and `isMathExpression origRawValue` and `EvaluateMath` succeeds
+- [x] Recovery in `addTokensToObj`: `tsMathExpression` checked first in the `recoveredValue` chain; raw string used as `$value` when present
+- [x] 2 new tests: `"8 * 2"` round-trip (expression restored, float not emitted, key stripped); plain `"16"` has no annotation
+- [x] 260/260 tests pass; ADR-031 written
+
 ## Dark-mode CSS emitter (completed 2026-05-03)
 
 - [x] `CssEmitter.emitBlock (selector: string) (tokens: ...) : string` — emits any selector block

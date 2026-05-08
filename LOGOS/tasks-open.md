@@ -186,6 +186,12 @@ import/export. See `penpot-api.md` for the three-surface comparison.
   Fix: `TokensStudioRawImport` record + `importTokensStudioRaw` added to top-level `Api`;
   `importTokensStudio` refactored to delegate. Round-trip is now three lines from `Api` alone.
   258/258 pass. ADR-029 created.
+- [x] **Math expression round-trip (ADR-031, 2026-05-08)** — `exportToTokensStudio` previously
+  emitted evaluated floats for math tokens (e.g. `25.6` instead of `"round({base} * pow({multiplier}, 2))"`).
+  Fix: shim annotation (5) writes `extMathExpressionKey` (`tsMathExpression`) into
+  `$extensions["com.fntools.designtokens"]` when `EvaluateMath` succeeds on a `number` token;
+  `addTokensToObj` recovery chain checks `tsMathExpression` first and restores the raw string as
+  `$value`. Key added to `shimAllInternalKeys` + `shimExportStripKeys`. 2 new tests. 260/260 pass.
 
 ### NuGet
 

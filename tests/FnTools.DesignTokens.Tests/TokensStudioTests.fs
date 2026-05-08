@@ -1169,5 +1169,38 @@ let allTests =
                 Expect.isFalse (outJson.Contains "originalHsl")        "originalHsl absent from TS output"
                 Expect.isFalse (outJson.Contains "originalFontWeight") "originalFontWeight absent from TS output"
                 Expect.isFalse (outJson.Contains "tsType")             "tsType absent from TS output"
+
+            // ─── ADR-031: math expression round-trip ──────────────────────────
+
+            testCase "ADR-031: tsMathExpression round-trip — math formula restored on TS export" <| fun () ->
+                // Shim evaluates "8 * 2" → 16.0 and stores the raw expression in
+                // $extensions so export restores it verbatim (not the computed float).
+                let json = """
+{
+  "tokens": {
+    "scale": { "$type": "number", "$value": "8 * 2" }
+  },
+  "$metadata": { "tokenSetOrder": ["tokens"] }
+}"""
+                let sr, sets = shimAndParse json
+                let outJson, _ = TokensStudio.exportToTokensStudio sr sets
+                Expect.stringContains outJson "\"8 * 2\""            "original math expression restored as $value"
+                Expect.isFalse (outJson.Contains "\"16\"")           "evaluated float not emitted"
+                Expect.isFalse (outJson.Contains "tsMathExpression") "tsMathExpression extension stripped from TS output"
+
+            testCase "ADR-031: plain number has no tsMathExpression extension" <| fun () ->
+                // A plain numeric string (no operators or functions) must not get
+                // the tsMathExpression annotation — isMathExpression must not match it.
+                let json = """
+{
+  "tokens": {
+    "size": { "$type": "number", "$value": "16" }
+  },
+  "$metadata": { "tokenSetOrder": ["tokens"] }
+}"""
+                let sr, sets = shimAndParse json
+                let outJson, _ = TokensStudio.exportToTokensStudio sr sets
+                Expect.stringContains outJson ": 16"                 "plain number value emitted as JSON number"
+                Expect.isFalse (outJson.Contains "tsMathExpression") "tsMathExpression absent for plain number"
         ]
     ]

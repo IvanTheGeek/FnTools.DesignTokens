@@ -163,6 +163,7 @@ module TokensStudio =
     let private extTsTypeKey             = "tsType"             // shim → DTCG (TS type name)
     let private extOriginalFontWeightKey             = "originalFontWeight"             // shim → DTCG (combined weight+style, standalone)
     let private extOriginalTypographyFontWeightKey   = "originalTypographyFontWeight"   // shim → DTCG (combined weight+style, composite)
+    let private extMathExpressionKey                = "tsMathExpression"               // shim → DTCG (raw math expression before evaluation)
 
     /// Keys written by the shim into DTCG $extensions. Stripped from TS input on
     /// re-import (cloneExtensionsForOutput) and from DTCG output on export
@@ -172,12 +173,14 @@ module TokensStudio =
     /// writes it as a TS-side recovery payload — ADR-023).
     let private shimAllInternalKeys =
         Set.ofList [ extOriginalColorKey; extOriginalHslKey
-                     extTsTypeKey; extOriginalFontWeightKey; extOriginalTypographyFontWeightKey ]
+                     extTsTypeKey; extOriginalFontWeightKey; extOriginalTypographyFontWeightKey
+                     extMathExpressionKey ]
 
     /// Keys stripped from DTCG Metadata.Extensions when writing TS output.
     /// extOriginalColorKey is excluded: the export adds it as an ADR-023 payload.
     let private shimExportStripKeys =
-        Set.ofList [ extOriginalHslKey; extTsTypeKey; extOriginalFontWeightKey; extOriginalTypographyFontWeightKey ]
+        Set.ofList [ extOriginalHslKey; extTsTypeKey; extOriginalFontWeightKey; extOriginalTypographyFontWeightKey
+                     extMathExpressionKey ]
 
     let private tryGetNode (key: string) (obj: JsonObject) : JsonNode option =
         let mutable node : JsonNode | null = null
@@ -963,6 +966,10 @@ module TokensStudio =
                                         addVendorExtension leaf extOriginalTypographyFontWeightKey (jv fw)
                                     | _ -> ()
                                 | _ -> ()
+                            // (5) Math expression — record the raw expression string before
+                            //     it was evaluated to a float, so export can restore it.
+                            if tsType = "number" && isMathExpression origRawValue then
+                                addVendorExtension leaf extMathExpressionKey (jv origRawValue)
                             result.Add(kvp.Key, leaf)
                     elif isTypelessAlias then
                         // Typeless alias leaf — emit $value only; $type is inferred later
@@ -1604,26 +1611,29 @@ module TokensStudio =
                 match exportValue cPath t.Value warnings with
                 | None -> ()
                 | Some (vn, origColor, descAnn) ->
-                    // ADR-026: prefer the original HSL expression or fontWeight combined
-                    // value over the lossy output from exportValue.
+                    // ADR-026/031: prefer the original math expression, HSL expression, or
+                    // fontWeight combined value over the lossy output from exportValue.
                     let recoveredValue : JsonNode | null =
-                        match tryReadVendorString extOriginalHslKey t.Metadata.Extensions with
-                        | Some hsl -> jv hsl
+                        match tryReadVendorString extMathExpressionKey t.Metadata.Extensions with
+                        | Some expr -> jv expr
                         | None ->
-                            match tryReadVendorString extOriginalFontWeightKey t.Metadata.Extensions with
-                            | Some fw -> jv fw
+                            match tryReadVendorString extOriginalHslKey t.Metadata.Extensions with
+                            | Some hsl -> jv hsl
                             | None ->
-                                match tryReadVendorString extOriginalTypographyFontWeightKey t.Metadata.Extensions with
-                                | Some fw ->
-                                    // Patch fontWeight inside the composite $value object.
-                                    match vn with
-                                    | :? JsonObject as obj ->
-                                        let cloned = obj.DeepClone() :?> JsonObject
-                                        cloned.Remove("fontWeight") |> ignore
-                                        cloned.Add("fontWeight", jv fw)
-                                        cloned :> JsonNode | null
-                                    | _ -> vn
-                                | None -> vn
+                                match tryReadVendorString extOriginalFontWeightKey t.Metadata.Extensions with
+                                | Some fw -> jv fw
+                                | None ->
+                                    match tryReadVendorString extOriginalTypographyFontWeightKey t.Metadata.Extensions with
+                                    | Some fw ->
+                                        // Patch fontWeight inside the composite $value object.
+                                        match vn with
+                                        | :? JsonObject as obj ->
+                                            let cloned = obj.DeepClone() :?> JsonObject
+                                            cloned.Remove("fontWeight") |> ignore
+                                            cloned.Add("fontWeight", jv fw)
+                                            cloned :> JsonNode | null
+                                        | _ -> vn
+                                    | None -> vn
                     leaf.Add("$value", recoveredValue)
                     let desc =
                         match t.Metadata.Description, descAnn with
