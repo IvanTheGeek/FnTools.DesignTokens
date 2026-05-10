@@ -1079,6 +1079,16 @@ let exportTokensStudio
 let serializeResolver (doc: ResolverDocument) : string =
     Resolver.serializeResolver doc
 
+/// Strict DTCG 2025.10 compliance check. Returns errors for any feature that
+/// is valid in this library's domain but not in the published spec — today,
+/// only <see cref="DimensionUnit.Em"/> (ADR-028).
+///
+/// Use this when you need to guarantee that a <see cref="TokenFile"/> contains
+/// no library extensions before exporting to a strict downstream consumer.
+/// References are not followed; only literal positions are checked.
+let validateStrictDtcg (file: TokenFile) : Result<unit, ValidationError list> =
+    Validation.validateStrictDtcg file
+
 
 // ─── Primitives module ───────────────────────────────────────────────────────
 
@@ -1090,7 +1100,8 @@ module Primitives =
     let serialize        = Format.serialize
     let serializeAs      = Format.serializeAs
     let serializePenpot  = Format.serializePenpot
-    let validate     = Validation.validate
+    let validate            = Validation.validate
+    let validateStrictDtcg  = Validation.validateStrictDtcg
     let flatten      = flattenFile
     let tryFind      = tryFindIn
     let tryResolveAlias = tryResolveAliasIn
