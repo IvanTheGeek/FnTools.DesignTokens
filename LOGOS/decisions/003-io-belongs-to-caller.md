@@ -19,4 +19,4 @@ The resolver's public API takes a `loadFile: string -> Result<string, string>` p
 - WASM hosts can provide a fetch-based loader.
 - CLI tools provide `File.ReadAllText`-based loaders.
 - The library has no dependency on `System.IO` beyond what BCL types already pull in.
-- This pattern must be maintained for any future layer that needs external resources (e.g., a future schema validator that fetches `$schema` URLs).
+- This pattern must be maintained for any future layer that needs external resources. The example originally given was "a schema validator that fetches `$schema` URLs"; that specific case is now explicitly **out of scope for this library** — see ADR-013 addendum (2026-05-10). If such a validator is ever built it will live in a separate companion package (`FnTools.DesignTokens.SchemaCheck`) and will use this `loadFile` pattern for its own external resources.
