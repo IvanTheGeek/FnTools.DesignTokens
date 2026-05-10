@@ -179,6 +179,45 @@ type TokenType =
     | GradientType
     | TypographyType
 
+module TokenType =
+    /// DTCG spec type-string for this token type (e.g. <c>ColorType → "color"</c>).
+    let displayName (t: TokenType) : string =
+        match t with
+        | ColorType        -> "color"
+        | DimensionType    -> "dimension"
+        | FontFamilyType   -> "fontFamily"
+        | FontWeightType   -> "fontWeight"
+        | DurationType     -> "duration"
+        | CubicBezierType  -> "cubicBezier"
+        | NumberType       -> "number"
+        | StrokeStyleType  -> "strokeStyle"
+        | BorderType       -> "border"
+        | TransitionType   -> "transition"
+        | ShadowType       -> "shadow"
+        | GradientType     -> "gradient"
+        | TypographyType   -> "typography"
+
+module TokenValue =
+    /// Map a literal <see cref="TokenValue"/> to its <see cref="TokenType"/>.
+    /// Returns <c>None</c> for <see cref="TokenValue.Alias"/> — aliases have no
+    /// intrinsic type until their target is followed.
+    let inferType (v: TokenValue) : TokenType option =
+        match v with
+        | TokenValue.Color _       -> Some ColorType
+        | TokenValue.Dimension _   -> Some DimensionType
+        | TokenValue.FontFamily _  -> Some FontFamilyType
+        | TokenValue.FontWeight _  -> Some FontWeightType
+        | TokenValue.Duration _    -> Some DurationType
+        | TokenValue.CubicBezier _ -> Some CubicBezierType
+        | TokenValue.Number _      -> Some NumberType
+        | TokenValue.StrokeStyle _ -> Some StrokeStyleType
+        | TokenValue.Border _      -> Some BorderType
+        | TokenValue.Shadow _      -> Some ShadowType
+        | TokenValue.Transition _  -> Some TransitionType
+        | TokenValue.Gradient _    -> Some GradientType
+        | TokenValue.Typography _  -> Some TypographyType
+        | TokenValue.Alias _       -> None
+
 
 // ─── Metadata ────────────────────────────────────────────────────────────────
 

@@ -434,6 +434,83 @@ let calcPreservingTests = testList "emitCalcPreserving" [
         Expect.stringContains css "--spacing-sm: 31px;" "falls back to concrete px"
         Expect.isFalse (css.Contains "calc(") "no calc expression emitted"
 
+    testCase "dimension token aliased to number — calc()-optimized via DimensionType" <| fun () ->
+        // spacing.sm declared $type:dimension aliasing scale.sm ($type:number, value 32).
+        // After flattening: Value=ResolvedNumber 32.0 but Type=DimensionType.
+        // 32 = 16 × 1.25^? — log(32/16)/log(1.25) ≈ 3.106, not an integer; falls back to 32px (not 32).
+        let dimAliasedToNumber n : ResolvedToken =
+            { Value    = ResolvedNumber n
+              Type     = DimensionType
+              Metadata = { Description = None; Deprecated = None; Extensions = [] } }
+        let tokens = [
+            ["base"],          resolvedNum 16.0
+            ["multiplier"],    resolvedNum 1.25
+            ["spacing"; "md"], dimAliasedToNumber 32.0   // doesn't fit scale
+            ["spacing"; "lg"], dimAliasedToNumber 31.25  // fits: 16 × 1.25^3
+        ]
+        let css = CssEmitter.emitCalcPreserving "--base" "--multiplier" (List.toSeq tokens)
+        Expect.isFalse (css.Contains "--spacing-md: 32;")  "no unitless value"
+        Expect.stringContains css "--spacing-md: 32px;"    "non-fitting: concrete px"
+        Expect.stringContains css
+            "--spacing-lg: calc(var(--base) * var(--multiplier) * var(--multiplier) * var(--multiplier) * 1px);"
+            "fitting: calc(n=3)"
+
+]
+
+
+// ─── Dimension token aliased to number (request_2026-05-10_01 fix) ────────────
+
+let dimNumberAliasTests = testList "dimension aliased to number" [
+
+    let dimAliasedToNumber n : ResolvedToken =
+        { Value    = ResolvedNumber n
+          Type     = DimensionType
+          Metadata = { Description = None; Deprecated = None; Extensions = [] } }
+
+    testCase "tokenToCssDecls: bare number for DimensionType emits Npx, not bare number" <| fun () ->
+        let decls = tokenToCssDecls ["spacing"; "x1"] (dimAliasedToNumber 16.0)
+        Expect.equal decls [ "--spacing-x1", "16px" ] "treated as 16px"
+
+    testCase "tokenToCssDecls: bare number for NumberType still emits unitless" <| fun () ->
+        let decls = tokenToCssDecls ["base"] (resolvedNum 16.0)
+        Expect.equal decls [ "--base", "16" ] "still unitless"
+
+    testCase "emitWith Rem policy: bare-number dimension converts 16 → 1rem" <| fun () ->
+        let remPolicy : DimensionUnitPolicy = fun _ _ -> Rem
+        let tokens = [ ["spacing"; "x1"], dimAliasedToNumber 16.0 ]
+        let css = CssEmitter.emitWith remPolicy (List.toSeq tokens)
+        Expect.stringContains css "--spacing-x1: 1rem;" "16px → 1rem with Rem policy"
+
+    testCase "emitWith identity policy: bare-number dimension stays Npx" <| fun () ->
+        let tokens = [ ["spacing"; "x1"], dimAliasedToNumber 16.0 ]
+        let css = CssEmitter.emitWith DimensionUnitPolicy.identity (List.toSeq tokens)
+        Expect.stringContains css "--spacing-x1: 16px;" "stays 16px"
+
+    testCase "emitThemedWith path-specific policy: stroke.* stays px, others go rem" <| fun () ->
+        let policy : DimensionUnitPolicy =
+            fun path _ ->
+                match path with
+                | "stroke" :: _ | "breakpoint" :: _ -> Px
+                | _                                 -> Rem
+        let baseTokens = [
+            ["spacing"; "x1"],   dimAliasedToNumber 16.0
+            ["stroke"; "thin"],  dimAliasedToNumber 1.0
+        ]
+        let css =
+            CssEmitter.emitThemedWith
+                policy (fun n -> sprintf "[data-theme=\"%s\"]" n) (List.toSeq baseTokens) Seq.empty
+        Expect.stringContains css "--spacing-x1: 1rem;"  "spacing → rem"
+        Expect.stringContains css "--stroke-thin: 1px;"  "stroke → px"
+
+    testCase "regression: never emits a unitless value for a DimensionType token" <| fun () ->
+        let tokens = [
+            ["spacing"; "x1"], dimAliasedToNumber 16.0
+            ["radius"; "sm"],  dimAliasedToNumber 4.0
+        ]
+        let css = CssEmitter.emit (List.toSeq tokens)
+        Expect.isFalse (css.Contains "--spacing-x1: 16;")  "no unitless spacing"
+        Expect.isFalse (css.Contains "--radius-sm: 4;")    "no unitless radius"
+
 ]
 
 
@@ -449,4 +526,5 @@ let allTests =
         multiModeTests
         themedTests
         calcPreservingTests
+        dimNumberAliasTests
     ]
