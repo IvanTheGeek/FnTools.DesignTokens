@@ -225,7 +225,12 @@ let allTests =
             | Ok doc ->
                 // Inject an extension onto the "core" set
                 let (coreName, coreDef) = doc.Sets.[0]
-                let coreWithExt = { coreDef with Extensions = ["x-tag", System.Text.Json.Nodes.JsonValue.Create("test") :> System.Text.Json.Nodes.JsonNode] }
+                let extNode : System.Text.Json.Nodes.JsonNode =
+                    System.Text.Json.Nodes.JsonValue.Create "test"
+                    |> Option.ofObj
+                    |> Option.defaultWith (fun () -> failwith "JsonValue.Create returned null")
+                    :> System.Text.Json.Nodes.JsonNode
+                let coreWithExt = { coreDef with Extensions = ["x-tag", extNode] }
                 let docWithExt  = { doc with Sets = [(coreName, coreWithExt)] }
                 let serialized  = Resolver.serializeResolver docWithExt
                 match Resolver.parseResolver serialized with
