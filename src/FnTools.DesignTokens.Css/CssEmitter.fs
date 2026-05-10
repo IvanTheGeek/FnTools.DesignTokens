@@ -211,6 +211,12 @@ let private tokenToCssDeclsWith (policy: DimensionUnitPolicy) (path: string list
     | ResolvedFontWeight  fw -> [ v, fontWeightToCss fw ]
     | ResolvedDuration    d  -> [ v, durationToCss d ]
     | ResolvedCubicBezier b  -> [ v, cubicBezierToCss b ]
+    // A dimension token aliased to a number token resolves to ResolvedNumber but
+    // keeps its declared DimensionType. Treat the bare number as Npx then apply
+    // the unit policy — without this, the emitter would write a unitless value
+    // which browsers silently reject as a CSS <length>.
+    | ResolvedNumber      n when token.Type = DimensionType ->
+                                [ v, dim { Value = n; Unit = Px } ]
     | ResolvedNumber      n  -> [ v, sprintf "%g" n ]
     | ResolvedStrokeStyle s  -> [ v, strokeStyleToCss s ]
     | ResolvedBorder      b  -> [ v, borderToCss b ]
@@ -585,8 +591,15 @@ module CssEmitter =
                 | _ -> ()
             else
                 let decls =
-                    match token.Value, baseOpt, multOpt with
-                    | ResolvedDimension d, Some bv, Some mv ->
+                    // Treat (ResolvedNumber n) with DimensionType the same as (ResolvedDimension {Value=n; Unit=Px})
+                    // so dimension→number alias chains still get calc()-optimized when they fit the scale.
+                    let asDim =
+                        match token.Value with
+                        | ResolvedDimension d                                  -> Some d
+                        | ResolvedNumber    n when token.Type = DimensionType  -> Some { Value = n; Unit = Px }
+                        | _                                                    -> None
+                    match asDim, baseOpt, multOpt with
+                    | Some d, Some bv, Some mv ->
                         let baseRef = String.concat "." basePath
                         let multRef = String.concat "." multPath
                         let nOpt =

@@ -101,22 +101,7 @@ let private tryResolveAliasIn (ref: TokenRef) (file: TokenFile) : Token option =
 
 // ─── Resolution to ResolvedToken ────────────────────────────────────────────
 
-let private inferType (v: TokenValue) : TokenType option =
-    match v with
-    | TokenValue.Color _       -> Some ColorType
-    | TokenValue.Dimension _   -> Some DimensionType
-    | TokenValue.FontFamily _  -> Some FontFamilyType
-    | TokenValue.FontWeight _  -> Some FontWeightType
-    | TokenValue.Duration _    -> Some DurationType
-    | TokenValue.CubicBezier _ -> Some CubicBezierType
-    | TokenValue.Number _      -> Some NumberType
-    | TokenValue.StrokeStyle _ -> Some StrokeStyleType
-    | TokenValue.Border _      -> Some BorderType
-    | TokenValue.Shadow _      -> Some ShadowType
-    | TokenValue.Transition _  -> Some TransitionType
-    | TokenValue.Gradient _    -> Some GradientType
-    | TokenValue.Typography _  -> Some TypographyType
-    | TokenValue.Alias _       -> None
+let private inferType = TokenValue.inferType
 
 /// Resolve a ValueOrRef<'T> by extracting the literal — references resolved by lookup.
 let private resolveValueOrRef

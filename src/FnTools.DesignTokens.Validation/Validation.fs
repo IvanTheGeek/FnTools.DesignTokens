@@ -287,6 +287,72 @@ let private findCycles (graph: Map<string, string list>) : string list list =
     List.ofSeq cycles
 
 
+// ─── Cross-type alias mismatch ───────────────────────────────────────────────
+// When a token declares $type X but aliases a target whose ultimate value has
+// type Y (X ≠ Y), the resolver silently produces a ResolvedToken with Type=X
+// and Value=Y. The emitter then dispatches on Value and ignores the declared
+// type, which for dimension→number aliases yields unitless CSS. Flag the
+// mismatch at validation so authors see it before it reaches an emitter.
+
+let private buildTokenLookup (file: TokenFile) : System.Collections.Generic.Dictionary<string, Token> =
+    let lookup = System.Collections.Generic.Dictionary<string, Token>()
+    let rec walk (path: string list) (node: TokenNode) =
+        match node with
+        | TokenLeaf t -> lookup.[joinPath path] <- t
+        | Group g ->
+            match g.Root with
+            | Some t -> lookup.[joinPath path] <- t
+            | None   -> ()
+            g.Children |> List.iter (fun (name, child) ->
+                walk (path @ [TokenName.value name]) child)
+    file.Children |> List.iter (fun (name, node) -> walk [TokenName.value name] node)
+    lookup
+
+let private checkAliasTypes (file: TokenFile) : ValidationError list =
+    let lookup = buildTokenLookup file
+    let errors = ResizeArray<ValidationError>()
+
+    /// Follow an alias chain to the ultimate non-alias value's type.
+    /// Returns None on cycle / unresolved / JSON pointer — those are flagged elsewhere.
+    let rec resolveTypeOf (visited: Set<string>) (path: string) : TokenType option =
+        if Set.contains path visited then None
+        else
+            match lookup.TryGetValue path with
+            | false, _ -> None
+            | true, t ->
+                match t.Value with
+                | TokenValue.Alias (CurlyBrace target) ->
+                    resolveTypeOf (Set.add path visited) (joinPath target)
+                | TokenValue.Alias (JsonPointer _) -> None
+                | v -> TokenValue.inferType v
+
+    let checkOne (originPath: string) (t: Token) =
+        match t.Type, t.Value with
+        | Some declared, TokenValue.Alias (CurlyBrace target) ->
+            let targetPath = joinPath target
+            match resolveTypeOf (Set.singleton originPath) targetPath with
+            | Some resolved when resolved <> declared ->
+                errors.Add (TypeMismatch (
+                    originPath,
+                    TokenType.displayName declared,
+                    TokenType.displayName resolved))
+            | _ -> ()
+        | _ -> ()
+
+    let rec walk (path: string list) (node: TokenNode) =
+        match node with
+        | TokenLeaf t -> checkOne (joinPath path) t
+        | Group g ->
+            match g.Root with
+            | Some t -> checkOne (joinPath path) t
+            | None   -> ()
+            g.Children |> List.iter (fun (name, child) ->
+                walk (path @ [TokenName.value name]) child)
+
+    file.Children |> List.iter (fun (name, node) -> walk [TokenName.value name] node)
+    List.ofSeq errors
+
+
 // ─── Public API ──────────────────────────────────────────────────────────────
 
 let validate (file: TokenFile) : Result<unit, ValidationError list> =
@@ -300,7 +366,9 @@ let validate (file: TokenFile) : Result<unit, ValidationError list> =
         |> findCycles
         |> List.map CircularReference
 
-    match valueErrs @ cycleErrs with
+    let aliasTypeErrs = checkAliasTypes file
+
+    match valueErrs @ cycleErrs @ aliasTypeErrs with
     | [] -> Ok ()
     | xs -> Error xs
 

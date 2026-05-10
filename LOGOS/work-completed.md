@@ -1,3 +1,15 @@
+## Dimension→number alias emission + validation (ADR-033, completed 2026-05-10)
+
+Reported by downstream consumer (`LOGOS/requests/request_2026-05-10_01_library...md`).
+
+- [x] `tokenToCssDeclsWith` (CssEmitter): when `Value=ResolvedNumber n` and `Type=DimensionType`, treat as `{Value=n; Unit=Px}` and apply unit policy. Fixes `--spacing-x1: 16;` → `1rem`/`16px`.
+- [x] `emitCalcPreserving` mirror: same coercion in the calc-optimization branch so dimension→number aliases still fit the scale and produce `calc()` expressions.
+- [x] `Validation.checkAliasTypes`: follow alias chains, emit `TypeMismatch` when declared `$type` ≠ ultimate resolved value's type.
+- [x] `TokenType.displayName` + `TokenValue.inferType` promoted from private in `DesignTokens.fs` to public module-on-type pattern in `Foundation/Domain.fs` (used by both validation and resolver).
+- [x] 12 new tests: 6 CssEmitter (tokenToCssDecls Npx, identity policy, Rem policy, themed path policy, regression no-unitless, calc() optimization fires); 5 Validation (mismatch flagged, same-type passes, chain mismatch, cycle not flagged as mismatch, unresolved not flagged as mismatch); 1 emitCalcPreserving extension. 281/281 total.
+- [x] ADR-033 written.
+- [x] Version bumped 0.5.1 → 0.6.0 (new validation rule + new emitter behavior, both consumer-visible).
+
 ## serializeResolver (ADR-032, completed 2026-05-08)
 
 - [x] `Resolver.serializeResolver (doc: ResolverDocument) : string` added to `Resolver.fs`
