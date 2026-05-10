@@ -180,6 +180,18 @@ import/export. See `penpot-api.md` for the three-surface comparison.
 - [ ] TOML authoring format + parser
 - [ ] ADR-001 (FnHCI): Fun.Css vs FSS — record CSS binding choice for Fun.Blazor consumers once the FnHCI project has a LOGOS directory
 
+### Candidate companion packages (deferred — pick up when a consumer needs it)
+
+- [ ] **`FnTools.DesignTokens.SchemaCheck`** — JSON Schema validation against the DTCG `$schema`
+  URL. Out of scope for this library (see ADR-013 addendum, 2026-05-10): our domain validation
+  is strictly stronger at every type, and the DTCG spec itself notes `$schema` is a courtesy
+  convention rather than a compliance requirement. If someone needs schema-compliance
+  verification as a separate check, it belongs in a companion package depending on
+  `Foundation` only, using the ADR-003 `loadSchema: string -> Result<string, string>` pattern
+  for `$ref` resolution, and pulling in a JSON Schema validator dep
+  (`JsonSchema.Net` or similar) so this library's selective-dependency posture (ADR-005)
+  stays intact.
+
 - [x] **`importTokensStudioRaw` round-trip API (ADR-029, 2026-05-04)** — `importTokensStudio*`
   functions discarded `ShimResult` + `ParsedSets` internally; `exportTokensStudio` and
   `toResolverDocument` both require them; callers had to use `Primitives.shimWithConfig`.
