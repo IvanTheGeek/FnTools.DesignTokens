@@ -1,10 +1,14 @@
 # API Reference
 
-The entry point is `FnTools.DesignTokens.Api`. One package reference is all you need:
+`FnTools.DesignTokens` — DTCG 2025.10 codec, validator, resolver, and emitters (CSS, F# bindings, Tokens Studio). The entry point is `FnTools.DesignTokens.Api`. One package reference is all you need:
 
 ```xml
-<PackageReference Include="FnTools.DesignTokens" Version="0.3.0" />
+<PackageReference Include="FnTools.DesignTokens" Version="0.6.0" />
 ```
+
+The meta-package transitively pulls in seven layered libraries: `Foundation`, `Format`, `Validation`, `Resolver`, `Css`, `Bindings`, `TokensStudio`. Reference an individual layer if you want a smaller dependency surface.
+
+See [`migration-0.5-to-0.6.md`](./migration-0.5-to-0.6.md) for the changes in 0.6.0 (new `TypeMismatch` validation, dimension→number alias emission fix).
 
 ---
 
@@ -17,7 +21,9 @@ Api.import (jsonText: string)
     : Result<(string list * ResolvedToken) seq, ImportError list>
 ```
 
-Parse, validate, and resolve a single DTCG `.tokens.json` file. Returns a flat sequence of `(path segments, resolved token)` pairs. Path segments are the dot-path components — `["color"; "text"; "main"]` for a token at `color.text.main`.
+Parse, validate, and resolve a single DTCG `.tokens.json` file. Returns a flat sequence of `(path segments, resolved token)` pairs — `["color"; "text"; "main"]` for a token at `color.text.main`.
+
+Validation includes (since 0.6.0) a cross-type alias check: a `dimension` token aliasing a `number` token returns `ImportError.ValidationFailed [TypeMismatch (path, "dimension", "number")]`. See the migration guide for how to handle.
 
 ### `Api.importWithResolver`
 
@@ -35,7 +41,7 @@ Parse a `.resolver.json` document, load referenced token files via `loadFile`, a
 
 ## Import from Tokens Studio format
 
-All four functions accept `ShimConfig`. Pass `ShimConfig.Default` in almost all cases. `{ MathPolicy = PreserveMath }` keeps math expression strings unevaluated for inspection.
+All five functions accept `ShimConfig`. Pass `ShimConfig.Default` in almost all cases. `{ MathPolicy = PreserveMath }` keeps math-expression strings unevaluated for inspection.
 
 ### `Api.importTokensStudio`
 
@@ -47,13 +53,11 @@ Api.importTokensStudio (config: ShimConfig) (jsonText: string)
 ```fsharp
 type TokensStudioImportResult = {
     Tokens   : (string list * ResolvedToken) list
-    Warnings : TokensStudioImportWarning list  // SetSkipped | TokenUnresolved | ThemeNotFound | MathEvalFailedVariantAlias
+    Warnings : TokensStudioImportWarning list  // SetSkipped | DtcgSetSkipped | TokenUnresolved | ThemeNotFound | MathEvalFailedVariantAlias
 }
 ```
 
-Merges all sets in `$metadata.tokenSetOrder` (first = lowest priority, last wins) and resolves. Partial-success: tokens with unresolvable aliases appear as `TokenUnresolved` warnings rather than failing the whole import.
-
-Use this for a flat, theme-agnostic snapshot.
+Merges all sets in `$metadata.tokenSetOrder` (first = lowest priority, last wins) and resolves. Partial-success: tokens with unresolvable aliases appear as `TokenUnresolved` warnings rather than failing the whole import. Use for a flat, theme-agnostic snapshot.
 
 ### `Api.importTokensStudioThemed`
 
@@ -78,9 +82,7 @@ type ThemeTokens = {
 }
 ```
 
-Resolves base sets and each theme independently. Each theme's token list includes base sets plus that theme's own sets — so `CssEmitter.emitThemedWith` can diff them automatically to produce only the changed variables per theme block.
-
-Use this to produce `:root` + per-theme override CSS, or any multi-mode output.
+Resolves base sets and each theme independently. Each theme's token list includes base sets plus that theme's own sets — feed the result to `CssEmitter.emitThemed` to produce `:root` + per-theme override CSS.
 
 ### `Api.importTokensStudioCombined`
 
@@ -92,9 +94,21 @@ Api.importTokensStudioCombined
     : Result<TokensStudioImportResult, ImportError list>
 ```
 
-Combines themes from different modifier groups into one resolution pass. For example, `["Light"; "Desktop"]` activates both the Light color set and the Desktop breakpoint set simultaneously. Non-requested groups' sets are excluded from the math index — no cross-group bleed.
+Combines themes from different modifier groups into one resolution pass. For example, `["Light"; "Desktop"]` activates both the Light color set and the Desktop breakpoint set simultaneously. Non-requested groups' sets are excluded from the math index — no cross-group bleed. Use this when you need a single concrete token snapshot for a specific combination of dimensions.
 
-Use this when you need a single concrete token snapshot for a specific combination of dimensions.
+### `Api.importTokensStudioCombinedWith`
+
+```fsharp
+Api.importTokensStudioCombinedWith
+    (config     : ShimConfig)
+    (themeNames : string list)
+    (tsJson     : string)
+    (sets       : (string * string) list)
+    (_          : DtcgSetRole)             // pass AsBasePrimitives
+    : Result<TokensStudioImportResult, ImportError list>
+```
+
+Same as `importTokensStudioCombined`, plus extra DTCG sets injected as the lowest-priority base layer. The `DtcgSetRole` argument is required at every call site to make the role of those sets explicit: they are always included regardless of `themeNames`, and TS theme sets always override them. Resolution order: DTCG base sets → TS base sets → TS active-theme sets.
 
 ### `Api.importTokensStudioRaw`
 
@@ -114,9 +128,8 @@ type TokensStudioRawImport = {
 Same resolved tokens as `importTokensStudio`, plus the raw shim artifacts needed for export. Use this for round-trips — you get everything in one call.
 
 ```fsharp
-// Round-trip example
 let raw = Api.importTokensStudioRaw ShimConfig.Default json |> Result.get
-let css = CssEmitter.emitBlock raw.Import.Tokens
+let css = CssEmitter.emit raw.Import.Tokens
 let (penpotJson, _) = Api.exportTokensStudio raw.ShimResult raw.ParsedSets
 ```
 
@@ -130,7 +143,7 @@ let (penpotJson, _) = Api.exportTokensStudio raw.ShimResult raw.ParsedSets
 Api.export (tokens: (string list * ResolvedToken) seq) : string
 ```
 
-Resolved token list back to a DTCG `.tokens.json` string. Reverses `Api.import`. All values are concrete literals — aliases are not reconstructed.
+Resolved token list back to a DTCG 2025.10 `.tokens.json` string. Reverses `Api.import`. All values are concrete literals — aliases are not reconstructed.
 
 ### `Api.exportTokensStudio`
 
@@ -142,10 +155,12 @@ Api.exportTokensStudio
 ```
 
 Rebuild a Tokens Studio multi-set JSON from DTCG token files. Preserves:
-- Alias references (`{color.text.main}` stays as a reference, not resolved)
+
+- Alias references (`{color.text.main}` stays a reference, not resolved)
 - Original Tokens Studio type names (`fontFamilies`, `spacing`, etc.)
 - HSL expressions (`hsla({hue.blue},{saturation},...)`)
 - Combined fontWeight strings (`"400 Italic"`)
+- Math expressions (`{base} * pow({mult}, 3)`) — see ADR-031
 
 Wide-gamut OKLCH colours are downsampled to sRGB hex with an `ExportWarning.LossyColorConversion`. Get `shimResult` and `parsedSets` from `importTokensStudioRaw`.
 
@@ -160,47 +175,76 @@ Api.toResolverDocument
 
 Map Tokens Studio `$themes` + `$metadata` to a DTCG `ResolverDocument`. Theme groups (Color mode, Breakpoint, Brand, etc.) become modifier groups; their themes become modifier variants; global sets become base `SetRef`s in resolution order.
 
+### `Api.serializeResolver`
+
+```fsharp
+Api.serializeResolver (doc: ResolverDocument) : string
+```
+
+Serialize a `ResolverDocument` to JSON. Output round-trips through `parseResolver` (and therefore `importWithResolver`) to a structurally equivalent document. `$ref` pointers are never emitted — all sources are written as concrete `inline` or `path` objects.
+
 ---
 
 ## CSS emission
 
-From `FnTools.DesignTokens.Css` — included via the meta-package.
+From `FnTools.DesignTokens.Css` — included via the meta-package, `[<AutoOpen>]` so functions are unqualified after `open FnTools.DesignTokens.Css`.
 
-### Basic block
+### `emit` — defaults to `:root`
 
 ```fsharp
-CssEmitter.emitBlock (tokens: (string list * ResolvedToken) seq) : string
+emit (tokens: (string list * ResolvedToken) seq) : string
 // :root { --color-text-main: #1a1a1a; --spacing-md: 16px; ... }
+```
 
-CssEmitter.emitBlockWith (policy: DimensionUnitPolicy) (tokens) : string
-// same, with per-path unit conversion
+### `emitBlock` — any selector or at-rule
+
+```fsharp
+emitBlock (selector: string) (tokens: (string list * ResolvedToken) seq) : string
+```
+
+When `selector` starts with `@` (e.g. `@media (max-width: 600px)`), declarations are wrapped in an inner `:root { }` block so the output is valid CSS.
+
+### `emitWith` — `:root` with a unit policy
+
+```fsharp
+emitWith (policy: DimensionUnitPolicy) (tokens: (string list * ResolvedToken) seq) : string
 ```
 
 ### Themed (multi-mode)
 
 ```fsharp
-CssEmitter.emitThemed
-    (selectorFn  : string -> string)
-    (baseTokens  : (string list * ResolvedToken) seq)
-    (themeTokens : ThemeTokens seq)
+emitThemed
+    (selectorForTheme : string -> string)
+    (baseTokens       : (string list * ResolvedToken) seq)
+    (themes           : (string * (string list * ResolvedToken) seq) seq)
     : string
 // :root { base vars }
-// [data-theme="dark"] { only the vars that differ }
+// [data-theme="dark"] { only the vars that differ from :root }
+```
 
-CssEmitter.emitThemedWith (policy: DimensionUnitPolicy) (selectorFn) (baseTokens) (themeTokens)
+`themes` is a sequence of `(themeName, tokens)` tuples. From `Api.importTokensStudioThemed`, build it as:
+
+```fsharp
+let themes =
+    result.Themes |> List.map (fun t -> t.ThemeName, t.Tokens :> _ seq)
+emitThemed (fun n -> sprintf "[data-theme=\"%s\"]" n) result.BaseTokens themes
+```
+
+```fsharp
+emitThemedWith (policy: DimensionUnitPolicy) (selectorForTheme) (baseTokens) (themes)
     : string
 ```
 
 ### Two-block (base + override)
 
 ```fsharp
-CssEmitter.emitMultiMode
-    (baseTokens     : (string list * ResolvedToken) seq)
-    (overrideTokens : (string list * ResolvedToken) seq)
+emitMultiMode
+    (baseTokens       : (string list * ResolvedToken) seq)
+    (overrideTokens   : (string list * ResolvedToken) seq)
     (overrideSelector : string)
     : string
 
-CssEmitter.emitMultiModeWith (policy) (baseTokens) (overrideTokens) (overrideSelector)
+emitMultiModeWith (policy) (baseTokens) (overrideTokens) (overrideSelector)
     : string
 ```
 
@@ -208,13 +252,15 @@ CssEmitter.emitMultiModeWith (policy) (baseTokens) (overrideTokens) (overrideSel
 
 ```fsharp
 CssEmitter.emitCalcPreserving
-    (baseTokenPath       : string list)
-    (multiplierTokenPath : string list)
-    (tokens              : (string list * ResolvedToken) seq)
+    (baseVarName       : string)    // e.g. "--base"
+    (multiplierVarName : string)    // e.g. "--multiplier"
+    (tokens            : (string list * ResolvedToken) seq)
     : string
 ```
 
-Tokens whose value fits `base × multiplier^N` emit `calc(var(--base) * pow(var(--multiplier), N))`. Others emit concrete values. Enables live slider control in a design workbench.
+Dimension tokens whose value fits `base × multiplier^N` emit `calc(var(--base) * var(--multiplier) * ... * 1px)`. Others emit concrete values. Annotation via the Tokens Studio `tsMathExpression` vendor extension is consulted first (ADR-031), then mathematical inference. Enables live slider control in a design workbench.
+
+As of 0.6.0 the calc match also fires for dimension tokens aliasing number tokens (ADR-033) — the bare number is treated as `Npx` before the scale check.
 
 ### `DimensionUnitPolicy`
 
@@ -222,15 +268,17 @@ Tokens whose value fits `base × multiplier^N` emit `calc(var(--base) * pow(var(
 type DimensionUnitPolicy = string list -> DimensionUnit -> DimensionUnit
 ```
 
-Called per token with the token's path and its current unit. Return `Rem` to convert `px` → `rem` (divides value by 16). Example:
+Called per token with its path and declared unit. Return `Rem` to convert `px` → `rem` (divides value by 16); return `Px` to convert the other direction. Example:
 
 ```fsharp
-let remPolicy : DimensionUnitPolicy =
+let remForTypography : DimensionUnitPolicy =
     fun path unit ->
         match path with
-        | "font-size" :: _ -> Rem
+        | "font-size" :: _ | "line-height" :: _ -> Rem
         | _ -> unit
 ```
+
+Identity is `DimensionUnitPolicy.identity` (passes through unchanged).
 
 ---
 
@@ -251,7 +299,7 @@ CssAudit.audit (cssText: string) : AuditResult
 CssAudit.auditAgainst (cssText: string) (tokenFile: TokenFile) : AuditResult
 ```
 
-Scan CSS rules (not just `:root`) for hardcoded values. Groups by inferred type (colors, dimensions, font families, shadows, durations). `auditAgainst` marks values that already match an existing token as duplicates. Each entry includes the selectors that use it and a frequency count.
+Scan CSS rules (not just `:root`) for hardcoded values. Groups by inferred type (colors, dimensions, font families, shadows, durations). `auditAgainst` populates each entry's `MatchedToken : string option` with the path of a matching token when one exists. Each entry includes the selectors that use it and a frequency count.
 
 ---
 
@@ -288,21 +336,29 @@ Human-readable description of any `ImportError`. Useful for logging or surfacing
 
 ## `Primitives` submodule
 
-`Api.Primitives` exposes the raw building blocks for composing custom pipelines:
+`Api.Primitives` exposes the raw building blocks for composing custom pipelines.
 
 | Name | What it wraps |
 |---|---|
 | `parse` / `parseAs` / `parseAuto` | `Format.parse*` |
-| `serialize` / `serializeAs` / `serializePenpot` | `Format.serialize*` |
-| `validate` | `Validation.validate` |
-| `load` | parse + validate in one call |
+| `serialize` / `serializeAs` / `serializePenpot` | `Format.serialize*` — `serializeAs` requires an `IAcceptDataLoss` parameter at the call site (ADR-028, marks a lossy spec downgrade) |
+| `validate` | `Validation.validate` — includes the cross-type alias check from ADR-033 |
 | `flatten` / `tryFind` / `tryResolveAlias` | token tree traversal |
-| `parseResolver` / `resolve` / `resolveAll` | `Resolver.*` |
+| `parseResolver` / `serializeResolver` / `resolve` / `resolveAll` | `Resolver.*` |
 | `flattenResolved` | full resolution pipeline |
 | `shimWithConfig` | `TokensStudio.shimSingleFile` |
 | `shimTokensStudio` | `TokensStudio.shim` (legacy single-set) |
-| `importTokensStudioRaw` / `importTokensStudioThemed` / `importTokensStudioCombined` | aliased from top-level |
+| `importTokensStudioRaw` / `importTokensStudioThemed` / `importTokensStudioCombined` / `importTokensStudioCombinedWith` | aliased from top-level |
 | `toResolverDocument` / `exportTokensStudio` | aliased from top-level |
-| `formatParseError` / `formatValidationError` / `formatResolveError` / `formatLoadError` / `formatSerializeError` / `formatShimWarning` / `formatImportWarning` / `formatExportWarning` | all error formatters |
+| `formatShimWarning` / `formatImportWarning` / `formatExportWarning` | error formatters |
 
 Normal usage does not require `Primitives`. Use it when you need a specific intermediate step — e.g. parse without validation, or shim without resolving.
+
+---
+
+## See also
+
+- [`migration-0.5-to-0.6.md`](./migration-0.5-to-0.6.md) — what changed in the current version
+- [`spec-context.md`](./spec-context.md) — DTCG 2025.10 spec references and version history
+- [`LOGOS/decisions/`](../LOGOS/decisions/) — Architecture Decision Records (33 ADRs)
+- [`samples/ivanthegeek.tokens.json`](../samples/ivanthegeek.tokens.json) — real-world sample bootstrapped from a live site
