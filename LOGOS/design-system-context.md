@@ -56,15 +56,15 @@ cb.tokens.json — CheddarBooks primitives
           surface.{base,raised,sunken,overlay}
           border.{default,strong,accent}
           accent.{default,hover,subtle,on}
-          feedback.{success,successSubtle,danger,dangerSubtle,info,infoSubtle}  ← pending rename
+          feedback.{success,danger,info}.{default,subtle}
   font / family.{display,body,mono}
          weight.{light,regular,medium,semibold,bold}
          size.{xs,sm,base,md,lg,xl,2xl,3xl,4xl,5xl}
-         lineHeight.{tight,snug,normal,relaxed}                                 ← pending rename
-         letterSpacing.{tight,normal,wide,wider}                                ← pending rename
+         line-height.{tight,snug,normal,relaxed}
+         letter-spacing.{tight,normal,wide,wider}
   spacing / N0 … N24  (4px base unit)
   radius / xs, sm, md, lg, xl, 2xl, pill
-  shadow / xs, sm, md, lg, xl, focusRing                                        ← pending rename
+  shadow / xs, sm, md, lg, xl, focus-ring
   duration / instant, fast, normal, slow
   easing / standard, spring, out
 
@@ -81,9 +81,9 @@ Binding type is `string` — values are `"var(--name)"` ready for Fun.Css/inline
 ```fsharp
 Tokens.Color.Text.Primary              = "var(--color-text-primary)"
 Tokens.Color.Machine.Washer.Default    = "var(--color-machine-washer-default)"
-Tokens.Color.Feedback.SuccessSubtle    = "var(--color-feedback-successSubtle)"  ← pending fix
-Tokens.Font.LineHeight.Normal          = "var(--font-lineHeight-normal)"         ← pending fix
-Tokens.Shadow.FocusRing                = "var(--shadow-focusRing)"               ← pending fix
+Tokens.Color.Feedback.Success.Subtle   = "var(--color-feedback-success-subtle)"
+Tokens.Font.LineHeight.Normal          = "var(--font-line-height-normal)"
+Tokens.Shadow.FocusRing                = "var(--shadow-focus-ring)"
 Tokens.Spacing.N4                      = "var(--spacing-N4)"
 ```
 
@@ -139,7 +139,7 @@ The components are the **primary validation target** for the token pipeline. Whe
 | CSS authoring | DTCG files → CSS emitter | No handwritten CSS vars; emitter is the source |
 | CSS binding in F# | `string` `"var(--name)"` | Fun.Css property builders accept strings directly; no wrapper type needed |
 | UI framework | Fun.Blazor | F# DSL for Blazor; SSR/WASM/PWA/MAUI Hybrid |
-| Design tool | Penpot | Open-source; DTCG import/export; HTML import (untested) |
+| Design tool | Penpot | Open-source; DTCG import/export; HTML import does not exist (EXP-01 falsified 2026-05-02 — open community request, no implementation) |
 | Token tooling (Node) | None | Not using Style Dictionary or Terrazzo; emitters are F# |
 | Color space | OKLCH | Native DTCG 2025.10 support; all LaundryLog colors |
 
@@ -184,8 +184,8 @@ See `experiments-planned.md` for the specific experiments. The intended workflow
 
 **Refinement direction** (Fun.Blazor → Penpot):
 1. Render Fun.Blazor component to HTML
-2. Import HTML into Penpot (feature is new as of ~early 2026; untested)
-3. Refine in Penpot, export, update Fun.Blazor
+2. ~~Import HTML into Penpot~~ — EXP-01 (2026-05-02) confirmed Penpot has no HTML import (community request open since March 2025, no implementation). This direction is not currently feasible.
+3. Alternative: re-create the structure manually in Penpot from the rendered HTML as visual reference, or pivot to a token-only round trip via the DTCG format.
 
 Penpot is visual exploration; Fun.Blazor is ground truth. The two sync at the token layer (shared CSS vars from emitted DTCG tokens).
 
