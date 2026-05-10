@@ -3,12 +3,14 @@
 `FnTools.DesignTokens` — DTCG 2025.10 codec, validator, resolver, and emitters (CSS, F# bindings, Tokens Studio). The entry point is `FnTools.DesignTokens.Api`. One package reference is all you need:
 
 ```xml
-<PackageReference Include="FnTools.DesignTokens" Version="0.6.0" />
+<PackageReference Include="FnTools.DesignTokens" Version="0.7.0" />
 ```
 
 The meta-package transitively pulls in seven layered libraries: `Foundation`, `Format`, `Validation`, `Resolver`, `Css`, `Bindings`, `TokensStudio`. Reference an individual layer if you want a smaller dependency surface.
 
-See [`migration-0.5-to-0.6.md`](./migration-0.5-to-0.6.md) for the changes in 0.6.0 (new `TypeMismatch` validation, dimension→number alias emission fix).
+Migration guides:
+- [`migration-0.6-to-0.7.md`](./migration-0.6-to-0.7.md) — current release. Purely additive: new `Api.validateStrictDtcg` opt-in spec-compliance check.
+- [`migration-0.5-to-0.6.md`](./migration-0.5-to-0.6.md) — new `TypeMismatch` validation, dimension→number alias emission fix.
 
 ---
 
@@ -391,7 +393,8 @@ Normal usage does not require `Primitives`. Use it when you need a specific inte
 
 ## See also
 
-- [`migration-0.5-to-0.6.md`](./migration-0.5-to-0.6.md) — what changed in the current version
+- [`migration-0.6-to-0.7.md`](./migration-0.6-to-0.7.md) — current release changes
+- [`migration-0.5-to-0.6.md`](./migration-0.5-to-0.6.md) — previous release changes
 - [`spec-context.md`](./spec-context.md) — DTCG 2025.10 spec references and version history
 - [`LOGOS/decisions/`](../LOGOS/decisions/) — Architecture Decision Records (33 ADRs)
 - [`samples/ivanthegeek.tokens.json`](../samples/ivanthegeek.tokens.json) — real-world sample bootstrapped from a live site
