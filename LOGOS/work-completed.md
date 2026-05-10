@@ -1,3 +1,23 @@
+## Strict DTCG 2025.10 compliance validator (ADR-028 addendum, completed 2026-05-10)
+
+Closes ADR-028's "future strict-mode serialiser" forward reference. Built as a
+validator rather than a serializer so `Format.serialize` stays infallible (ADR-012)
+and strictness becomes a separate, opt-in concern (mirrors ADR-033 — validation
+surfaces, leaf layer accommodates).
+
+- [x] `Validation.validateStrictDtcg : TokenFile -> Result<unit, ValidationError list>` — walks
+  the file, reports `ConstraintViolation` for any literal `DimensionValue` with `Unit = Em`
+  (direct or inside Border/Shadow/Typography/StrokeStyle composites). References pass.
+- [x] `Api.validateStrictDtcg` and `Primitives.validateStrictDtcg` surface to consumers.
+- [x] 10 new tests: plain Em, Px/Rem pass, Em in shadow.blur / typography.letterSpacing /
+  border.width / strokeStyle.dashArray, alias-not-followed, multi-violation collection
+  (ADR-002), regular validate still accepts Em (separation of concerns), deep-path reporting.
+- [x] ADR-028 addendum: documents why-validator-not-serializer, the rejected
+  Em→Px coercion option, and the "extensions gather here" pattern for future
+  spec deviations.
+- [x] `docs/api-reference.md`: new section + Primitives table entry.
+- [x] 291/291 tests pass.
+
 ## Dimension→number alias emission + validation (ADR-033, completed 2026-05-10)
 
 Reported by downstream consumer (`LOGOS/requests/request_2026-05-10_01_library...md`).

@@ -222,4 +222,182 @@ let allTests =
                     | Error xs -> xs
                 let hasMismatch = es |> List.exists (function TypeMismatch _ -> true | _ -> false)
                 Expect.isFalse hasMismatch "no spurious mismatch on unresolved alias"
+
+
+        // ─── Strict DTCG 2025.10 compliance (ADR-028 follow-up) ───────────────
+
+        testCase "strict: plain dimension with em fails" <| fun () ->
+            let file = fileWith [
+                tn "tracking", mkLeaf
+                    (TokenValue.Dimension { Value = 0.22; Unit = Em })
+                    DimensionType
+            ]
+            match Validation.validateStrictDtcg file with
+            | Ok () -> failtest "expected strict-mode error for em"
+            | Error es ->
+                Expect.isTrue (es.Length > 0) "at least one error"
+                Expect.isTrue
+                    (es |> List.exists (function
+                        | ConstraintViolation (p, msg) ->
+                            p = "tracking" && msg.Contains "em"
+                        | _ -> false))
+                    "tracking flagged with em-mentioning message"
+
+        testCase "strict: px and rem dimensions pass" <| fun () ->
+            let file = fileWith [
+                tn "p", mkLeaf
+                    (TokenValue.Dimension { Value = 8.0;  Unit = Px })
+                    DimensionType
+                tn "r", mkLeaf
+                    (TokenValue.Dimension { Value = 1.0;  Unit = Rem })
+                    DimensionType
+            ]
+            match Validation.validateStrictDtcg file with
+            | Ok () -> ()
+            | Error es -> failtestf "unexpected errors: %A" es
+
+        testCase "strict: em in shadow.blur fails" <| fun () ->
+            let shadow : ShadowValue =
+                ShadowSingle {
+                    Color   = Literal { ColorSpace = SRGB
+                                        Components = (Channel 0.0, Channel 0.0, Channel 0.0)
+                                        Alpha = Some 0.5; Hex = None }
+                    OffsetX = Literal { Value = 0.0; Unit = Px }
+                    OffsetY = Literal { Value = 2.0; Unit = Px }
+                    Blur    = Literal { Value = 0.5; Unit = Em }   // ← the violation
+                    Spread  = Literal { Value = 0.0; Unit = Px }
+                    Inset   = None
+                }
+            let file = fileWith [ tn "s", mkLeaf (TokenValue.Shadow shadow) ShadowType ]
+            match Validation.validateStrictDtcg file with
+            | Ok () -> failtest "expected strict-mode error for em in shadow.blur"
+            | Error es ->
+                Expect.isTrue
+                    (es |> List.exists (function
+                        | ConstraintViolation (p, _) -> p = "s.blur"
+                        | _ -> false))
+                    "s.blur flagged"
+
+        testCase "strict: em in typography.letterSpacing fails" <| fun () ->
+            let typo : TypographyValue = {
+                FontFamily    = Literal (Single "Inter")
+                FontSize      = Literal { Value = 16.0; Unit = Px }
+                FontWeight    = Literal (Keyword Regular)
+                LetterSpacing = Literal { Value = 0.05; Unit = Em }   // ← the violation
+                LineHeight    = Literal 1.4
+            }
+            let file = fileWith [ tn "t", mkLeaf (TokenValue.Typography typo) TypographyType ]
+            match Validation.validateStrictDtcg file with
+            | Ok () -> failtest "expected strict-mode error for em in letterSpacing"
+            | Error es ->
+                Expect.isTrue
+                    (es |> List.exists (function
+                        | ConstraintViolation (p, _) -> p = "t.letterSpacing"
+                        | _ -> false))
+                    "t.letterSpacing flagged"
+
+        testCase "strict: em in border.width fails" <| fun () ->
+            let border : BorderValue = {
+                Color = Literal { ColorSpace = SRGB
+                                  Components = (Channel 0.0, Channel 0.0, Channel 0.0)
+                                  Alpha = None; Hex = None }
+                Width = Literal { Value = 0.1; Unit = Em }    // ← the violation
+                Style = Literal (StrokeKeyword Solid)
+            }
+            let file = fileWith [ tn "b", mkLeaf (TokenValue.Border border) BorderType ]
+            match Validation.validateStrictDtcg file with
+            | Ok () -> failtest "expected strict-mode error for em in border.width"
+            | Error es ->
+                Expect.isTrue
+                    (es |> List.exists (function
+                        | ConstraintViolation (p, _) -> p = "b.width"
+                        | _ -> false))
+                    "b.width flagged"
+
+        testCase "strict: em in strokeStyle.dashArray fails" <| fun () ->
+            let stroke : StrokeStyleValue =
+                StrokeCustom {
+                    DashArray = [
+                        Literal { Value = 4.0; Unit = Px }
+                        Literal { Value = 0.5; Unit = Em }   // ← the violation
+                    ]
+                    LineCap = Butt
+                }
+            let file = fileWith [ tn "x", mkLeaf (TokenValue.StrokeStyle stroke) StrokeStyleType ]
+            match Validation.validateStrictDtcg file with
+            | Ok () -> failtest "expected strict-mode error for em in dashArray[1]"
+            | Error es ->
+                Expect.isTrue
+                    (es |> List.exists (function
+                        | ConstraintViolation (p, _) -> p = "x.dashArray[1]"
+                        | _ -> false))
+                    "x.dashArray[1] flagged"
+
+        testCase "strict: alias does not produce a strict error (refs not followed)" <| fun () ->
+            let file = fileWith [
+                tn "base",  mkLeaf (TokenValue.Dimension { Value = 0.22; Unit = Em }) DimensionType
+                tn "alias", mkLeaf (TokenValue.Alias (CurlyBrace ["base"]))           DimensionType
+            ]
+            match Validation.validateStrictDtcg file with
+            | Error es ->
+                // 'base' is flagged; 'alias' is NOT (it's a Reference, not a literal).
+                let flaggedPaths =
+                    es |> List.choose (function
+                        | ConstraintViolation (p, _) -> Some p
+                        | _ -> None)
+                Expect.contains    flaggedPaths "base"  "base flagged"
+                Expect.isFalse (List.contains "alias" flaggedPaths) "alias not flagged"
+            | Ok () -> failtest "expected strict error on base"
+
+        testCase "strict: multiple violations collected, not short-circuited" <| fun () ->
+            let file = fileWith [
+                tn "a", mkLeaf (TokenValue.Dimension { Value = 0.1; Unit = Em }) DimensionType
+                tn "b", mkLeaf (TokenValue.Dimension { Value = 0.2; Unit = Em }) DimensionType
+                tn "c", mkLeaf (TokenValue.Dimension { Value = 0.3; Unit = Em }) DimensionType
+            ]
+            match Validation.validateStrictDtcg file with
+            | Ok () -> failtest "expected three errors"
+            | Error es ->
+                Expect.equal es.Length 3 "all three em violations collected"
+
+        testCase "strict: regular validate still accepts em (separation of concerns)" <| fun () ->
+            let file = fileWith [
+                tn "tracking", mkLeaf
+                    (TokenValue.Dimension { Value = 0.22; Unit = Em })
+                    DimensionType
+            ]
+            match Validation.validate file with
+            | Ok () -> ()
+            | Error es ->
+                failtestf "regular validate should accept em (extension per ADR-028): %A" es
+
+        testCase "strict: nested group with em deep inside fails with correct path" <| fun () ->
+            let typo : TypographyValue = {
+                FontFamily    = Literal (Single "Inter")
+                FontSize      = Literal { Value = 16.0; Unit = Px }
+                FontWeight    = Literal (Keyword Regular)
+                LetterSpacing = Literal { Value = 0.05; Unit = Em }
+                LineHeight    = Literal 1.4
+            }
+            let file = fileWith [
+                tn "font", Group {
+                    Type = None; Metadata = emptyMeta; Root = None; Extends = None
+                    Children = [
+                        tn "heading", Group {
+                            Type = None; Metadata = emptyMeta; Root = None; Extends = None
+                            Children = [
+                                tn "h1", mkLeaf (TokenValue.Typography typo) TypographyType
+                            ]
+                        }
+                    ]
+                }
+            ]
+            match Validation.validateStrictDtcg file with
+            | Ok () -> failtest "expected strict-mode error"
+            | Error es ->
+                Expect.isTrue
+                    (es |> List.exists (function
+                        | ConstraintViolation (p, _) -> p = "font.heading.h1.letterSpacing"
+                        | _ -> false))
+                    "deep path is reported correctly"
     ]

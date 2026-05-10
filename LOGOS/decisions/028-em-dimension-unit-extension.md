@@ -84,3 +84,40 @@ over a separate "extensions" type because:
   0 incomplete-pattern warnings after the change.
 - `insights.md` updated: entry "DTCG dimension units are `px` and `rem` only"
   corrected to reflect `Em` support and accurate `CssIngest` behavior.
+
+## Addendum — strict-mode validator built (2026-05-10)
+
+The "future strict-mode serialiser" mentioned in the Rejected section is now
+built, taking the alternate form discussed in the original ADR's parenthetical
+("a future strict-mode serialiser should treat `Em` as an error"):
+`Validation.validateStrictDtcg : TokenFile -> Result<unit, ValidationError list>`.
+
+Walks the file, reports any literal `DimensionValue` with `Unit = Em` (direct
+or inside Border/Shadow/Typography/StrokeStyle composites) as a
+`ConstraintViolation`. References (aliases) are not followed — only literal
+positions are checked, matching the rest of the validation layer's convention.
+
+Design choice (vs. a fallible `serializeStrict`):
+
+- `Format.serialize` stays infallible, preserving the ADR-012 principle that
+  serialisation of a structurally valid file cannot fail.
+- Strictness becomes a separate concern: validation is where "is this
+  acceptable?" lives; serialise is where "render it" lives. This mirrors how
+  ADR-033 placed the `dimension`→`number` cross-type check in validation
+  rather than in the emitter.
+- The "map `Em` to `px` with `IAcceptDataLoss`" coercion option from the
+  original wording was rejected: `em` is element-relative; no general
+  numeric conversion exists.
+
+Surfaced via `Api.validateStrictDtcg` and `Api.Primitives.validateStrictDtcg`;
+documented in `docs/api-reference.md`. 10 new tests cover the common
+extension positions plus error-collection-not-short-circuited (ADR-002 still
+applies) and the separation-of-concerns guarantee that regular `validate`
+still accepts `Em` (extension is allowed in the domain; only opt-in strictness
+rejects it).
+
+When future extensions are added to the domain (e.g., a new dimension unit or
+color space), add the corresponding rejection in `Validation.fs`
+`nonSpecTokenValue` and a test asserting the new case. The "extensions
+gather here" pattern keeps the strict checker the one place to find the
+catalogue of library-level deviations from the spec.

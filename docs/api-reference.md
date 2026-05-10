@@ -185,6 +185,38 @@ Serialize a `ResolverDocument` to JSON. Output round-trips through `parseResolve
 
 ---
 
+## Strict DTCG 2025.10 compliance check
+
+### `Api.validateStrictDtcg`
+
+```fsharp
+Api.validateStrictDtcg (file: TokenFile) : Result<unit, ValidationError list>
+```
+
+Reports `ConstraintViolation` errors for any feature that is valid in this library's domain but **not** in the published DTCG 2025.10 spec — today, only `DimensionUnit.Em` (added per ADR-028 for Tokens Studio / Penpot round-trip fidelity, but not in DTCG §7.4.6's list of valid dimension units).
+
+Use this when you need to guarantee that a `TokenFile` contains no library extensions before exporting it to a strict downstream consumer. Detects `Em` in any literal position:
+
+- `TokenValue.Dimension` directly
+- `Border.Width`, `StrokeStyle.dashArray`
+- `Shadow.OffsetX / OffsetY / Blur / Spread`
+- `Typography.FontSize / LetterSpacing`
+
+References (aliases) are not followed — only literal positions are checked. Errors are collected across the whole file, not short-circuited on the first violation. Regular `Validation.validate` (and `Api.import`'s built-in validation) continue to accept `Em` — strict compliance is an opt-in additional check.
+
+```fsharp
+match Api.import jsonText with
+| Error es -> handleImportErrors es
+| Ok tokens ->
+    // Optional: refuse to ship anything containing library extensions
+    match Format.parse jsonText |> Result.bind (Api.validateStrictDtcg >> Result.mapError ValidationFailed >> Result.map (fun () -> ())) with
+    | Error _ -> warnUserAboutExtensions ()
+    | Ok _    -> ()
+    proceed tokens
+```
+
+---
+
 ## CSS emission
 
 From `FnTools.DesignTokens.Css` — included via the meta-package, `[<AutoOpen>]` so functions are unqualified after `open FnTools.DesignTokens.Css`.
@@ -343,6 +375,7 @@ Human-readable description of any `ImportError`. Useful for logging or surfacing
 | `parse` / `parseAs` / `parseAuto` | `Format.parse*` |
 | `serialize` / `serializeAs` / `serializePenpot` | `Format.serialize*` — `serializeAs` requires an `IAcceptDataLoss` parameter at the call site (ADR-028, marks a lossy spec downgrade) |
 | `validate` | `Validation.validate` — includes the cross-type alias check from ADR-033 |
+| `validateStrictDtcg` | `Validation.validateStrictDtcg` — opt-in spec-extension check (ADR-028 addendum) |
 | `flatten` / `tryFind` / `tryResolveAlias` | token tree traversal |
 | `parseResolver` / `serializeResolver` / `resolve` / `resolveAll` | `Resolver.*` |
 | `flattenResolved` | full resolution pipeline |

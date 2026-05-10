@@ -353,6 +353,82 @@ let private checkAliasTypes (file: TokenFile) : ValidationError list =
     List.ofSeq errors
 
 
+// ─── Strict DTCG 2025.10 compliance check ───────────────────────────────────
+// validateStrictDtcg flags features that are valid in our domain but not in
+// the published DTCG 2025.10 spec. The library extends the spec deliberately
+// (ADR-028: DimensionUnit.Em for TS/Penpot round-trip fidelity); this checker
+// is the opt-in proof that a TokenFile contains nothing beyond the spec.
+//
+// References are not followed — only literal positions are checked. An alias
+// that resolves to an Em-unit token will pass here but fail downstream if the
+// caller also runs the resolver and re-runs strict checks on resolved values.
+//
+// Today the only extension is Em. When future extensions are added to the
+// domain, add the corresponding rejection here.
+
+let private nonSpecDimension (path: string) (d: DimensionValue) : ValidationError list =
+    match d.Unit with
+    | Em -> [ ConstraintViolation (path,
+                "unit 'em' is not in DTCG 2025.10 (extension per ADR-028)") ]
+    | Px | Rem -> []
+
+let private nonSpecValueOrRefDimension (path: string) (vor: ValueOrRef<DimensionValue>) : ValidationError list =
+    match vor with
+    | Literal d   -> nonSpecDimension path d
+    | Reference _ -> []
+
+let private nonSpecValueOrRefStrokeStyle (path: string) (vor: ValueOrRef<StrokeStyleValue>) : ValidationError list =
+    match vor with
+    | Literal (StrokeCustom obj) ->
+        obj.DashArray
+        |> List.mapi (fun i v ->
+            nonSpecValueOrRefDimension (sprintf "%s.dashArray[%d]" path i) v)
+        |> List.concat
+    | Literal (StrokeKeyword _) -> []
+    | Reference _               -> []
+
+let private nonSpecShadowObject (path: string) (s: ShadowObject) : ValidationError list =
+    [ nonSpecValueOrRefDimension (path + ".offsetX") s.OffsetX
+      nonSpecValueOrRefDimension (path + ".offsetY") s.OffsetY
+      nonSpecValueOrRefDimension (path + ".blur")    s.Blur
+      nonSpecValueOrRefDimension (path + ".spread")  s.Spread ]
+    |> List.concat
+
+let private nonSpecTokenValue (path: string) (v: TokenValue) : ValidationError list =
+    match v with
+    | TokenValue.Dimension d   -> nonSpecDimension path d
+    | TokenValue.StrokeStyle s -> nonSpecValueOrRefStrokeStyle path (Literal s)
+    | TokenValue.Border b      ->
+        nonSpecValueOrRefDimension     (path + ".width") b.Width
+        @ nonSpecValueOrRefStrokeStyle (path + ".style") b.Style
+    | TokenValue.Shadow (ShadowSingle obj)   -> nonSpecShadowObject path obj
+    | TokenValue.Shadow (ShadowMultiple xs)  ->
+        xs
+        |> List.mapi (fun i x ->
+            match x with
+            | ShadowLiteral obj  -> nonSpecShadowObject (sprintf "%s[%d]" path i) obj
+            | ShadowReference _  -> [])
+        |> List.concat
+    | TokenValue.Typography t  ->
+        nonSpecValueOrRefDimension (path + ".fontSize")      t.FontSize
+        @ nonSpecValueOrRefDimension (path + ".letterSpacing") t.LetterSpacing
+    | _ -> []
+
+let rec private strictWalkNode (path: string list) (node: TokenNode) : ValidationError list =
+    match node with
+    | TokenLeaf t -> nonSpecTokenValue (joinPath path) t.Value
+    | Group g ->
+        let rootErrs =
+            match g.Root with
+            | Some t -> nonSpecTokenValue (joinPath path) t.Value
+            | None   -> []
+        let childErrs =
+            g.Children
+            |> List.collect (fun (name, child) ->
+                strictWalkNode (path @ [TokenName.value name]) child)
+        rootErrs @ childErrs
+
+
 // ─── Public API ──────────────────────────────────────────────────────────────
 
 let validate (file: TokenFile) : Result<unit, ValidationError list> =
@@ -408,3 +484,22 @@ let validateResolver (doc: ResolverDocument) : Result<unit, ValidationError list
 
     if errors.Count = 0 then Ok ()
     else Error (List.ofSeq errors)
+
+
+/// Strict DTCG 2025.10 compliance check. Returns errors for any feature that
+/// is valid in this library's domain but not in the published spec — today,
+/// only <see cref="DimensionUnit.Em"/> (ADR-028).
+///
+/// Use this when you need to guarantee that a <see cref="TokenFile"/> contains
+/// no library extensions before exporting it to a strict downstream consumer.
+/// References (aliases) are not followed — only literal positions are checked;
+/// run strict checks on resolved tokens separately if you also need to catch
+/// aliases that resolve to extension values.
+let validateStrictDtcg (file: TokenFile) : Result<unit, ValidationError list> =
+    let errs =
+        file.Children
+        |> List.collect (fun (name, node) ->
+            strictWalkNode [TokenName.value name] node)
+    match errs with
+    | [] -> Ok ()
+    | xs -> Error xs
