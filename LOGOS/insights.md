@@ -201,17 +201,21 @@ Three interaction surfaces in 2.14.4 — see `penpot-api.md`:
 - MCP server (`@penpot/mcp`) wrapping the Plugins API (requires browser open)
 - Claude browser extension (interactive, no setup)
 
-Penpot also supports SVG export (reliable) and HTML import (new, untested as of 2026-05-02).
+Penpot supports SVG export (reliable). HTML import does not exist (EXP-01 falsified
+2026-05-02 — open community feature request since March 2025, no implementation;
+File menu has no HTML option, Plugins menu offers only the plugin manager).
 
-**Proposed workflow**:
+**Actual workflow** (post-EXP-01):
 1. Author Fun.Blazor components in F# using typed token bindings
-2. Render to HTML, import into Penpot for visual design iteration
+2. Author the corresponding Penpot file by hand (or via DTCG token-only round trip)
 3. Refine in Penpot (variants, states, layout), export SVG
 4. Use SVG as reference to update Fun.Blazor component structure
 
 **Reverse direction**: Penpot variants/states → document component structure decisions → inform Fun.Blazor component parameters. Penpot is the visual exploration tool; Fun.Blazor is ground truth.
 
-The HTML import direction is unexplored. Penpot SVG export is the reliable path. Test both and document the gap in `experiments-planned.md`.
+The HTML→Penpot direction is blocked at the tool. Token round-trip works through
+DTCG import/export, with the caveats documented in ADR-016 (hex fallback) and
+ADRs 021–026 (Tokens Studio dual-carrier preservation).
 
 ## Token naming — post-2025.10 community guidance
 
@@ -282,6 +286,30 @@ The DTCG 2025.10 spec explicitly limits `$value.unit` for dimension tokens to `"
 **Rule of thumb**: if a CSS value is relative to font-size (`em`) or viewport (`vw`, `vh`, `%`), ask whether it is a design decision or a layout/sizing implementation. Design decisions (spacing scale, type scale in `rem`) go in tokens. Layout implementations stay in component code.
 
 `CssAudit` reflects this: `isDimensionValue` matches only `px` and `rem`. Values in `em` and other relative units are classified as `CssNative` and surfaced explicitly so the bootstrap workflow can route them to the component layer rather than silently discarding them.
+
+## Dual-layer response when a footgun crosses the validation boundary
+
+ADR-033 fixed a class of bug — `dimension` aliasing `number` produced unitless CSS
+— by responding on two layers at once: validation **surfaces** the type mismatch
+to the author as `TypeMismatch`; the emitter **coerces** the bare number to
+`Npx` so downstream CSS is valid even if the caller skipped validation. Neither
+layer alone is sufficient: validation alone would still let `Primitives.*`
+callers produce broken output; emitter coercion alone would silently paper over
+the authoring mistake.
+
+This pattern generalises whenever a problem can be caught at one layer (the
+type system / validation boundary) but bypassed by a different code path that
+reaches the leaf layer (the emitter / I/O). The two-layer response treats the
+type system as the documentation (loud, refusing, fast feedback) and the leaf
+layer as the safety net (quiet, accommodating, no broken output). Either alone
+is wrong — together they make the broken state both visible and harmless.
+
+Same shape: ADR-016 (`Hex` field preserved as ground truth for the codec even
+though gamut math is out of scope), ADR-011 (`$extensions` round-tripped
+verbatim by the leaf serializer regardless of what validation knows about
+them). The principle: when scope (ADR-013) means the library cannot solve a
+problem itself, make sure it neither corrupts data on the way through nor
+hides the problem from the caller.
 
 ## LaundryLog existing components use hard-coded CSS class names
 

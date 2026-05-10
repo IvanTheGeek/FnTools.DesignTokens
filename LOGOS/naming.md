@@ -71,7 +71,7 @@ Key principles:
 
 ## Known gaps
 
-### 1. Fused compound segments — FIXED (2026-05-02)
+### 1. ~~Fused compound segments~~ — resolved 2026-05-02
 
 `successSubtle`, `dangerSubtle`, `infoSubtle`, `focusRing`, `lineHeight`, `letterSpacing` were
 renamed as a single breaking commit. The feedback group was restructured to use `.default` +
