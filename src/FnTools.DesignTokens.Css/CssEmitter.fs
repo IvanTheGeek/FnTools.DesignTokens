@@ -2,6 +2,8 @@ module FnTools.DesignTokens.Css
 
 open System
 open System.Text
+open System.Text.Json.Nodes
+open System.Text.RegularExpressions
 open FnTools.DesignTokens
 
 
@@ -480,8 +482,46 @@ module CssEmitter =
 
     // ─── Calc-preserving emitter (Gap 1 — design-tool workbench) ─────────────
 
-    /// Returns Some n when dimVal ≈ baseVal × multVal^n for an integer n, else None.
-    /// Uses relative tolerance 1e-6 to guard against floating-point drift.
+    // ─── Annotated-expression helpers (ADR-027 option a / ADR-031) ───────────────
+
+    /// Vendor namespace written by the Tokens Studio shim (ADR-023).
+    let private tsVendorKey   = "com.fntools.designtokens"
+    let private tsMathExprKey = "tsMathExpression"
+
+    /// Read the tsMathExpression string from a token's vendor extensions if present.
+    let private tryReadMathExpr (ext: Extensions) : string option =
+        ext |> List.tryPick (fun (k, node) ->
+            if k = tsVendorKey then
+                match node with
+                | :? JsonObject as vendor when vendor.ContainsKey tsMathExprKey ->
+                    vendor.[tsMathExprKey]
+                    |> Option.ofObj
+                    |> Option.bind (fun v -> try Some (v.GetValue<string>()) with _ -> None)
+                | _ -> None
+            else None)
+
+    /// Strip an outer round(…) wrapper from a math expression string.
+    /// "round({base} * pow({multiplier}, 3))" → "{base} * pow({multiplier}, 3)"
+    let private stripRound (expr: string) : string =
+        let m = Regex.Match(expr.Trim(), @"^round\((.+)\)$", RegexOptions.IgnoreCase)
+        if m.Success then m.Groups.[1].Value.Trim() else expr.Trim()
+
+    /// Try to parse the integer exponent N from a Tokens Studio power-of-multiplier
+    /// expression. Handles both plain and round()-wrapped forms.
+    ///
+    /// Recognised patterns (after round() stripping):
+    ///   {base}                           → n = 0
+    ///   {base} * pow({multiplier}, N)    → n = N
+    let private tryParsePowN (baseRef: string) (multRef: string) (expr: string) : int option =
+        let inner = stripRound expr
+        if inner = sprintf "{%s}" baseRef then Some 0
+        else
+            let pat =
+                sprintf @"^\{%s\}\s*\*\s*pow\(\{%s\}\s*,\s*(-?\d+)\)$"
+                    (Regex.Escape baseRef) (Regex.Escape multRef)
+            let m = Regex.Match(inner, pat, RegexOptions.IgnoreCase)
+            if m.Success then Some (int m.Groups.[1].Value) else None
+
     let private tryInferCalcN (baseVal: float) (multVal: float) (dimVal: float) : int option =
         if baseVal < 1e-9 || abs(multVal - 1.0) < 1e-9 || dimVal < 1e-9 then None
         else
@@ -547,7 +587,13 @@ module CssEmitter =
                 let decls =
                     match token.Value, baseOpt, multOpt with
                     | ResolvedDimension d, Some bv, Some mv ->
-                        match tryInferCalcN bv mv d.Value with
+                        let baseRef = String.concat "." basePath
+                        let multRef = String.concat "." multPath
+                        let nOpt =
+                            (tryReadMathExpr token.Metadata.Extensions
+                             |> Option.bind (tryParsePowN baseRef multRef))
+                            |> Option.orElseWith (fun () -> tryInferCalcN bv mv d.Value)
+                        match nOpt with
                         | Some n -> [ cssVarName path, buildCalcExpr baseVarName multiplierVarName n ]
                         | None   -> tokenToCssDecls path token
                     | _ -> tokenToCssDecls path token

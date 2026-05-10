@@ -1,5 +1,6 @@
 module FnTools.DesignTokens.Tests.CssEmitterTests
 
+open System.Text.Json.Nodes
 open Expecto
 open FnTools.DesignTokens
 open FnTools.DesignTokens.Css
@@ -387,6 +388,55 @@ let private themedTests =
     ]
 
 
+// ─── emitCalcPreserving ───────────────────────────────────────────────────────
+
+let private resolvedDimWithExpr (v: float) (u: DimensionUnit) (expr: string) : ResolvedToken =
+    let vendor = JsonObject()
+    vendor.Add("tsMathExpression", JsonValue.Create<string>(expr))
+    { Value    = ResolvedDimension { Value = v; Unit = u }
+      Type     = DimensionType
+      Metadata = { Description = None; Deprecated = None; Extensions = [ "com.fntools.designtokens", vendor ] } }
+
+let calcPreservingTests = testList "emitCalcPreserving" [
+
+    testCase "mathematical inference: non-rounded value emits calc()" <| fun () ->
+        // 16 * 1.25^3 = 31.25 — exact match, tryInferCalcN finds n=3
+        let tokens = [
+            ["base"],          resolvedNum 16.0
+            ["multiplier"],    resolvedNum 1.25
+            ["spacing"; "sm"], resolvedDim 31.25 Px
+        ]
+        let css = CssEmitter.emitCalcPreserving "--base" "--multiplier" (List.toSeq tokens)
+        Expect.stringContains css
+            "--spacing-sm: calc(var(--base) * var(--multiplier) * var(--multiplier) * var(--multiplier) * 1px);"
+            "n=3 calc expression"
+
+    testCase "annotated path: round()-wrapped expression emits calc() with correct n" <| fun () ->
+        // round() changes 31.25 → 31; without annotation tryInferCalcN would fail (0.8% error >> 1e-6)
+        let tokens = [
+            ["base"],          resolvedNum 16.0
+            ["multiplier"],    resolvedNum 1.25
+            ["spacing"; "sm"], resolvedDimWithExpr 31.0 Px "round({base} * pow({multiplier}, 3))"
+        ]
+        let css = CssEmitter.emitCalcPreserving "--base" "--multiplier" (List.toSeq tokens)
+        Expect.stringContains css
+            "--spacing-sm: calc(var(--base) * var(--multiplier) * var(--multiplier) * var(--multiplier) * 1px);"
+            "annotation path emits calc n=3"
+
+    testCase "no annotation and non-fitting value falls back to concrete px" <| fun () ->
+        // 31.0 ≠ 16 × 1.25^n for any integer n (round()-ed from 31.25), no annotation present
+        let tokens = [
+            ["base"],          resolvedNum 16.0
+            ["multiplier"],    resolvedNum 1.25
+            ["spacing"; "sm"], resolvedDim 31.0 Px
+        ]
+        let css = CssEmitter.emitCalcPreserving "--base" "--multiplier" (List.toSeq tokens)
+        Expect.stringContains css "--spacing-sm: 31px;" "falls back to concrete px"
+        Expect.isFalse (css.Contains "calc(") "no calc expression emitted"
+
+]
+
+
 // ─── All ──────────────────────────────────────────────────────────────────────
 
 let allTests =
@@ -398,4 +448,5 @@ let allTests =
         emitTests
         multiModeTests
         themedTests
+        calcPreservingTests
     ]
