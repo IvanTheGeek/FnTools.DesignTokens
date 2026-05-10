@@ -49,3 +49,40 @@ not part of `CssIngest` itself.
 - Components that use `em`-based spacing or `%`-based sizing must continue using those
   values directly — they are not expressible as DTCG tokens and the component layer
   (ADR 017) is the right owner.
+
+## Addendum — `TokenValue.CssNative` is closed, not deferred (2026-05-10)
+
+The original ADR left option 4 ("emit `CssNative` token type") "open as a future
+enhancement." On review (session 2026-05-10), this is now explicitly **closed**.
+The audit-time classification (`CssAudit.AuditValueType.CssNative`) is the
+complete answer; there will be no first-class `TokenValue.CssNative` domain case.
+
+Three reasons:
+
+1. **No clean JSON shape exists.** DTCG 2025.10 has no `cssNative` or `string`
+   token type. Every implementation route breaks something:
+   - `$type: "cssNative"` produces files other DTCG consumers reject (violates ADR-014 and ADR-013).
+   - `$type: "string"` has the same problem — `string` isn't in the spec.
+   - `$type: "number"` + a vendor `$extensions.cssNative` value carries the
+     unit only in the extension, lying about the token's actual type. This is
+     option 2 in the original ADR ("lose type semantics") wearing a disguise.
+
+2. **The component layer already owns these values (ADR-017).** Values like
+   `clamp(2rem, 5vw, 3.6rem)` for hero typography or `0.22em` letter-spacing
+   are element-relative by definition — they belong in the component's CSS,
+   not in the portable design-system vocabulary. The whole point of `em` is
+   "relative to the current element's font-size," which has no meaning at the
+   token layer.
+
+3. **No companion-package middle path.** Unlike the schema-validator close
+   (ADR-013 addendum, 2026-05-10) where a downstream `FnTools.DesignTokens.SchemaCheck`
+   could layer on top of `Foundation`, `TokenValue` is a closed DU in
+   `Foundation`. A separate package cannot add a case to it. The choice is
+   binary: either we add it here, or we close the question. We close it.
+
+The user-visible behavior is unchanged from the original decision: `CssIngest`
+emits `Skipped` warnings; `CssAudit` surfaces these values under the
+`CssNative` classification so the bootstrap workflow routes them to the
+component layer; the codec itself never produces or consumes a `CssNative`
+token. The "future" wording in option 4 of the original decision is hereby
+withdrawn.
