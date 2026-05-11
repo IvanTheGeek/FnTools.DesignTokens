@@ -586,7 +586,7 @@ Normal usage does not require `Primitives`. Use it when you need a specific inte
 ## See also
 
 - [`getting-started.md`](./getting-started.md) — five-minute walkthrough: import → validate → emit CSS → bind in F#
-- [Migration guides](#) — `migration-0.2-to-0.3.md` through `migration-0.9-to-0.10.md` (see top of page for full list)
+- [Migration guides](#) — `migration-0.2-to-0.3.md` through `migration-0.10.2-to-0.11.0.md` (see top of page for full list)
 - [`spec-context.md`](./spec-context.md) — DTCG 2025.10 spec references and version history
-- [`LOGOS/decisions/`](../LOGOS/decisions/) — Architecture Decision Records (37 ADRs, 1 deferred — `decisions/README.md` indexes them)
+- [`LOGOS/decisions/`](../LOGOS/decisions/) — Architecture Decision Records (38 ADRs, 1 deferred — `decisions/README.md` indexes them)
 - [`samples/ivanthegeek.tokens.json`](../samples/ivanthegeek.tokens.json) — real-world sample bootstrapped from a live site
