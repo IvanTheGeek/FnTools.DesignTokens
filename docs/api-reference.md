@@ -6,10 +6,11 @@
 <PackageReference Include="FnTools.DesignTokens" Version="0.11.0" />
 ```
 
-The meta-package transitively pulls in seven layered libraries: `Foundation`, `Format`, `Validation`, `Resolver`, `Css`, `Bindings`, `TokensStudio`. Reference an individual layer if you want a smaller dependency surface.
+The meta-package transitively pulls in seven layered libraries: `Foundation`, `Format`, `Validation`, `Resolver`, `Css`, `FSharp`, `TokensStudio`. Reference an individual layer if you want a smaller dependency surface.
 
 Migration guides (newest first):
-- [`migration-0.10.2-to-0.11.0.md`](./migration-0.10.2-to-0.11.0.md) — current release. New `BindingsEmitter.checkIdentifierSafety` + `emitChecked` catch silent data loss from F# identifier collisions and leaf/branch conflicts in generated bindings (ADR-038).
+- [`migration-0.11.0-to-0.12.0.md`](./migration-0.11.0-to-0.12.0.md) — current release. Breaking: `FnTools.DesignTokens.Bindings` renamed to `FnTools.DesignTokens.FSharp`; `BindingsIdentifierIssue` → `IdentifierIssue`. Mechanical find-and-replace. See [ADR-039](../LOGOS/decisions/039-emitter-contract-and-naming.md).
+- [`migration-0.10.2-to-0.11.0.md`](./migration-0.10.2-to-0.11.0.md) — previous release. New `BindingsEmitter.checkIdentifierSafety` + `emitChecked` catch silent data loss from F# identifier collisions and leaf/branch conflicts in generated bindings (ADR-038).
 - [`migration-0.10.1-to-0.10.2.md`](./migration-0.10.1-to-0.10.2.md) — internal refactor: `flattenResolvedFile` + `partialFlattenResolvedFile` unified via shared helper. Tiny cleanup of `TokenUnresolved` warning format (ADR-033 v0.10.2 addendum).
 - [`migration-0.10.0-to-0.10.1.md`](./migration-0.10.0-to-0.10.1.md) — bug fix: `flattenResolvedFile` was clobbering the aliasing token's declared type, producing unitless CSS for dimension→number aliases (ADR-033 v0.10.1 addendum).
 - [`migration-0.9-to-0.10.md`](./migration-0.9-to-0.10.md) — `ValidateOptions` opt-in laxness (ADR-035); `Resolver.resolveAll` deprecated, `Resolver.flattenAliases` now public (ADR-036).
@@ -490,9 +491,9 @@ Scan CSS rules (not just `:root`) for hardcoded values. Groups by inferred type 
 
 ---
 
-## F# bindings
+## F# emitter
 
-From `FnTools.DesignTokens.Bindings`. After `open FnTools.DesignTokens.Bindings`, all functions are callable unqualified (the module declares `module FnTools.DesignTokens.Bindings` directly).
+From `FnTools.DesignTokens.FSharp` (renamed from `Bindings` in v0.12.0 — see [ADR-039](../LOGOS/decisions/039-emitter-contract-and-naming.md)). After `open FnTools.DesignTokens.FSharp`, all functions are callable unqualified (the module declares `module FnTools.DesignTokens.FSharp` directly).
 
 ### `emit`
 
@@ -518,17 +519,17 @@ Numeric path segments are prefixed with `N` (e.g. `scale.400` → `Scale.N400`).
 ```fsharp
 checkIdentifierSafety
     (tokens: (string list * ResolvedToken) seq)
-    : BindingsIdentifierIssue list
+    : IdentifierIssue list
 
-type BindingsIdentifierIssue =
+type IdentifierIssue =
     | IdentifierCollision of fsharpPath: string list * tokenPaths: string list list
     | LeafBranchConflict
         of leafFsharpPath: string list
          * leafTokenPath: string list
          * extendingTokenPaths: string list list
 
-module BindingsIdentifierIssue =
-    val format : BindingsIdentifierIssue -> string
+module IdentifierIssue =
+    val format : IdentifierIssue -> string
 ```
 
 Pre-flight check. Returns `[]` if `emit` would produce one binding per token. Otherwise returns the list of `IdentifierCollision` (same F# path from multiple DTCG paths) and `LeafBranchConflict` (one F# path is a strict prefix of another, with the shorter being a Leaf) issues.
@@ -539,7 +540,7 @@ Pre-flight check. Returns `[]` if `emit` would produce one binding per token. Ot
 emitChecked
     (moduleName: string)
     (tokens: (string list * ResolvedToken) seq)
-    : Result<string, BindingsIdentifierIssue list>
+    : Result<string, IdentifierIssue list>
 ```
 
 `emit` + `checkIdentifierSafety` in one call. Returns `Ok source` if the check is clean; otherwise `Error issues` and does not emit. Use when you want pipeline build failures to fire at emission time rather than at downstream F# compilation (or worse — silently produce a file missing tokens the consumer expects to reference).

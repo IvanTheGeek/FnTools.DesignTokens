@@ -22,7 +22,7 @@ Seven layered packages plus a meta-package, all under the `FnTools.DesignTokens`
 - `FnTools.DesignTokens.Validation` — invariants (alpha range, fontWeight, alias cycles, hex/component consistency).
 - `FnTools.DesignTokens.Resolver` — multi-set / modifier resolver document semantics.
 - `FnTools.DesignTokens.Css` — CSS custom-property emitter + `CssIngest` / `CssAudit` for ingesting existing stylesheets.
-- `FnTools.DesignTokens.Bindings` — typed F# bindings emitter (resolved tokens → `Tokens.*` module).
+- `FnTools.DesignTokens.FSharp` — F# emitter (resolved tokens → `Tokens.*` module). Renamed from `Bindings` in v0.12.0; see ADR-039.
 - `FnTools.DesignTokens.TokensStudio` — Tokens Studio import/export with alias-preserving round-trip.
 - `FnTools.DesignTokens` — meta-package; depends on all seven above.
 

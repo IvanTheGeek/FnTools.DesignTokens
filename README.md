@@ -1,20 +1,33 @@
 # FnTools.DesignTokens
 
-F# library for working with [DTCG 2025.10](https://tr.designtokens.org/format/) design tokens — the W3C Community Group standard for sharing design decisions between tools.
+F# library implementing the **DTCG 2025.10** specification — the W3C Community Group standard for sharing design tokens between tools. Parses, resolves, and translates design-token files into any target format your codebase needs: CSS custom properties, F# source code, Tokens Studio JSON, and more.
 
-If your design system lives in Penpot or Tokens Studio, this library is how you get those tokens into your F# codebase as typed values, resolved CSS custom properties, or typed binding constants — and back again.
+> **New here?** Read [`docs/concept.md`](docs/concept.md) first — one page on what this library is, where it sits in the design-token toolchain, and what it deliberately does *not* do.
 
 ---
 
-## Why this library
+## Where this library sits in the pipeline
 
-Design tokens are the single source of truth for a design system: colours, spacing, typography, shadows, transitions. The DTCG spec defines a portable JSON format for them. The problem is the gap between that format and actual use:
+The DTCG community describes the design-token toolchain as four stages:
 
-- Tokens Studio (VS Code plugin) and Penpot both use a variant format — different type names, HSL expressions, math formulas, multi-set structures — none of which parses cleanly as DTCG.
-- CSS output requires alias resolution across multiple token sets, unit normalisation, and multi-theme override logic.
-- Round-trips (read → modify → write back to Penpot) need to preserve the original structure, aliases, and expressions, not flatten everything to concrete values.
+```
+DTCG source → Resolver → Translator → Target
+```
 
-This library handles all of that.
+**This library fills the Resolver and Translator stages.** It does not author tokens (a design tool does that) and it does not run a UI (your application does that).
+
+- **Resolver stage** — accepts a DTCG token file, Tokens Studio JSON, or a `.resolver.json`; merges multi-set inheritance chains; evaluates math expressions; resolves aliases; produces a flat sequence of `(path, resolved-value)` pairs.
+- **Translator stage** — turns that flat sequence into a target-native string: CSS custom properties, F# constants, Penpot-compatible JSON, and (planned) Swift, Kotlin, XAML for native platforms.
+
+The boundary between these two stages is a single type:
+
+```fsharp
+(string list * ResolvedToken) seq
+```
+
+Every emitter consumes this. Add a new platform target by adding a new emitter package — the core does not change. See [ADR-039: Emitter contract and naming](LOGOS/decisions/039-emitter-contract-and-naming.md).
+
+Strings in, strings out. The library never touches the filesystem; the caller owns I/O (see [ADR-003](LOGOS/decisions/003-io-belongs-to-caller.md)).
 
 ---
 
@@ -39,13 +52,32 @@ This library handles all of that.
 
 **Ingest CSS** — extract custom properties from existing CSS files, infer token types, produce DTCG token files. The migration path from a hand-authored CSS design system.
 
-**Audit CSS** — scan stylesheets for hardcoded values not covered by existing tokens.
+**Audit CSS** — scan stylesheets for hardcoded values not covered by existing tokens; flag duplicates of values already covered by tokens.
+
+---
+
+## Package layout
+
+Eight packages, all in one meta-package:
+
+| Package | Stage | What it does |
+|---|---|---|
+| `FnTools.DesignTokens.Foundation` | core | Domain types. No external dependencies. |
+| `FnTools.DesignTokens.Format` | resolver | JSON parsing and serialization. |
+| `FnTools.DesignTokens.Validation` | resolver | Strict-by-default constraint checks; permissive mode opt-in. |
+| `FnTools.DesignTokens.Resolver` | resolver | Multi-set merging, alias resolution, math expression evaluation. |
+| `FnTools.DesignTokens.Css` | translator | CSS custom-property emitter, calc-preserving emission, themed emission, CSS ingest + audit. |
+| `FnTools.DesignTokens.FSharp` | translator | F# source emitter; produces typed token modules. *(Renamed from `Bindings` in v0.12.0.)* |
+| `FnTools.DesignTokens.TokensStudio` | translator | Tokens Studio import/export with alias-preserving round-trip. |
+| `FnTools.DesignTokens` | meta | Re-exports all of the above; one reference gets everything. |
+
+Each translator package depends only on `Foundation`. A consumer that only emits Swift will eventually reference only `Foundation` + `Swift`. See [ADR-001](LOGOS/decisions/001-layer-split-architecture.md).
 
 ---
 
 ## Install
 
-The package is hosted on a self-managed Forgejo feed, not NuGet.org. Add the source first:
+Hosted on a self-managed Forgejo feed, not NuGet.org. Add the source first:
 
 **`nuget.config`** (place alongside your `.sln` / `.fsproj` / `.fsx`):
 
@@ -60,20 +92,20 @@ The package is hosted on a self-managed Forgejo feed, not NuGet.org. Add the sou
 
 **.NET CLI**
 ```bash
-dotnet add package FnTools.DesignTokens --version 0.11.0
+dotnet add package FnTools.DesignTokens --version 0.12.0
 ```
 
 **PackageReference**
 ```xml
-<PackageReference Include="FnTools.DesignTokens" Version="0.11.0" />
+<PackageReference Include="FnTools.DesignTokens" Version="0.12.0" />
 ```
 
 **F# script (`#r`)**
 ```fsharp
-#r "nuget: FnTools.DesignTokens, 0.11.0"
+#r "nuget: FnTools.DesignTokens, 0.12.0"
 ```
 
-One reference gets everything. The sub-packages (`Foundation`, `Format`, `Validation`, `Resolver`, `Css`, `Bindings`, `TokensStudio`) are published separately if you need only specific layers.
+One reference gets everything. The sub-packages (`Foundation`, `Format`, `Validation`, `Resolver`, `Css`, `FSharp`, `TokensStudio`) are published separately if you need only specific layers.
 
 ---
 
@@ -82,12 +114,25 @@ One reference gets everything. The sub-packages (`Foundation`, `Format`, `Valida
 ```fsharp
 open FnTools.DesignTokens
 
-// Tokens Studio JSON → themed CSS
+// Plain DTCG JSON → resolved tokens
+let json    = System.IO.File.ReadAllText "tokens.json"
+let tokens  = Api.import json |> Result.get   // (string list * ResolvedToken) seq
+
+// Resolved tokens → CSS
+let css = FnTools.DesignTokens.Css.CssEmitter.emit tokens
+System.IO.File.WriteAllText("tokens.css", css)
+
+// Resolved tokens → F# bindings module
+let source = FnTools.DesignTokens.FSharp.emit "Tokens" tokens
+System.IO.File.WriteAllText("Tokens.fs", source)
+```
+
+```fsharp
+// Tokens Studio JSON → themed CSS (math expressions evaluated, aliases preserved)
 let tsJson = System.IO.File.ReadAllText "tokens.json"
 let result = Api.importTokensStudioThemed ShimConfig.Default ["Light"; "Dark"] tsJson |> Result.get
-
 let css =
-    CssEmitter.emitThemedWith
+    FnTools.DesignTokens.Css.CssEmitter.emitThemedWith
         (fun path unit -> match path with "font-size" :: _ -> Rem | _ -> unit)
         (fun theme -> $"[data-theme=\"{theme}\"]")
         result.BaseTokens
@@ -101,22 +146,19 @@ let raw = Api.importTokensStudioRaw ShimConfig.Default tsJson |> Result.get
 let (penpotJson, warnings) = Api.exportTokensStudio raw.ShimResult raw.ParsedSets
 ```
 
-```fsharp
-// Plain DTCG JSON → F# binding constants
-let tokens = Api.import (System.IO.File.ReadAllText "tokens.dtcg.json") |> Result.get
-let bindings = BindingsEmitter.emit tokens
-// generates: module Tokens = let ColorTextMain = "var(--color-text-main)"
-```
+The five-minute walkthrough lives in [`docs/getting-started.md`](docs/getting-started.md).
 
 ---
 
 ## Docs
 
-- [API Reference](docs/api-reference.md) — all public functions with signatures, types, and usage patterns
-- [Building & contributing](CONTRIBUTING.md) — prerequisites, build, test, publish
-- [AI/LLM index](llms.txt) — structured index for AI-assisted development
-
-Architecture decisions are recorded in [LOGOS/decisions/](LOGOS/decisions/).
+- [**Concept**](docs/concept.md) — pipeline, library role, what is and is not in scope. Read first.
+- [**Getting started**](docs/getting-started.md) — five-minute walkthrough from `.tokens.json` to CSS + F# bindings.
+- [**API reference**](docs/api-reference.md) — every public function with signatures, types, and usage patterns.
+- [**Architecture decisions**](LOGOS/decisions/) — 39 ADRs, indexed by topic in [`LOGOS/decisions/README.md`](LOGOS/decisions/README.md).
+- [**Migration guides**](docs/) — `migration-X-to-Y.md` for every minor version bump.
+- [**AI/LLM index**](llms.txt) — structured index for AI-assisted development.
+- [**Building & contributing**](CONTRIBUTING.md) — prerequisites, build, test, publish.
 
 ---
 

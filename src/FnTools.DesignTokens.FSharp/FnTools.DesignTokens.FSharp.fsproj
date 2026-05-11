@@ -3,11 +3,11 @@
     <OutputType>Library</OutputType>
     <TargetFramework>net10.0</TargetFramework>
     <RootNamespace>FnTools.DesignTokens</RootNamespace>
-    <AssemblyName>FnTools.DesignTokens.Bindings</AssemblyName>
-    <PackageId>FnTools.DesignTokens.Bindings</PackageId>
-    <Version>0.11.0</Version>
+    <AssemblyName>FnTools.DesignTokens.FSharp</AssemblyName>
+    <PackageId>FnTools.DesignTokens.FSharp</PackageId>
+    <Version>0.12.0</Version>
     <Authors>FnTools</Authors>
-    <Description>DTCG 2025.10 F# bindings emitter — resolved tokens to typed var() module</Description>
+    <Description>DTCG 2025.10 F# emitter — resolved tokens to typed var() module</Description>
     <PackageLicenseExpression>AGPL-3.0-or-later</PackageLicenseExpression>
     <RepositoryUrl>https://forgejo.ivanthegeek.com/FnTools/FnTools.DesignTokens</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
@@ -15,7 +15,7 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="BindingsEmitter.fs" />
+    <Compile Include="FSharpEmitter.fs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\FnTools.DesignTokens.Foundation\FnTools.DesignTokens.Foundation.fsproj" />

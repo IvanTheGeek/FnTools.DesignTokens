@@ -27,3 +27,9 @@ The `N` prefix is applied in the **emitter only** — a single transformation po
 - CSS vars use the numeric form: `--color-blue-500` (no N prefix in CSS output).
 - The emitter must apply the N prefix consistently to any path segment that starts with a digit.
 - If a token path segment is a reserved F# keyword (e.g., `default`, `type`), the emitter also backtick-escapes it: `` ``default`` ``.
+
+## Addendum — emitter package renamed (2026-05-11, v0.12.0)
+
+The package referred to here as "the bindings emitter" was renamed from `FnTools.DesignTokens.Bindings` to `FnTools.DesignTokens.FSharp` in v0.12.0. The decision in this ADR is unchanged — the N-prefix transformation still happens in the F# emitter only, at a single transformation point. See [ADR-039](039-emitter-contract-and-naming.md) for the rename rationale (emitter packages are named by their output target, not by their role).
+
+The `toFsharpIdent` function keeps its name; `Bindings.emit` is now `FSharp.emit`.

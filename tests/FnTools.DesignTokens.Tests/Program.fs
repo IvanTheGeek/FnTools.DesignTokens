@@ -16,7 +16,7 @@ let main args =
             PropertyTests.allTests
             SmokeTests.allTests
             CssEmitterTests.allTests
-            BindingsEmitterTests.allTests
+            FSharpEmitterTests.allTests
             CssIngestTests.allTests
             CssAuditTests.allTests
             TokensStudioTests.allTests

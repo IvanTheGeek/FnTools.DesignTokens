@@ -412,8 +412,8 @@ explicitly is better than offering two near-identical options.
 
 ## Language-specific safety checks belong in language-specific emitter layers
 
-A target-language emitter has knowledge no other layer should — `BindingsEmitter`
-knows that F# normalises `Color.Dark` and `Color.dark` to the same identifier
+A target-language emitter has knowledge no other layer should — the `FSharp`
+emitter knows that F# normalises `Color.Dark` and `Color.dark` to the same identifier
 (ADR-038); a future TypeScript emitter would know JS case rules instead. Pushing
 those rules into a generic `Validation` would force every consumer to inherit
 every potential emitter's naming opinions, regardless of which emitter they

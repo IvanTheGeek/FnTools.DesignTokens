@@ -86,7 +86,7 @@ src/
   FnTools.DesignTokens.Validation/   — invariant checks (FsToolkit.ErrorHandling)
   FnTools.DesignTokens.Resolver/     — multi-set resolver document semantics
   FnTools.DesignTokens.Css/          — CSS emitter + CssIngest + CssAudit
-  FnTools.DesignTokens.Bindings/     — typed F# binding emitter
+  FnTools.DesignTokens.FSharp/       — F# code emitter (renamed from Bindings in v0.12.0)
   FnTools.DesignTokens.TokensStudio/ — Tokens Studio shim and export
   FnTools.DesignTokens/              — meta-package, public Api module
 tests/

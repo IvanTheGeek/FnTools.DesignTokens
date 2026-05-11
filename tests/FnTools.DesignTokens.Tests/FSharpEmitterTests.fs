@@ -1,8 +1,8 @@
-module FnTools.DesignTokens.Tests.BindingsEmitterTests
+module FnTools.DesignTokens.Tests.FSharpEmitterTests
 
 open Expecto
 open FnTools.DesignTokens
-open FnTools.DesignTokens.Bindings
+open FnTools.DesignTokens.FSharp
 
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -315,9 +315,9 @@ let safetyTests = testList "checkIdentifierSafety + emitChecked" [
                 Expect.equal fs ["Color"; "Dark"] "collision at Color.Dark"
             | other -> failtestf "expected IdentifierCollision, got %A" other
 
-    testCase "BindingsIdentifierIssue.format produces readable line" <| fun () ->
+    testCase "IdentifierIssue.format produces readable line" <| fun () ->
         let issue = IdentifierCollision (["Color"; "Dark"], [["color"; "dark"]; ["color"; "Dark"]])
-        let s = BindingsIdentifierIssue.format issue
+        let s = IdentifierIssue.format issue
         Expect.stringContains s "Color.Dark"   "fsPath mentioned"
         Expect.stringContains s "color.dark"   "first source mentioned"
         Expect.stringContains s "color.Dark"   "second source mentioned"
@@ -340,7 +340,7 @@ let safetyTests = testList "checkIdentifierSafety + emitChecked" [
 // ─── All tests ────────────────────────────────────────────────────────────────
 
 let allTests =
-    testList "BindingsEmitter" [
+    testList "FSharpEmitter" [
         identTests
         emitTests
         integrationTests

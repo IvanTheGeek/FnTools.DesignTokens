@@ -30,7 +30,7 @@ Key functions:
 - [src/FnTools.DesignTokens.Css/CssEmitter.fs](src/FnTools.DesignTokens.Css/CssEmitter.fs): CSS custom-property emitter (emitBlock, emitThemedWith, emitCalcPreserving, DimensionUnitPolicy)
 - [src/FnTools.DesignTokens.Css/CssIngest.fs](src/FnTools.DesignTokens.Css/CssIngest.fs): CSS → DTCG token file ingestion
 - [src/FnTools.DesignTokens.Css/CssAudit.fs](src/FnTools.DesignTokens.Css/CssAudit.fs): CSS hardcoded-value audit
-- [src/FnTools.DesignTokens.Bindings/BindingsEmitter.fs](src/FnTools.DesignTokens.Bindings/BindingsEmitter.fs): Typed F# var() binding constants emitter
+- [src/FnTools.DesignTokens.FSharp/FSharpEmitter.fs](src/FnTools.DesignTokens.FSharp/FSharpEmitter.fs): F# var() constant emitter (typed Tokens module). Renamed from Bindings in v0.12.0 — see ADR-039.
 - [src/FnTools.DesignTokens.TokensStudio/TokensStudio.fs](src/FnTools.DesignTokens.TokensStudio/TokensStudio.fs): Tokens Studio shim (type renames, math eval, HSL eval, $themes) and export
 - [src/FnTools.DesignTokens.Format/Format.fs](src/FnTools.DesignTokens.Format/Format.fs): DTCG JSON parse and serialize
 - [src/FnTools.DesignTokens.Resolver/Resolver.fs](src/FnTools.DesignTokens.Resolver/Resolver.fs): Multi-set resolver document
@@ -56,7 +56,7 @@ let tokens = Api.import json |> Result.get  // (string list * ResolvedToken) seq
 
 **Emit F# binding constants:**
 ```fsharp
-let fsharp = BindingsEmitter.emit tokens
+let fsharp = FnTools.DesignTokens.FSharp.emit "Tokens" tokens
 // generates: module Tokens = let ColorTextMain = "var(--color-text-main)"
 ```
 
@@ -75,7 +75,7 @@ Seven layered packages plus a meta-package, all under the `FnTools.DesignTokens`
 - `Validation` — invariant checks (FsToolkit.ErrorHandling for error accumulation)
 - `Resolver` — multi-set merge, modifier contexts
 - `Css` — CSS emitter, CssIngest, CssAudit
-- `Bindings` — typed F# binding emitter
+- `FSharp` — F# code emitter (renamed from `Bindings` in v0.12.0; see ADR-039)
 - `TokensStudio` — Tokens Studio shim and export
 - `FnTools.DesignTokens` — meta-package, public Api module
 

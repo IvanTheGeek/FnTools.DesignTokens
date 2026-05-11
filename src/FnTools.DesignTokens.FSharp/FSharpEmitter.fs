@@ -1,4 +1,4 @@
-module FnTools.DesignTokens.Bindings
+module FnTools.DesignTokens.FSharp
 
 open System
 open System.Text
@@ -175,7 +175,7 @@ let emit (moduleName: string) (tokens: (string list * ResolvedToken) seq) : stri
 /// Issues that <see cref="checkIdentifierSafety"/> reports. All currently
 /// represent silent data loss in <see cref="emit"/>; neither variant is
 /// informational.
-type BindingsIdentifierIssue =
+type IdentifierIssue =
     /// Two or more DTCG token paths transform to the same F# identifier path.
     /// Generated F# would silently keep only the last-encountered token at
     /// that path; the others would be missing from the bindings module.
@@ -189,9 +189,9 @@ type BindingsIdentifierIssue =
          * leafTokenPath: string list
          * extendingTokenPaths: string list list
 
-module BindingsIdentifierIssue =
+module IdentifierIssue =
     /// One-line human-readable description of an issue.
-    let format (i: BindingsIdentifierIssue) : string =
+    let format (i: IdentifierIssue) : string =
         let fmtFs (p: string list)  = String.concat "." p
         let fmtTok (p: string list) = String.concat "." p
         let fmtTokList (ps: string list list) =
@@ -223,7 +223,7 @@ module BindingsIdentifierIssue =
 /// to compose the check and emission in one call. ADR-038.
 let checkIdentifierSafety
     (tokens: (string list * ResolvedToken) seq)
-    : BindingsIdentifierIssue list =
+    : IdentifierIssue list =
 
     // For each token, materialise the (fsPath, originalDtcgPath) pairs the
     // emit pipeline would attempt to insert. Typography tokens contribute
@@ -301,7 +301,7 @@ let checkIdentifierSafety
 let emitChecked
     (moduleName: string)
     (tokens: (string list * ResolvedToken) seq)
-    : Result<string, BindingsIdentifierIssue list> =
+    : Result<string, IdentifierIssue list> =
     let tokenList = List.ofSeq tokens
     match checkIdentifierSafety tokenList with
     | [] -> Ok (emit moduleName tokenList)

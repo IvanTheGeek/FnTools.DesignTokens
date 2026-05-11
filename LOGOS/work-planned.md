@@ -48,9 +48,9 @@ Multi-mode output: `emitThemed`/`emitThemedWith` emit `:root` + per-theme diff b
 `DimensionUnitPolicy` allows per-path unit selection (e.g. rem for font-size tokens).
 `emitCalcPreserving` for design-tool workbench slider (ADR-027).
 
-## ~~Typed F# bindings emitter~~ ✓ done 2026-05-02
+## ~~Typed F# bindings emitter~~ ✓ done 2026-05-02 *(package renamed to `FSharp` in v0.12.0)*
 
-`FnTools.DesignTokens.Bindings` — resolved token tree → `Tokens.*` module with `string` var() constants.
+`FnTools.DesignTokens.FSharp` (originally `FnTools.DesignTokens.Bindings`) — resolved token tree → `Tokens.*` module with `string` var() constants.
 N-prefix for numeric segments, PascalCase identifiers, typography expands to 5 sub-props.
 Generated file has zero runtime dependencies; values work directly in Fun.Css property builders.
 

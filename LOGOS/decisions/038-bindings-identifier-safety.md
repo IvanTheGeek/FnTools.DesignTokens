@@ -1,9 +1,11 @@
 ---
 id: 038
-title: Bindings identifier safety lives in the Bindings layer, not in Validation
+title: F# identifier safety lives in the F# emitter layer, not in Validation
 status: accepted
 date: 2026-05-11
 ---
+
+> **Title update 2026-05-11 (v0.12.0)**: this ADR was originally titled "Bindings identifier safety lives in the Bindings layer, not in Validation." The `Bindings` package was renamed to `FSharp` in v0.12.0 (see [ADR-039](039-emitter-contract-and-naming.md)). The decision is unchanged. References to `BindingsEmitter` below should be read as `FSharpEmitter`; `Bindings.emit` is now `FSharp.emit`; `BindingsIdentifierIssue` is now `IdentifierIssue` (the redundant `Bindings` prefix was dropped since the type already lives inside the `FSharp` module).
 
 ## Context
 

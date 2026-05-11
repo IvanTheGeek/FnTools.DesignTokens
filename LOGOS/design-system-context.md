@@ -233,7 +233,7 @@ Token reading: `~/.config/forgejo-claude.token` — Bearer token for Forgejo API
 
 Completed as of 2026-05-02:
 - CSS emitter (`FnTools.DesignTokens.Css`) ✓
-- Typed F# bindings emitter (`FnTools.DesignTokens.Bindings`) ✓
+- F# emitter (`FnTools.DesignTokens.FSharp`, originally `FnTools.DesignTokens.Bindings`) ✓
 - LaundryLog `tokens/ll.css` (124 CSS vars) ✓
 - LaundryLog `tokens/Tokens.fs` (161-line F# bindings) ✓
 

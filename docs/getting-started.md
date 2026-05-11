@@ -9,10 +9,10 @@ This guide takes you from "I have a `.tokens.json` file" to "I have a CSS styles
 ## Install
 
 ```xml
-<PackageReference Include="FnTools.DesignTokens" Version="0.11.0" />
+<PackageReference Include="FnTools.DesignTokens" Version="0.12.0" />
 ```
 
-That's the meta-package; it pulls in seven layered libraries transitively (`Foundation`, `Format`, `Validation`, `Resolver`, `Css`, `Bindings`, `TokensStudio`). Reference an individual layer if you want a smaller dependency surface — see [`api-reference.md`](./api-reference.md).
+That's the meta-package; it pulls in seven layered libraries transitively (`Foundation`, `Format`, `Validation`, `Resolver`, `Css`, `FSharp`, `TokensStudio`). Reference an individual layer if you want a smaller dependency surface — see [`api-reference.md`](./api-reference.md).
 
 NuGet feed: `https://forgejo.ivanthegeek.com/api/packages/FnTools/nuget/index.json`
 
@@ -101,16 +101,16 @@ Output:
 
 The CSS emitter is `[<AutoOpen>]` after `open FnTools.DesignTokens.Css` — `emit`, `emitBlock`, `emitWith`, `emitThemed`, etc. are all top-level functions. See [`api-reference.md`](./api-reference.md#css-emission) for the full menu.
 
-### 3. Generate typed F# bindings
+### 3. Generate a typed F# module
 
 ```fsharp
-open FnTools.DesignTokens.Bindings
+open FnTools.DesignTokens
 
 match Api.import json with
 | Error _ -> ()
 | Ok tokens ->
-    let bindings = BindingsEmitter.emit tokens
-    System.IO.File.WriteAllText("Tokens.fs", bindings)
+    let source = FnTools.DesignTokens.FSharp.emit "Tokens" tokens
+    System.IO.File.WriteAllText("Tokens.fs", source)
 ```
 
 Output (`Tokens.fs`):
@@ -267,7 +267,7 @@ for entry in audit.Entries do
 
 - [`api-reference.md`](./api-reference.md) — full function signatures, every public API
 - [`spec-context.md`](./spec-context.md) — DTCG 2025.10 spec references, version history, what the library implements
-- [`../LOGOS/decisions/README.md`](../LOGOS/decisions/README.md) — index of all 34 ADRs by topic
+- [`../LOGOS/decisions/README.md`](../LOGOS/decisions/README.md) — index of all 39 ADRs by topic
 - [`../samples/ivanthegeek.tokens.json`](../samples/ivanthegeek.tokens.json) — real-world sample bootstrapped from a live site, useful as a copy-and-modify starting point
 - [Migration guides](./api-reference.md) — see the top of the API reference for the full list
 

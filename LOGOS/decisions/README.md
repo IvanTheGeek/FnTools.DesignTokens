@@ -1,9 +1,9 @@
 # Architecture Decision Records
 
-38 ADRs covering the library's architecture, scope, dependencies, and feature-level technical decisions. Each ADR is one numbered Markdown file in this directory. Several have addenda — call-outs flagged below.
+39 ADRs covering the library's architecture, scope, dependencies, and feature-level technical decisions. Each ADR is one numbered Markdown file in this directory. Several have addenda — call-outs flagged below.
 
-**Latest ADR:** 038 (2026-05-11 — Bindings identifier safety).
-**Most-amended ADRs:** 003, 013, 018, 028, 033, 034 (all closed forward references or had design corrections in 2026-05-10).
+**Latest ADR:** 039 (2026-05-11 — Emitter contract and target-named packages; renames `Bindings` → `FSharp`).
+**Most-amended ADRs:** 003, 010, 013, 018, 028, 033, 034, 038 (all closed forward references or had design corrections; 010+038 carry v0.12.0 rename addenda).
 **Superseded:** ADR-022 superseded in part by ADR-023.
 **Deferred (documented future direction, not built):** 037.
 
@@ -70,9 +70,10 @@
 
 | ID | Title | Date | Notes |
 |---|---|---|---|
-| [010](010-n-prefix-numeric-scales.md) | N-prefix for numeric token names in generated F# bindings | 2026-05-02 | `scale.400` → `Scale.N400` |
+| [010](010-n-prefix-numeric-scales.md) | N-prefix for numeric token names in generated F# bindings | 2026-05-02 | `scale.400` → `Scale.N400`. **Addendum 2026-05-11 (v0.12.0)**: emitter package renamed to `FSharp`. |
 | [017](017-component-token-tier-lives-in-code.md) | Component tokens live in F# code, not in `.tokens.json` files | 2026-05-03 | Two-tier file model (primitive + semantic only); cited by ADR-018 addendum |
-| [038](038-bindings-identifier-safety.md) | Bindings identifier safety lives in the Bindings layer, not in Validation | 2026-05-11 | `checkIdentifierSafety` + `emitChecked` catch silent data loss from F# identifier collisions and leaf/branch conflicts. Pattern for future emitter packages. Shipped v0.11.0 |
+| [038](038-bindings-identifier-safety.md) | F# identifier safety lives in the F# emitter layer, not in Validation | 2026-05-11 | `checkIdentifierSafety` + `emitChecked` catch silent data loss from F# identifier collisions and leaf/branch conflicts. Pattern for future emitter packages. Shipped v0.11.0. **Renamed 2026-05-11 (v0.12.0)**: `Bindings` package → `FSharp`; `BindingsIdentifierIssue` → `IdentifierIssue`. |
+| [039](039-emitter-contract-and-naming.md) | Emitter contract `(string list * ResolvedToken) seq -> string` and target-named packages | 2026-05-11 | Names the universal handoff type; documents the package naming rule (target language/tool, not role); covers the `Bindings` → `FSharp` rename. Shipped v0.12.0 |
 
 ### Tokens Studio integration
 
@@ -128,13 +129,22 @@ ADR-036 (deprecate resolveAll, expose flattenAliases)
   └─ paired with ADR-035: both address the friction chain that forced
      TS-as-SoT consumers off the convenience wrappers
 
-ADR-038 (Bindings identifier safety)
+ADR-038 (F# identifier safety, originally Bindings identifier safety)
   ├─ cites ADR-013 (interchange-boundary scope) — keeps F# naming rules
   │  out of Foundation/Validation; each emitter owns its naming concerns
   ├─ follows ADR-028 addendum shape (opt-in pre-flight check at the
   │  layer where the check is meaningful)
-  └─ follows ADR-033 v0.10.2 addendum's DRY pattern (shared `expandedFsPaths`
-     helper between build-the-tree and check-the-tree paths)
+  ├─ follows ADR-033 v0.10.2 addendum's DRY pattern (shared `expandedFsPaths`
+  │  helper between build-the-tree and check-the-tree paths)
+  └─ renamed in v0.12.0 alongside ADR-039 (Bindings package → FSharp)
+
+ADR-039 (Emitter contract + target-named packages)
+  ├─ cites ADR-003 (caller-supplied I/O) — emit returns strings, never writes files
+  ├─ cites ADR-012 (structural enforcement) — ResolvedToken is alias-free by type
+  ├─ cites ADR-013 (interchange-boundary scope) — emitters cross outward only
+  ├─ adds rename addenda to ADR-010 and ADR-038 (Bindings → FSharp)
+  └─ generalises ADR-038's per-emitter safety-check pattern to every future
+     target language (Swift, Kotlin, Xaml — same shape, different rules)
 ```
 
 ---
@@ -180,7 +190,8 @@ ADR-038 (Bindings identifier safety)
 | 035 | 2026-05-10 | `ValidateOptions` opt-in laxness | accepted (v0.10.0) |
 | 036 | 2026-05-10 | Deprecate `resolveAll`, expose `flattenAliases` | accepted (v0.10.0) |
 | 037 | 2026-05-10 | Validation warning channel (future possible route) | **deferred** |
-| 038 | 2026-05-11 | Bindings identifier safety (Bindings layer, not Validation) | accepted (v0.11.0) |
+| 038 | 2026-05-11 | F# identifier safety (FSharp emitter layer, not Validation) | accepted (v0.11.0) + v0.12.0 rename |
+| 039 | 2026-05-11 | Emitter contract + target-named packages (`Bindings`→`FSharp` rename) | accepted (v0.12.0) |
 
 ---
 

@@ -1,6 +1,6 @@
 <Solution>
   <Folder Name="/src/">
-    <Project Path="src/FnTools.DesignTokens.Bindings/FnTools.DesignTokens.Bindings.fsproj" />
+    <Project Path="src/FnTools.DesignTokens.FSharp/FnTools.DesignTokens.FSharp.fsproj" />
     <Project Path="src/FnTools.DesignTokens.Css/FnTools.DesignTokens.Css.fsproj" />
     <Project Path="src/FnTools.DesignTokens.Format/FnTools.DesignTokens.Format.fsproj" />
     <Project Path="src/FnTools.DesignTokens.Foundation/FnTools.DesignTokens.Foundation.fsproj" />
