@@ -17,7 +17,7 @@ dotnet build FnTools.DesignTokens.slnx -c Release
 dotnet run --project tests/FnTools.DesignTokens.Tests/FnTools.DesignTokens.Tests.fsproj -c Release
 ```
 
-The test runner is [Expecto](https://github.com/haf/expecto). Output ends with a pass/fail summary; all 258 tests should pass.
+The test runner is [Expecto](https://github.com/haf/expecto). Output ends with a pass/fail summary; all 339 tests should pass.
 
 ## Reproducing CI locally with Docker
 

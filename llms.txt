@@ -68,7 +68,7 @@ let dtcgJson = Format.serialize ingestResult.TokenFile
 
 ## Architecture
 
-Five layered packages under `FnTools.DesignTokens` namespace, plus Css, Bindings, TokensStudio layers, and a meta-package. All layers share the same namespace — `open FnTools.DesignTokens` exposes everything.
+Seven layered packages plus a meta-package, all under the `FnTools.DesignTokens` namespace. `open FnTools.DesignTokens` exposes everything.
 
 - `Foundation` — pure domain types, zero non-BCL deps
 - `Format` — JSON parse/serialize (System.Text.Json)
@@ -90,7 +90,7 @@ All significant design choices are in [LOGOS/decisions/](LOGOS/decisions/). Nota
 
 ## Tests
 
-[tests/FnTools.DesignTokens.Tests/](tests/FnTools.DesignTokens.Tests/) — 258 Expecto tests covering all layers. Run with:
+[tests/FnTools.DesignTokens.Tests/](tests/FnTools.DesignTokens.Tests/) — 339 Expecto tests covering all layers. Run with:
 ```
 dotnet run --project tests/FnTools.DesignTokens.Tests/FnTools.DesignTokens.Tests.fsproj
 ```

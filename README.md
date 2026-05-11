@@ -60,17 +60,17 @@ The package is hosted on a self-managed Forgejo feed, not NuGet.org. Add the sou
 
 **.NET CLI**
 ```bash
-dotnet add package FnTools.DesignTokens --version 0.3.0
+dotnet add package FnTools.DesignTokens --version 0.11.0
 ```
 
 **PackageReference**
 ```xml
-<PackageReference Include="FnTools.DesignTokens" Version="0.3.0" />
+<PackageReference Include="FnTools.DesignTokens" Version="0.11.0" />
 ```
 
 **F# script (`#r`)**
 ```fsharp
-#r "nuget: FnTools.DesignTokens, 0.3.0"
+#r "nuget: FnTools.DesignTokens, 0.11.0"
 ```
 
 One reference gets everything. The sub-packages (`Foundation`, `Format`, `Validation`, `Resolver`, `Css`, `Bindings`, `TokensStudio`) are published separately if you need only specific layers.
