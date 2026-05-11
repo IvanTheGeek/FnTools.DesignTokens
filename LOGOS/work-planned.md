@@ -54,13 +54,20 @@ Multi-mode output: `emitThemed`/`emitThemedWith` emit `:root` + per-theme diff b
 N-prefix for numeric segments, PascalCase identifiers, typography expands to 5 sub-props.
 Generated file has zero runtime dependencies; values work directly in Fun.Css property builders.
 
-## Penpot round-trip workflow
+## Penpot workflow (revised after EXP-01 falsification, 2026-05-02)
 
-See `experiments-planned.md` for experiment details.
+EXP-01 falsified the original "code → Penpot via HTML import" direction: Penpot has no
+HTML import as of May 2026. EXP-04 confirmed the reverse direction works: design natively
+in Penpot using DTCG tokens as variables, then use the Inspect tab to read CSS/SVG output.
 
-- [ ] Test Penpot HTML import with a Fun.Blazor rendered component
-- [ ] Validate that Penpot SVG export → Fun.Blazor reconstruction is workable
-- [ ] Define the standard Penpot→Fun.Blazor translation pattern
+See `experiments-planned.md` § EXP-01 and § EXP-04 for full results.
+
+- [ ] Document the Penpot → F# translation pattern: variables in Penpot ↔ tokens in
+      `.tokens.json`; component variants → F# parameters; Inspect-tab CSS as reference
+      output for `CssEmitter` validation
+- [ ] Decide whether SVG export → Fun.Blazor reconstruction is worth tooling, given that
+      the canonical direction is now Penpot-Inspect → manual F# port (vs. SVG → automated
+      port). Likely deferred — manual port is acceptable for the LaundryLog scale.
 
 ## FnHCI non-visual token support
 

@@ -1,11 +1,13 @@
 ---
 area: Experiments
-status: planned — 2026-05-02
+status: mixed — 2026-05-11 (EXP-01/02/04 concluded; EXP-03 still planned)
 ---
 
-# Experiments Planned
+# Experiments
 
 These are concrete experiments with a specific hypothesis, method, and expected result. Each one resolves an uncertainty that would otherwise require a downstream assumption.
+
+The filename retains the historical name (`experiments-planned.md`); status of each experiment is annotated in its own section. Three of four have concluded.
 
 ---
 
@@ -68,14 +70,14 @@ DTCG token CSS vars. Renders correctly in browser; Penpot import not possible.
 
 ## EXP-03: Fun.Css CssVar token reference in Fun.Blazor component
 
-**Status**: planned
+**Status**: planned (prerequisite shipped — Bindings emitter in v0.11.0, see ADR-038)
 
 **Hypothesis**: A Fun.Blazor component can reference emitted `Tokens.*` bindings via Fun.Css `CssVar` and produce correct CSS output, replacing hardcoded class names.
 
 **Why it matters**: This validates the full pipeline end-to-end: DTCG files → emitter → typed bindings → Fun.Blazor component → rendered CSS.
 
-**Method**:
-1. Manually write a small `Tokens.fs` module with two or three `CssVar` bindings (before the emitter exists)
+**Method** (revised — emitter now exists, step 1 is automatic):
+1. ~~Manually write a small `Tokens.fs` module~~ → run `BindingsEmitter` against a real token file
 2. Update `MachineTypeChips.fs` to reference `Tokens.Color.Machine.washer` instead of `"ll-machine-chip--washer"`
 3. Verify: component renders with correct CSS custom property values
 
