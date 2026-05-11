@@ -509,12 +509,21 @@ let resolverDocumentTests =
                     Expect.equal (getResolvedNum t ["scale"; "x1"])    20.0 "scale.x1 evaluated"
                     Expect.equal (getResolvedNum t ["spacing"; "x1"])  20.0 "spacing.x1 PROPAGATED — alias picked up evaluated scale.x1"
 
-        testCase "TRAP: Primitives.resolveAll consumes the alias graph; subsequent evaluation cannot propagate" <| fun () ->
-            // Documents the bug from request_2026-05-10_04. Future refactors
-            // that change this behavior (e.g. teaching resolveAll to evaluate
-            // before flattening — ADR-013 violation) would need to update or
-            // remove this test. The point is to make the trap visible in the
-            // test suite so the discoverability gap is acknowledged.
+        // ── deprecated resolveAll under scoped FS44 suppression ───────────
+        // resolveAll was deprecated in 0.10.0 (ADR-036) because it consumes
+        // the alias graph that evaluateMathExtensionsInFile needs. The trap
+        // test below intentionally calls the deprecated function to pin the
+        // trap behavior — scoped #nowarn 44 / #warnon 44 narrows the
+        // suppression to just this case.
+        #nowarn 44
+
+        testCase "TRAP: deprecated Primitives.resolveAll consumes the alias graph; subsequent evaluation cannot propagate" <| fun () ->
+            // Documents the bug from request_2026-05-10_04 — the trap that
+            // motivated the ADR-036 deprecation. resolveAll is now Obsolete;
+            // this test still calls it (under #nowarn) to pin the wrong-path
+            // behavior so future changes that would silently fix this
+            // (e.g. teaching resolveAll to evaluate before flattening —
+            // ADR-013 violation) require an explicit update to this test.
             let doc = Api.Primitives.parseResolver resolverDocJson |> Result.defaultWith (fun e -> failwithf "%A" e)
             match Api.Primitives.resolveAll noLoad Map.empty doc with
             | Error es -> failtestf "resolveAll failed: %A" es
@@ -527,24 +536,15 @@ let resolverDocumentTests =
                     Expect.equal (getResolvedNum t ["scale"; "x1"])    20.0 "scale.x1 still evaluates"
                     Expect.equal (getResolvedNum t ["spacing"; "x1"])  16.0 "spacing.x1 STALE — resolveAll baked the alias before evaluation could run"
 
-        testCase "FRICTION: convenience wrapper hard-fails for dimension→number aliases (ADR-033 / punted)" <| fun () ->
-            // Documents the validation friction that forces consumers with the
-            // canonical Tokens Studio scale pattern (dimension tokens aliasing
-            // number tokens) off the convenience wrapper and onto the manual
-            // Primitives path. The wrapper internally composes correctly for
-            // propagation, but Validation.validate (ADR-033) flags this alias
-            // as TypeMismatch before evaluation can run.
-            //
-            // When the punt is addressed (option 2 ValidateOptions per the
-            // outside-conversations_2026-05-10_01.md discussion), update this
-            // test to assert the wrapper now propagates instead of fails.
-            // Until then, this test pins the friction so it stays visible.
+        #warnon 44
+
+        testCase "STRICT (default): convenience wrapper hard-fails for dimension→number aliases (ADR-033)" <| fun () ->
+            // With strict validation (the default for importWithResolverEvaluatingExtensions),
+            // dimension→number aliases produce TypeMismatch per ADR-033. This protects
+            // against accidental mismatches.
             match Api.importWithResolverEvaluatingExtensions noLoad Map.empty resolverDocJson with
             | Ok _ ->
-                failtest "expected ValidationFailed [TypeMismatch ...] — ADR-033 friction. \
-                          If this test now passes with Ok, the validation friction has been \
-                          addressed (option 2 ValidateOptions or equivalent). Update this test \
-                          to assert correct propagation through the convenience wrapper."
+                failtest "expected ValidationFailed [TypeMismatch ...] under strict validation"
             | Error errs ->
                 let hasExpectedTypeMismatch =
                     errs |> List.exists (function
@@ -555,6 +555,19 @@ let resolverDocumentTests =
                         | _ -> false)
                 Expect.isTrue hasExpectedTypeMismatch
                     (sprintf "expected ValidationFailed [TypeMismatch (\"spacing.x1\", \"dimension\", \"number\")]; got: %A" errs)
+
+        testCase "PERMISSIVE (ADR-035): *With variant accepts dimension→number aliases and propagates correctly" <| fun () ->
+            // ADR-035 / 0.10.0 — opt-in laxness for the canonical Tokens Studio scale pattern.
+            // With ValidateOptions.permissive, the dimension→number alias is accepted,
+            // evaluation runs, and propagation works end-to-end through the convenience wrapper.
+            // No need to drop down to the Primitives path.
+            match Api.importWithResolverEvaluatingExtensionsWith
+                      ValidateOptions.permissive noLoad Map.empty resolverDocJson with
+            | Error es -> failtestf "permissive import failed: %A" es
+            | Ok result ->
+                Expect.equal result.Warnings [] "no math-evaluation warnings"
+                Expect.equal (getResolvedNum result.Tokens ["scale"; "x1"])    20.0 "scale.x1 evaluated"
+                Expect.equal (getResolvedNum result.Tokens ["spacing"; "x1"])  20.0 "spacing.x1 PROPAGATED via permissive convenience wrapper"
     ]
 
 

@@ -308,7 +308,7 @@ let private buildTokenLookup (file: TokenFile) : System.Collections.Generic.Dict
     file.Children |> List.iter (fun (name, node) -> walk [TokenName.value name] node)
     lookup
 
-let private checkAliasTypes (file: TokenFile) : ValidationError list =
+let private checkAliasTypes (opts: ValidateOptions) (file: TokenFile) : ValidationError list =
     let lookup = buildTokenLookup file
     let errors = ResizeArray<ValidationError>()
 
@@ -326,12 +326,21 @@ let private checkAliasTypes (file: TokenFile) : ValidationError list =
                 | TokenValue.Alias (JsonPointer _) -> None
                 | v -> TokenValue.inferType v
 
+    // The dimension→number alias is the canonical Tokens Studio scale pattern.
+    // When the caller opts into permissive validation (ADR-035), suppress
+    // *only* this specific mismatch — all other cross-type alias mismatches
+    // still surface as errors.
+    let isOptedOut (declared: TokenType) (resolved: TokenType) : bool =
+        opts.AllowDimensionAliasingNumber
+        && declared = DimensionType
+        && resolved = NumberType
+
     let checkOne (originPath: string) (t: Token) =
         match t.Type, t.Value with
         | Some declared, TokenValue.Alias (CurlyBrace target) ->
             let targetPath = joinPath target
             match resolveTypeOf (Set.singleton originPath) targetPath with
-            | Some resolved when resolved <> declared ->
+            | Some resolved when resolved <> declared && not (isOptedOut declared resolved) ->
                 errors.Add (TypeMismatch (
                     originPath,
                     TokenType.displayName declared,
@@ -431,7 +440,12 @@ let rec private strictWalkNode (path: string list) (node: TokenNode) : Validatio
 
 // ─── Public API ──────────────────────────────────────────────────────────────
 
-let validate (file: TokenFile) : Result<unit, ValidationError list> =
+/// Validate a TokenFile with caller-supplied options (ADR-035, 2026-05-10).
+/// Use this when you need to opt into laxness for known-safe authoring
+/// patterns (currently only the dimension→number alias per ADR-033, used
+/// by Tokens Studio scale designs). All structural checks except those
+/// explicitly opted out via <paramref name="opts"/> still fire.
+let validateWith (opts: ValidateOptions) (file: TokenFile) : Result<unit, ValidationError list> =
     let valueErrs =
         file.Children
         |> List.collect (fun (name, node) ->
@@ -442,11 +456,17 @@ let validate (file: TokenFile) : Result<unit, ValidationError list> =
         |> findCycles
         |> List.map CircularReference
 
-    let aliasTypeErrs = checkAliasTypes file
+    let aliasTypeErrs = checkAliasTypes opts file
 
     match valueErrs @ cycleErrs @ aliasTypeErrs with
     | [] -> Ok ()
     | xs -> Error xs
+
+/// Validate a TokenFile with the strict (default) option set. All structural
+/// checks active including the ADR-033 cross-type alias mismatch. Equivalent
+/// to <c>validateWith ValidateOptions.strict</c>.
+let validate (file: TokenFile) : Result<unit, ValidationError list> =
+    validateWith ValidateOptions.strict file
 
 let validateResolver (doc: ResolverDocument) : Result<unit, ValidationError list> =
     let errors = ResizeArray<ValidationError>()

@@ -4,6 +4,11 @@ open Expecto
 open FnTools.DesignTokens
 open FnTools.DesignTokens.Tests.Fixtures
 
+// The deprecatedResolveAllTests testList intentionally exercises the 0.10.0-
+// deprecated Resolver.resolveAll for regression coverage. Scoped #nowarn 44 /
+// #warnon 44 narrows the suppression to just that testList; everything else
+// in this file is held to the strict no-suppression rule.
+
 
 let private noLoad (_: string) : Result<string, string> = Error "no file loading in tests"
 
@@ -242,4 +247,110 @@ let allTests =
                     match extVal with
                     | Some (_, v) -> Expect.equal (v.ToString()) "test" "extension value preserved"
                     | None -> ()
+
+        // ─── flattenAliases public API (ADR-036, 0.10.0) ─────────────────────
+
+        testCase "flattenAliases (public): replaces TokenValue.Alias with the target's literal value" <| fun () ->
+            let json = """
+                { "base":  { "$type": "number", "$value": 16 },
+                  "alias": { "$type": "number", "$value": "{base}" } }
+                """
+            let file =
+                match Format.parse json with
+                | Ok f -> f
+                | Error es -> failtestf "parse failed: %A" es
+            match Resolver.flattenAliases file with
+            | Error es -> failtestf "flattenAliases failed: %A" es
+            | Ok flattened ->
+                // Walk to find the alias token; it should now hold Number 16, not Alias
+                let aliasNode =
+                    flattened.Children
+                    |> List.find (fun (n, _) -> TokenName.value n = "alias")
+                    |> snd
+                match aliasNode with
+                | TokenLeaf t ->
+                    match t.Value with
+                    | TokenValue.Number 16.0 -> ()
+                    | other -> failtestf "expected Number 16 (alias followed), got %A" other
+                | _ -> failtest "expected leaf"
+
+        testCase "flattenAliases (public): cycle detection emits CircularReference" <| fun () ->
+            let json = """
+                { "a": { "$type": "number", "$value": "{b}" },
+                  "b": { "$type": "number", "$value": "{a}" } }
+                """
+            let file =
+                match Format.parse json with
+                | Ok f -> f
+                | Error es -> failtestf "parse failed: %A" es
+            match Resolver.flattenAliases file with
+            | Ok _ -> failtest "expected CircularReference"
+            | Error es ->
+                let hasCycle =
+                    es |> List.exists (function
+                        | ResolveError.ValidationError (CircularReference _) -> true
+                        | _ -> false)
+                Expect.isTrue hasCycle "cycle detected"
+
+        testCase "Primitives.flattenAliases matches Resolver.flattenAliases" <| fun () ->
+            let json = """
+                { "base":  { "$type": "number", "$value": 8 },
+                  "alias": { "$type": "number", "$value": "{base}" } }
+                """
+            let file =
+                match Format.parse json with
+                | Ok f -> f
+                | Error es -> failtestf "parse failed: %A" es
+            let viaResolver =
+                match Resolver.flattenAliases file with
+                | Ok f -> Some f.Children.Length
+                | Error _ -> None
+            let viaPrim =
+                match Api.Primitives.flattenAliases file with
+                | Ok f -> Some f.Children.Length
+                | Error _ -> None
+            Expect.equal viaPrim viaResolver "Primitives alias matches"
+
+        // ─── Deprecated resolveAll (ADR-036, 0.10.0) ─────────────────────────
+
+        #nowarn 44
+
+        testCase "deprecated resolveAll: still functions identically to resolve + flattenAliases composition" <| fun () ->
+            // Regression coverage for the deprecated function. When removed,
+            // delete this testCase.
+            let json = """
+                { "base":  { "$type": "number", "$value": 16 },
+                  "alias": { "$type": "number", "$value": "{base}" } }
+                """
+            let docJson = """
+                {
+                  "version": "2025.10",
+                  "name": "deprecated-resolveall-regression",
+                  "sets": {
+                    "tokens": { "sources": [ { "inline": """ + json + """ } ] }
+                  },
+                  "resolutionOrder": [ { "set": "tokens" } ]
+                }
+                """
+            let doc =
+                match Resolver.parseResolver docJson with
+                | Ok d -> d
+                | Error es -> failtestf "parseResolver failed: %A" es
+            // resolveAll should still produce the alias-flattened TokenFile
+            let viaDeprecated =
+                match Resolver.resolveAll noLoad Map.empty doc with
+                | Ok f -> f
+                | Error es -> failtestf "resolveAll failed: %A" es
+            // Same as resolve + flattenAliases
+            let viaExplicit =
+                match Resolver.resolve noLoad Map.empty doc with
+                | Ok merged ->
+                    match Resolver.flattenAliases merged with
+                    | Ok f -> f
+                    | Error es -> failtestf "flattenAliases failed: %A" es
+                | Error es -> failtestf "resolve failed: %A" es
+            Expect.equal viaDeprecated.Children.Length viaExplicit.Children.Length
+                "deprecated resolveAll produces same children as explicit composition"
+
+        #warnon 44
     ]

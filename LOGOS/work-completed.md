@@ -1,3 +1,54 @@
+## ValidateOptions + deprecate resolveAll + flattenAliases public (ADR-035 / 036 / 037, v0.10.0, 2026-05-10)
+
+Closes the friction chain that bit `request_2026-05-10_04`: ADR-033
+TypeMismatch forces TS-as-SoT consumers off the convenience wrappers →
+they fall back to the Primitives path → they hit the `resolveAll` trap
+(`resolveAll = resolve >>= flattenAliases` eats the alias graph that
+`evaluateMathExtensionsInFile` needs to propagate) → they file a wrong
+library request thinking the library is broken.
+
+Two paired fixes plus a deferred-direction ADR for traceability:
+
+- [x] **ADR-035 — `ValidateOptions` opt-in laxness**:
+  `ValidateOptions { AllowDimensionAliasingNumber }` + `strict`/`permissive`
+  presets in Foundation. `Validation.validateWith` accepts options; legacy
+  `validate` is `validateWith ValidateOptions.strict`. New `*With` variants
+  for every convenience wrapper: `Api.importWith`, `Api.importWithResolverWith`,
+  `Api.importWithResolverEvaluatingExtensionsWith`. Permissive opts out of
+  *only* the dimension→number TypeMismatch — other cross-type aliases still
+  fail. Strict default protects accidental mismatches.
+- [x] **ADR-036 — deprecate `Resolver.resolveAll` + expose `Resolver.flattenAliases`
+  publicly**: `resolveAll` is now `[<Obsolete>]` with a deprecation message
+  naming both replacement paths (common: `resolve` + `flattenResolved`;
+  narrow: `resolve` + `flattenAliases`). `flattenAliases` promoted from
+  `let private` to public, with full XML docs explaining the narrow use case.
+  Same shared-impl pattern as ADR-034 addendum to avoid FS44 on the Primitives
+  re-export.
+- [x] **ADR-037 — validation warning channel (deferred)**: option 3 from the
+  outside-conversations exchange. Not built; documented as future possible
+  route for advisory issues that aren't footguns (unused tokens, scale
+  outliers, etc.). Filed for traceability so future agents reach for it
+  before adding a new `ValidationError` for something that's really advisory.
+- [x] 10 new tests: 5 in ValidationTests (validateWith strict/permissive +
+  narrow scope + legacy equivalence + Primitives parity), 3 in ResolverTests
+  (flattenAliases public + cycle detection + Primitives parity + deprecated
+  resolveAll regression under `#nowarn 44`), 2 in ExtensionEvaluationTests
+  (STRICT default friction + PERMISSIVE convenience-wrapper propagation —
+  the FRICTION test from 0.9.0 split into STRICT + PERMISSIVE cases).
+  328/328 pass (was 318).
+- [x] `docs/migration-0.9-to-0.10.md` written: 4 upgrade scenarios + reference.
+- [x] `docs/api-reference.md` updated: version + migration list bumped; all
+  new functions documented; `resolveAll` marked deprecated in Primitives table.
+- [x] `LOGOS/decisions/README.md` ADR index updated: 3 new ADRs cross-referenced,
+  ADR-037's `deferred` status called out.
+- [x] `LOGOS/insights.md` updated: two new entries — "Per-call opt-in beats
+  global laxness for footgun-prevention" + "Deprecation as a discoverability
+  fix when renaming would replace one trap with another".
+
+Outside conversation: `LOGOS/outside-conversations/outside-conversations_2026-05-10_01.md`
+captures the 4-option comparison that produced this ADR trio. Response to the
+requester drafted at `outside-conversations_2026-05-10_02.md`.
+
 ## Extension-aware resolve — alias propagation fix (ADR-034 addendum, v0.9.0, 2026-05-10)
 
 Closes `request_2026-05-10_03`. The 0.8.0 `Api.evaluateMathExtensions`
