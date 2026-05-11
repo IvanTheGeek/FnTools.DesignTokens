@@ -3,13 +3,14 @@
 `FnTools.DesignTokens` — DTCG 2025.10 codec, validator, resolver, and emitters (CSS, F# bindings, Tokens Studio). The entry point is `FnTools.DesignTokens.Api`. One package reference is all you need:
 
 ```xml
-<PackageReference Include="FnTools.DesignTokens" Version="0.10.0" />
+<PackageReference Include="FnTools.DesignTokens" Version="0.10.1" />
 ```
 
 The meta-package transitively pulls in seven layered libraries: `Foundation`, `Format`, `Validation`, `Resolver`, `Css`, `Bindings`, `TokensStudio`. Reference an individual layer if you want a smaller dependency surface.
 
 Migration guides (newest first):
-- [`migration-0.9-to-0.10.md`](./migration-0.9-to-0.10.md) — current release. `ValidateOptions` opt-in laxness (ADR-035); `Resolver.resolveAll` deprecated, `Resolver.flattenAliases` now public (ADR-036).
+- [`migration-0.10.0-to-0.10.1.md`](./migration-0.10.0-to-0.10.1.md) — current release. Bug fix: `flattenResolvedFile` was clobbering the aliasing token's declared type, producing unitless CSS for dimension→number aliases. No API changes (ADR-033 addendum).
+- [`migration-0.9-to-0.10.md`](./migration-0.9-to-0.10.md) — `ValidateOptions` opt-in laxness (ADR-035); `Resolver.resolveAll` deprecated, `Resolver.flattenAliases` now public (ADR-036).
 - [`migration-0.8-to-0.9.md`](./migration-0.8-to-0.9.md) — `evaluateMathExtensions` deprecated; new `evaluateMathExtensionsInFile` fixes alias propagation (ADR-034 addendum).
 - [`migration-0.7-to-0.8.md`](./migration-0.7-to-0.8.md) — `Api.evaluateMathExtensions` and `Api.importWithResolverEvaluatingExtensions` (ADR-034 original).
 - [`migration-0.6-to-0.7.md`](./migration-0.6-to-0.7.md) — `Api.validateStrictDtcg` opt-in spec-compliance check (ADR-028 addendum).

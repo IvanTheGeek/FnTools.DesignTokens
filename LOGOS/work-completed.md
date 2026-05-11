@@ -1,3 +1,51 @@
+## Type-preservation bug fix in flattenResolvedFile (ADR-033 addendum, v0.10.1, 2026-05-10)
+
+Latent bug discovered via `outside-conversations_2026-05-10_03.md` follow-up to
+the 0.10.0 release: `DesignTokens.fs` `flattenResolvedFile` was using
+`target.Type |> Option.orElse t.Type` for alias-following, meaning the
+alias *target's* declared type won over the aliasing token's. For a
+`spacing.x1 (DimensionType)` aliasing `scale.x1 (NumberType)`, the resolved
+token came out with `Type = NumberType`, and ADR-033's emitter coercion
+guard (`when token.Type = DimensionType`) never fired — producing unitless
+`--spacing-x1: 20` instead of `--spacing-x1: 20px`.
+
+The bug was present since 0.6.0 but masked because every common code path
+went through `Resolver.flattenAliases` first (which preserves declared types
+correctly) or used `partialFlattenResolvedFile` (which has the correct
+behavior since 2026-05-04 and was the model for this fix). 0.9.0's
+`evaluateMathExtensionsInFile` introduced the direct
+`resolve → evaluate → flattenResolvedFile` path that exposed the bug;
+0.10.0's `ValidateOptions.permissive` then let TS-as-SoT consumers actually
+reach the buggy path with files containing dimension→number aliases.
+
+- [x] **One-line fix** in `DesignTokens.fs` `flattenResolvedFile`:
+  precedence flipped to `t.Type |> Option.orElse target.Type` (aliasing
+  token's declared type wins). Plus the same `Number → Dimension {n, Px}` /
+  `Number → Duration {n, Milliseconds}` coercion `partialFlattenResolvedFile`
+  has had for months. The two flatten functions now have identical
+  alias-handling logic.
+- [x] **Test coverage gap closed**: the 0.10.0 PERMISSIVE test asserted
+  value (20.0) via a `getResolvedNum` helper that didn't care about the
+  type, which let the bug slip through. 0.10.1 strengthens it to assert
+  `Type = DimensionType`, `Value = ResolvedDimension { 20.0, Px }`, and
+  full CSS-emit output (`--spacing-x1: 20px;` identity policy + `1.25rem`
+  Rem policy). 329/329 pass.
+- [x] **ADR-033 addendum** written documenting the latent bug, why it
+  was masked through 0.9.0, the visibility chain that exposed it, and
+  the parallel-functions cleanup direction (unify
+  `flattenResolvedFile` + `partialFlattenResolvedFile` in a future
+  refactor; left parallel with cross-reference comments for the patch
+  release).
+- [x] `docs/migration-0.10.0-to-0.10.1.md` written — 4 upgrade scenarios.
+- [x] `docs/api-reference.md` updated: version + migration list bumped.
+- [x] `LOGOS/decisions/README.md` ADR index updated: ADR-033 row +
+  chronological list noted addendum date.
+- [x] `LOGOS/outside-conversations/outside-conversations_2026-05-10_04.md`
+  drafts the response back to the requester confirming the diagnosis and
+  fix.
+
+Patch release. No API changes; pure bug fix.
+
 ## ValidateOptions + deprecate resolveAll + flattenAliases public (ADR-035 / 036 / 037, v0.10.0, 2026-05-10)
 
 Closes the friction chain that bit `request_2026-05-10_04`: ADR-033

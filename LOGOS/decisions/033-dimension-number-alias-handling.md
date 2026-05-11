@@ -76,3 +76,49 @@ when a bare number is supplied where a length is expected (rejection).
 - Validation passes do not catch this when called separately from import
   pipelines that skip them. Callers must opt in to validation for the error to
   surface. The emitter fix is the floor; validation is the ceiling.
+
+## Addendum — `flattenResolvedFile` was preventing the emitter coercion (v0.10.1, 2026-05-10)
+
+The 0.6.0 ADR-033 fix had a latent bug discovered by
+`request_2026-05-10_04` follow-up (`outside-conversations_2026-05-10_03.md`):
+`DesignTokens.fs` `flattenResolvedFile` was using `target.Type |> Option.orElse t.Type`
+when following an alias — meaning the alias *target's* declared type won
+over the aliasing token's declared type. For a `spacing.x1 (DimensionType)`
+aliasing `scale.x1 (NumberType)`, the resolved token came out with
+`Type = NumberType`, and the ADR-033 emitter coercion guard
+(`when token.Type = DimensionType`) never fired. The output was unitless
+`--spacing-x1: 16` — the exact behavior ADR-033 was designed to prevent.
+
+The bug was masked through 0.9.0 because every code path that produced
+visible CSS output went through `Resolver.flattenAliases` first (either
+via `resolveAll` internally, or via the TS-import-specific
+`partialFlattenResolvedFile` which already had this fix applied
+2026-05-04). When 0.9.0's `evaluateMathExtensionsInFile` introduced the
+direct `resolve → evaluate → flattenResolvedFile` path (skipping
+`flattenAliases` to enable propagation), the bug became visible. 0.10.0's
+`ValidateOptions.permissive` then let TS-as-SoT consumers actually reach
+this path with files containing dimension→number aliases — at which point
+the requester reported unitless CSS in their build output.
+
+The fix in 0.10.1 mirrors the long-standing `partialFlattenResolvedFile`
+implementation:
+
+1. Flip the precedence: `t.Type |> Option.orElse target.Type` — the
+   aliasing token's declared type wins, restoring ADR-033's intended
+   behavior.
+2. Add the `Number → Dimension {n, Px}` / `Number → Duration {n, Milliseconds}`
+   coercion at the flatten step so the resolved `Value` matches the
+   resolved `Type` (rather than relying solely on the emitter to coerce).
+
+After the fix, `partialFlattenResolvedFile` and `flattenResolvedFile` have
+identical alias-handling logic. The two functions could be unified in a
+future refactor; for the patch release, they're left parallel with a
+comment in each pointing at the other.
+
+Test coverage gap closed: the 0.10.0 test asserted the value (20.0) but
+not the type or the CSS output, which let the bug slip through. The 0.10.1
+tests assert all three.
+
+Removal of this addendum would require either reverting the fix (no — it
+breaks real consumer output) or unifying the two flatten functions
+(separate refactor, not patch-release scope).
