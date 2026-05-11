@@ -127,6 +127,14 @@ ADR-036 (deprecate resolveAll, expose flattenAliases)
   ├─ closes the trap that bit request_2026-05-10_04
   └─ paired with ADR-035: both address the friction chain that forced
      TS-as-SoT consumers off the convenience wrappers
+
+ADR-038 (Bindings identifier safety)
+  ├─ cites ADR-013 (interchange-boundary scope) — keeps F# naming rules
+  │  out of Foundation/Validation; each emitter owns its naming concerns
+  ├─ follows ADR-028 addendum shape (opt-in pre-flight check at the
+  │  layer where the check is meaningful)
+  └─ follows ADR-033 v0.10.2 addendum's DRY pattern (shared `expandedFsPaths`
+     helper between build-the-tree and check-the-tree paths)
 ```
 
 ---
