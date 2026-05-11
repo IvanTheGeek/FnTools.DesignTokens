@@ -275,7 +275,7 @@ module CssEmitter =
     /// </remarks>
     /// <param name="selector">CSS selector or at-rule for the block.</param>
     /// <param name="tokens">Flat sequence of <c>(path, token)</c> pairs.</param>
-    let emitBlock (selector: string) (tokens: (string list * ResolvedToken) seq) : string =
+    let emitBlock (selector: string) (tokens: ResolvedTokens) : string =
         let sb = StringBuilder()
         let isAtRule = selector.TrimStart().StartsWith "@"
         if isAtRule then
@@ -302,7 +302,7 @@ module CssEmitter =
     /// <see cref="FnTools.DesignTokens.Api.importWithResolver"/> or equivalent.
     /// </param>
     /// <returns>CSS text ready to write to a <c>.css</c> file.</returns>
-    let emit (tokens: (string list * ResolvedToken) seq) : string =
+    let emit (tokens: ResolvedTokens) : string =
         emitBlock ":root" tokens
 
     /// <summary>
@@ -318,8 +318,8 @@ module CssEmitter =
     ///   from <c>baseTokens</c>. Themes with no differences produce no output block.</param>
     let emitThemed
         (selectorForTheme : string -> string)
-        (baseTokens       : (string list * ResolvedToken) seq)
-        (themes           : (string * (string list * ResolvedToken) seq) seq)
+        (baseTokens       : ResolvedTokens)
+        (themes           : (string * ResolvedTokens) seq)
         : string =
         let baseDecls =
             baseTokens
@@ -354,8 +354,8 @@ module CssEmitter =
     /// If no tokens differ, only the <c>:root</c> block is emitted.
     /// </returns>
     let emitMultiMode
-        (baseTokens:       (string list * ResolvedToken) seq)
-        (overrideTokens:   (string list * ResolvedToken) seq)
+        (baseTokens:       ResolvedTokens)
+        (overrideTokens:   ResolvedTokens)
         (overrideSelector: string)
         : string =
         let baseDecls =
@@ -380,7 +380,7 @@ module CssEmitter =
 
     // ─── Policy-aware emitters (Gap 2 — rem per token type) ──────────────────
 
-    let private emitBlockWith (policy: DimensionUnitPolicy) (selector: string) (tokens: (string list * ResolvedToken) seq) : string =
+    let private emitBlockWith (policy: DimensionUnitPolicy) (selector: string) (tokens: ResolvedTokens) : string =
         let sb = StringBuilder()
         let isAtRule = selector.TrimStart().StartsWith "@"
         if isAtRule then
@@ -406,7 +406,7 @@ module CssEmitter =
     /// <param name="policy">Unit selection policy. Use <see cref="DimensionUnitPolicy.identity"/>
     /// for the same behaviour as <see cref="emit"/>.</param>
     /// <param name="tokens">Flat sequence of <c>(path, token)</c> pairs.</param>
-    let emitWith (policy: DimensionUnitPolicy) (tokens: (string list * ResolvedToken) seq) : string =
+    let emitWith (policy: DimensionUnitPolicy) (tokens: ResolvedTokens) : string =
         emitBlockWith policy ":root" tokens
 
     /// <summary>
@@ -424,8 +424,8 @@ module CssEmitter =
     let emitThemedWith
         (policy           : DimensionUnitPolicy)
         (selectorForTheme : string -> string)
-        (baseTokens       : (string list * ResolvedToken) seq)
-        (themes           : (string * (string list * ResolvedToken) seq) seq)
+        (baseTokens       : ResolvedTokens)
+        (themes           : (string * ResolvedTokens) seq)
         : string =
         let baseDecls =
             baseTokens
@@ -462,8 +462,8 @@ module CssEmitter =
     /// <param name="overrideSelector">CSS selector for the override block.</param>
     let emitMultiModeWith
         (policy           : DimensionUnitPolicy)
-        (baseTokens       : (string list * ResolvedToken) seq)
-        (overrideTokens   : (string list * ResolvedToken) seq)
+        (baseTokens       : ResolvedTokens)
+        (overrideTokens   : ResolvedTokens)
         (overrideSelector : string)
         : string =
         let baseDecls =
@@ -569,7 +569,7 @@ module CssEmitter =
     let emitCalcPreserving
         (baseVarName       : string)
         (multiplierVarName : string)
-        (tokens            : (string list * ResolvedToken) seq)
+        (tokens            : ResolvedTokens)
         : string =
         let tokenList = tokens |> List.ofSeq
         let varToPath (v: string) = v.TrimStart('-').Split('-') |> Array.toList

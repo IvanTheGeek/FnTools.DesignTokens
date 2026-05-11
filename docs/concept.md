@@ -56,18 +56,18 @@ See [ADR-039: Emitter contract and naming convention](../LOGOS/decisions/039-emi
 
 ## The universal handoff
 
-Every Translator receives the same type:
+Every Translator receives the same type, exposed under a named alias since v0.13.0:
 
 ```fsharp
-(string list * ResolvedToken) seq
+type ResolvedTokens = (string list * ResolvedToken) seq
 ```
 
 The `string list` is the token's dotted path as segments (`["color"; "accent"; "default"]`). The `ResolvedToken` is the post-resolution value — concrete, typed, alias-free, type-non-optional. This is the boundary between the Resolver stage and any Translator.
 
 Two consequences:
 
-- **One resolve, many translations.** The same resolved seq feeds CSS, F# bindings, Swift, Kotlin, and docs simultaneously.
-- **Adding a new Translator is decoupled.** A `FnTools.DesignTokens.Swift` package consumes the same `seq` that `Css` and `FSharp` consume. The Foundation, Format, Validation, and Resolver layers do not change.
+- **One resolve, many translations.** The same `ResolvedTokens` feeds CSS, F# bindings, Swift, Kotlin, and docs simultaneously.
+- **Adding a new Translator is decoupled.** A `FnTools.DesignTokens.Swift` package consumes the same `ResolvedTokens` that `Css` and `FSharp` consume. The Foundation, Format, Validation, and Resolver layers do not change.
 
 See [ADR-012: Structural enforcement over documentation](../LOGOS/decisions/012-structural-enforcement-over-documentation.md) for why `ResolvedToken` has no `Alias` case and `Type` is non-optional.
 
@@ -85,7 +85,7 @@ See [ADR-012: Structural enforcement over documentation](../LOGOS/decisions/012-
 │                                                  │
 └──────────────────▲───────────────────────────────┘
                    │
-                   │ consumes: (string list * ResolvedToken) seq
+                   │ consumes: ResolvedTokens
                    │
 ┌── Resolver stage ─────────────────────────────┐
 │                                                │

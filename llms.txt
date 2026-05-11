@@ -51,7 +51,7 @@ let (penpotJson, _) = Api.exportTokensStudio raw.ShimResult raw.ParsedSets
 
 **Read plain DTCG JSON and resolve:**
 ```fsharp
-let tokens = Api.import json |> Result.get  // (string list * ResolvedToken) seq
+let tokens = Api.import json |> Result.get  // ResolvedTokens (= (string list * ResolvedToken) seq)
 ```
 
 **Emit F# binding constants:**

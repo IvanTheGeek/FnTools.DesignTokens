@@ -22,7 +22,7 @@ DTCG source → Resolver → Translator → Target
 The boundary between these two stages is a single type:
 
 ```fsharp
-(string list * ResolvedToken) seq
+type ResolvedTokens = (string list * ResolvedToken) seq
 ```
 
 Every emitter consumes this. Add a new platform target by adding a new emitter package — the core does not change. See [ADR-039: Emitter contract and naming](LOGOS/decisions/039-emitter-contract-and-naming.md).
@@ -92,17 +92,17 @@ Hosted on a self-managed Forgejo feed, not NuGet.org. Add the source first:
 
 **.NET CLI**
 ```bash
-dotnet add package FnTools.DesignTokens --version 0.12.0
+dotnet add package FnTools.DesignTokens --version 0.13.0
 ```
 
 **PackageReference**
 ```xml
-<PackageReference Include="FnTools.DesignTokens" Version="0.12.0" />
+<PackageReference Include="FnTools.DesignTokens" Version="0.13.0" />
 ```
 
 **F# script (`#r`)**
 ```fsharp
-#r "nuget: FnTools.DesignTokens, 0.12.0"
+#r "nuget: FnTools.DesignTokens, 0.13.0"
 ```
 
 One reference gets everything. The sub-packages (`Foundation`, `Format`, `Validation`, `Resolver`, `Css`, `FSharp`, `TokensStudio`) are published separately if you need only specific layers.
@@ -116,7 +116,7 @@ open FnTools.DesignTokens
 
 // Plain DTCG JSON → resolved tokens
 let json    = System.IO.File.ReadAllText "tokens.json"
-let tokens  = Api.import json |> Result.get   // (string list * ResolvedToken) seq
+let tokens  = Api.import json |> Result.get   // ResolvedTokens
 
 // Resolved tokens → CSS
 let css = FnTools.DesignTokens.Css.CssEmitter.emit tokens

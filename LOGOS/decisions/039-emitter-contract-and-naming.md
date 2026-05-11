@@ -1,6 +1,6 @@
 ---
 id: 039
-title: Emitter contract `(string list * ResolvedToken) seq -> string` and target-named packages
+title: Emitter contract `ResolvedTokens -> string` and target-named packages
 status: accepted
 date: 2026-05-11
 ---
@@ -21,10 +21,15 @@ Two questions were left implicit until now:
 Every emitter package in `FnTools.DesignTokens.*` exposes at least one function with this shape:
 
 ```fsharp
-val emit : (string list * ResolvedToken) seq -> string
+val emit : ResolvedTokens -> string
+
+// where ResolvedTokens is defined in Foundation as:
+type ResolvedTokens = (string list * ResolvedToken) seq
 ```
 
 The input is the universal handoff point from the Resolver stage: a flat sequence of `(token path segments, resolved value)` pairs. The output is a single string containing the target-native artifact. The caller writes the string to disk; no emitter performs file I/O (per ADR-003).
+
+The alias was introduced in v0.13.0 (see addendum below); prior to that, every signature spelled the tuple-seq form explicitly. The contract type itself is unchanged — the alias is purely a documentation improvement.
 
 Emitter packages may expose additional functions for variants (`emitThemed`, `emitChecked`, `emitWith`, etc.) but they all share the same input type. Resolution happens once upstream; multiple emitters consume the same resolved sequence in parallel.
 
@@ -72,3 +77,17 @@ Module and type names follow:
 - Cites [ADR-013: Library scope ends at the DTCG interchange boundary](013-library-scope-dtcg-interchange-boundary.md) — emitters cross the boundary outward; nothing emitter-specific leaks back into the core.
 - Renames the package referenced by [ADR-010](010-n-prefix-numeric-scales.md) and [ADR-038](038-bindings-identifier-safety.md). Both ADRs receive an addendum noting the rename.
 - Caller-side examples and traps live in `LauraExperiment/LOGOS/library/api-patterns.md` (`emitChecked` vs `emit`; the `resolveAll` trap closed by ADR-036).
+
+## Addendum — `ResolvedTokens` type alias (2026-05-11, v0.13.0)
+
+The contract type defined above was originally spelled out everywhere as `(string list * ResolvedToken) seq`. In v0.13.0 the type is given a name in Foundation:
+
+```fsharp
+type ResolvedTokens = (string list * ResolvedToken) seq
+```
+
+This is a non-breaking change in F# semantics — type aliases are erased by the compiler, so existing source compiles unchanged and the binary surface is identical. The benefit is documentation: every public signature now reads as intent rather than implementation (`val emit : ResolvedTokens -> string` instead of `val emit : (string list * ResolvedToken) seq -> string`).
+
+The alias lives in `Foundation/Domain.fs`, near `ResolvedToken`. No new types, no behavioural changes.
+
+A `TokenPath = string list` alias was considered alongside and explicitly rejected for now — `string list` is idiomatic and ubiquitous; adding a second-level alias would proliferate without clear payoff. Reconsider if the path becomes a sore spot.

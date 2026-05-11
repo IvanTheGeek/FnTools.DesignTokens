@@ -3,13 +3,24 @@
 `FnTools.DesignTokens` — DTCG 2025.10 codec, validator, resolver, and emitters (CSS, F# bindings, Tokens Studio). The entry point is `FnTools.DesignTokens.Api`. One package reference is all you need:
 
 ```xml
-<PackageReference Include="FnTools.DesignTokens" Version="0.11.0" />
+<PackageReference Include="FnTools.DesignTokens" Version="0.13.0" />
 ```
 
 The meta-package transitively pulls in seven layered libraries: `Foundation`, `Format`, `Validation`, `Resolver`, `Css`, `FSharp`, `TokensStudio`. Reference an individual layer if you want a smaller dependency surface.
 
+## Core types
+
+```fsharp
+/// The universal handoff between Resolver and any Translator (since v0.13.0).
+/// Every emitter accepts this; every import path returns this. See ADR-039.
+type ResolvedTokens = (string list * ResolvedToken) seq
+```
+
+All emitter and import signatures below use this alias.
+
 Migration guides (newest first):
-- [`migration-0.11.0-to-0.12.0.md`](./migration-0.11.0-to-0.12.0.md) — current release. Breaking: `FnTools.DesignTokens.Bindings` renamed to `FnTools.DesignTokens.FSharp`; `BindingsIdentifierIssue` → `IdentifierIssue`. Mechanical find-and-replace. See [ADR-039](../LOGOS/decisions/039-emitter-contract-and-naming.md).
+- [`migration-0.12.0-to-0.13.0.md`](./migration-0.12.0-to-0.13.0.md) — current release. Non-breaking: `ResolvedTokens` type alias added to Foundation; all public signatures use it. No behaviour changes. See [ADR-039 v0.13.0 addendum](../LOGOS/decisions/039-emitter-contract-and-naming.md).
+- [`migration-0.11.0-to-0.12.0.md`](./migration-0.11.0-to-0.12.0.md) — previous release. Breaking: `FnTools.DesignTokens.Bindings` renamed to `FnTools.DesignTokens.FSharp`; `BindingsIdentifierIssue` → `IdentifierIssue`. Mechanical find-and-replace. See [ADR-039](../LOGOS/decisions/039-emitter-contract-and-naming.md).
 - [`migration-0.10.2-to-0.11.0.md`](./migration-0.10.2-to-0.11.0.md) — previous release. New `BindingsEmitter.checkIdentifierSafety` + `emitChecked` catch silent data loss from F# identifier collisions and leaf/branch conflicts in generated bindings (ADR-038).
 - [`migration-0.10.1-to-0.10.2.md`](./migration-0.10.1-to-0.10.2.md) — internal refactor: `flattenResolvedFile` + `partialFlattenResolvedFile` unified via shared helper. Tiny cleanup of `TokenUnresolved` warning format (ADR-033 v0.10.2 addendum).
 - [`migration-0.10.0-to-0.10.1.md`](./migration-0.10.0-to-0.10.1.md) — bug fix: `flattenResolvedFile` was clobbering the aliasing token's declared type, producing unitless CSS for dimension→number aliases (ADR-033 v0.10.1 addendum).
@@ -30,10 +41,10 @@ Migration guides (newest first):
 
 ```fsharp
 Api.import     (jsonText: string)
-    : Result<(string list * ResolvedToken) seq, ImportError list>
+    : Result<ResolvedTokens, ImportError list>
 
 Api.importWith (opts: ValidateOptions) (jsonText: string)
-    : Result<(string list * ResolvedToken) seq, ImportError list>
+    : Result<ResolvedTokens, ImportError list>
 ```
 
 Parse, validate, and resolve a single DTCG `.tokens.json` file. Returns a flat sequence of `(path segments, resolved token)` pairs — `["color"; "text"; "main"]` for a token at `color.text.main`.
@@ -49,14 +60,14 @@ Api.importWithResolver
     (loadFile : string -> Result<string, string>)
     (context  : Map<string, string>)
     (jsonText : string)
-    : Result<(string list * ResolvedToken) seq, ImportError list>
+    : Result<ResolvedTokens, ImportError list>
 
 Api.importWithResolverWith
     (opts     : ValidateOptions)
     (loadFile : string -> Result<string, string>)
     (context  : Map<string, string>)
     (jsonText : string)
-    : Result<(string list * ResolvedToken) seq, ImportError list>
+    : Result<ResolvedTokens, ImportError list>
 ```
 
 Parse a `.resolver.json` document, load referenced token files via `loadFile`, apply context variables, merge sets in resolution order, then resolve. File I/O stays with the caller — `loadFile` receives a path string and returns the file content or an error message.
@@ -166,7 +177,7 @@ let (penpotJson, _) = Api.exportTokensStudio raw.ShimResult raw.ParsedSets
 ### `Api.export`
 
 ```fsharp
-Api.export (tokens: (string list * ResolvedToken) seq) : string
+Api.export (tokens: ResolvedTokens) : string
 ```
 
 Resolved token list back to a DTCG 2025.10 `.tokens.json` string. Reverses `Api.import`. All values are concrete literals — aliases are not reconstructed.
@@ -257,7 +268,7 @@ Or use `Api.importWithResolverEvaluatingExtensions` (below) which does this comp
 ```fsharp
 [<System.Obsolete>]
 Api.evaluateMathExtensions
-    (tokens: (string list * ResolvedToken) seq)
+    (tokens: ResolvedTokens)
     : ResolveWithExtensionsResult
 ```
 
@@ -380,14 +391,14 @@ From `FnTools.DesignTokens.Css` — included via the meta-package, `[<AutoOpen>]
 ### `emit` — defaults to `:root`
 
 ```fsharp
-emit (tokens: (string list * ResolvedToken) seq) : string
+emit (tokens: ResolvedTokens) : string
 // :root { --color-text-main: #1a1a1a; --spacing-md: 16px; ... }
 ```
 
 ### `emitBlock` — any selector or at-rule
 
 ```fsharp
-emitBlock (selector: string) (tokens: (string list * ResolvedToken) seq) : string
+emitBlock (selector: string) (tokens: ResolvedTokens) : string
 ```
 
 When `selector` starts with `@` (e.g. `@media (max-width: 600px)`), declarations are wrapped in an inner `:root { }` block so the output is valid CSS.
@@ -395,7 +406,7 @@ When `selector` starts with `@` (e.g. `@media (max-width: 600px)`), declarations
 ### `emitWith` — `:root` with a unit policy
 
 ```fsharp
-emitWith (policy: DimensionUnitPolicy) (tokens: (string list * ResolvedToken) seq) : string
+emitWith (policy: DimensionUnitPolicy) (tokens: ResolvedTokens) : string
 ```
 
 ### Themed (multi-mode)
@@ -403,8 +414,8 @@ emitWith (policy: DimensionUnitPolicy) (tokens: (string list * ResolvedToken) se
 ```fsharp
 emitThemed
     (selectorForTheme : string -> string)
-    (baseTokens       : (string list * ResolvedToken) seq)
-    (themes           : (string * (string list * ResolvedToken) seq) seq)
+    (baseTokens       : ResolvedTokens)
+    (themes           : (string * ResolvedTokens) seq)
     : string
 // :root { base vars }
 // [data-theme="dark"] { only the vars that differ from :root }
@@ -427,8 +438,8 @@ emitThemedWith (policy: DimensionUnitPolicy) (selectorForTheme) (baseTokens) (th
 
 ```fsharp
 emitMultiMode
-    (baseTokens       : (string list * ResolvedToken) seq)
-    (overrideTokens   : (string list * ResolvedToken) seq)
+    (baseTokens       : ResolvedTokens)
+    (overrideTokens   : ResolvedTokens)
     (overrideSelector : string)
     : string
 
@@ -442,7 +453,7 @@ emitMultiModeWith (policy) (baseTokens) (overrideTokens) (overrideSelector)
 CssEmitter.emitCalcPreserving
     (baseVarName       : string)    // e.g. "--base"
     (multiplierVarName : string)    // e.g. "--multiplier"
-    (tokens            : (string list * ResolvedToken) seq)
+    (tokens            : ResolvedTokens)
     : string
 ```
 
@@ -498,7 +509,7 @@ From `FnTools.DesignTokens.FSharp` (renamed from `Bindings` in v0.12.0 — see [
 ### `emit`
 
 ```fsharp
-emit (moduleName: string) (tokens: (string list * ResolvedToken) seq) : string
+emit (moduleName: string) (tokens: ResolvedTokens) : string
 ```
 
 Resolved tokens → a generated F# source file with a top-level module of `string` constants:
@@ -518,7 +529,7 @@ Numeric path segments are prefixed with `N` (e.g. `scale.400` → `Scale.N400`).
 
 ```fsharp
 checkIdentifierSafety
-    (tokens: (string list * ResolvedToken) seq)
+    (tokens: ResolvedTokens)
     : IdentifierIssue list
 
 type IdentifierIssue =
@@ -539,7 +550,7 @@ Pre-flight check. Returns `[]` if `emit` would produce one binding per token. Ot
 ```fsharp
 emitChecked
     (moduleName: string)
-    (tokens: (string list * ResolvedToken) seq)
+    (tokens: ResolvedTokens)
     : Result<string, IdentifierIssue list>
 ```
 

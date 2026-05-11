@@ -408,7 +408,7 @@ let private flattenOneToken
 
 let private flattenResolvedFile
     (file: TokenFile)
-    : Result<(string list * ResolvedToken) seq, ValidationError list> =
+    : Result<ResolvedTokens, ValidationError list> =
     flattenFile file
     |> Seq.map (fun (path, t) ->
         flattenOneToken file path t
@@ -431,7 +431,7 @@ let private flattenResolvedFile
 let importWith
     (opts: ValidateOptions)
     (jsonText: string)
-    : Result<(string list * ResolvedToken) seq, ImportError list> =
+    : Result<ResolvedTokens, ImportError list> =
     match Format.parse jsonText with
     | Error es -> Error [ParseFailed es]
     | Ok file ->
@@ -444,7 +444,7 @@ let importWith
 
 /// Import a DTCG <c>.tokens.json</c> file with strict validation
 /// (default — equivalent to <c>importWith ValidateOptions.strict</c>).
-let import (jsonText: string) : Result<(string list * ResolvedToken) seq, ImportError list> =
+let import (jsonText: string) : Result<ResolvedTokens, ImportError list> =
     importWith ValidateOptions.strict jsonText
 
 /// Resolver-document import with caller-supplied <see cref="ValidateOptions"/>.
@@ -456,7 +456,7 @@ let importWithResolverWith
     (loadFile: string -> Result<string, string>)
     (context : Map<string, string>)
     (jsonText: string)
-    : Result<(string list * ResolvedToken) seq, ImportError list> =
+    : Result<ResolvedTokens, ImportError list> =
     match Resolver.parseResolver jsonText with
     | Error es -> Error [ParseFailed es]
     | Ok doc ->
@@ -479,7 +479,7 @@ let importWithResolver
     (loadFile: string -> Result<string, string>)
     (context: Map<string, string>)
     (jsonText: string)
-    : Result<(string list * ResolvedToken) seq, ImportError list> =
+    : Result<ResolvedTokens, ImportError list> =
     importWithResolverWith ValidateOptions.strict loadFile context jsonText
 
 /// Convert a ValidationError to the partial-success <c>(path, message)</c>
@@ -968,7 +968,7 @@ let importTokensStudioCombinedWith
 
 /// Round-trip a resolved-token sequence back to JSON.
 /// Builds a flat TokenFile (no groups beyond what dot-paths require) and serializes.
-let export (tokens: (string list * ResolvedToken) seq) : string =
+let export (tokens: ResolvedTokens) : string =
     // Convert ResolvedToken back to Token (no aliases, all literals)
     let rec back (rv: ResolvedTokenValue) : TokenValue =
         match rv with
@@ -1208,7 +1208,7 @@ let private updateNumericValue (newValue: float) (token: ResolvedToken) : Resolv
 // FS0044 themselves — the deprecation lives on the public surface, where it
 // belongs.
 let private evaluateMathExtensionsImpl
-    (tokens: (string list * ResolvedToken) seq)
+    (tokens: ResolvedTokens)
     : ResolveWithExtensionsResult =
     let tokenList = List.ofSeq tokens
     let index     = buildResolvedNumberIndex tokenList
@@ -1241,7 +1241,7 @@ to tokens that aliased it. Use evaluateMathExtensionsInFile instead — it opera
 pre-flatten TokenFile, and aliases pick up updated values when subsequently flattened. \
 See migration-0.8-to-0.9.md and the ADR-034 addendum (2026-05-10).")>]
 let evaluateMathExtensions
-    (tokens: (string list * ResolvedToken) seq)
+    (tokens: ResolvedTokens)
     : ResolveWithExtensionsResult =
     evaluateMathExtensionsImpl tokens
 
@@ -1411,7 +1411,7 @@ module Primitives =
     // deprecation warning just like consumers of Api.*.
     [<System.Obsolete("evaluateMathExtensions does not propagate through alias chains. Use evaluateMathExtensionsInFile instead. See migration-0.8-to-0.9.md.")>]
     let evaluateMathExtensions
-        (tokens: (string list * ResolvedToken) seq)
+        (tokens: ResolvedTokens)
         : ResolveWithExtensionsResult =
         evaluateMathExtensionsImpl tokens
     let evaluateMathExtensionsInFile          = evaluateMathExtensionsInFile

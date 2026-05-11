@@ -354,6 +354,12 @@ type ResolvedToken = {
     Metadata : Metadata
 }
 
+/// The universal handoff between the Resolver stage and any Translator.
+/// Each element is (token path segments, resolved value):
+///   ["color"; "accent"; "default"], { Value = ResolvedColor ...; Type = ColorType; ... }
+/// Every emitter consumes this. See ADR-039.
+type ResolvedTokens = (string list * ResolvedToken) seq
+
 
 // ─── Resolver types ──────────────────────────────────────────────────────────
 

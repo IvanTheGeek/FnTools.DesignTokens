@@ -73,7 +73,7 @@
 | [010](010-n-prefix-numeric-scales.md) | N-prefix for numeric token names in generated F# bindings | 2026-05-02 | `scale.400` → `Scale.N400`. **Addendum 2026-05-11 (v0.12.0)**: emitter package renamed to `FSharp`. |
 | [017](017-component-token-tier-lives-in-code.md) | Component tokens live in F# code, not in `.tokens.json` files | 2026-05-03 | Two-tier file model (primitive + semantic only); cited by ADR-018 addendum |
 | [038](038-bindings-identifier-safety.md) | F# identifier safety lives in the F# emitter layer, not in Validation | 2026-05-11 | `checkIdentifierSafety` + `emitChecked` catch silent data loss from F# identifier collisions and leaf/branch conflicts. Pattern for future emitter packages. Shipped v0.11.0. **Renamed 2026-05-11 (v0.12.0)**: `Bindings` package → `FSharp`; `BindingsIdentifierIssue` → `IdentifierIssue`. |
-| [039](039-emitter-contract-and-naming.md) | Emitter contract `(string list * ResolvedToken) seq -> string` and target-named packages | 2026-05-11 | Names the universal handoff type; documents the package naming rule (target language/tool, not role); covers the `Bindings` → `FSharp` rename. Shipped v0.12.0 |
+| [039](039-emitter-contract-and-naming.md) | Emitter contract `ResolvedTokens -> string` and target-named packages | 2026-05-11 | Names the universal handoff type; documents the package naming rule (target language/tool, not role); covers the `Bindings` → `FSharp` rename. Shipped v0.12.0. **Addendum 2026-05-11 (v0.13.0)**: `ResolvedTokens` type alias formalises the contract type in Foundation. |
 
 ### Tokens Studio integration
 
@@ -191,7 +191,7 @@ ADR-039 (Emitter contract + target-named packages)
 | 036 | 2026-05-10 | Deprecate `resolveAll`, expose `flattenAliases` | accepted (v0.10.0) |
 | 037 | 2026-05-10 | Validation warning channel (future possible route) | **deferred** |
 | 038 | 2026-05-11 | F# identifier safety (FSharp emitter layer, not Validation) | accepted (v0.11.0) + v0.12.0 rename |
-| 039 | 2026-05-11 | Emitter contract + target-named packages (`Bindings`→`FSharp` rename) | accepted (v0.12.0) |
+| 039 | 2026-05-11 | Emitter contract + target-named packages (`Bindings`→`FSharp` rename) | accepted (v0.12.0) + v0.13.0 `ResolvedTokens` alias addendum |
 
 ---
 

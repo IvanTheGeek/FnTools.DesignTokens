@@ -9,7 +9,7 @@ This guide takes you from "I have a `.tokens.json` file" to "I have a CSS styles
 ## Install
 
 ```xml
-<PackageReference Include="FnTools.DesignTokens" Version="0.12.0" />
+<PackageReference Include="FnTools.DesignTokens" Version="0.13.0" />
 ```
 
 That's the meta-package; it pulls in seven layered libraries transitively (`Foundation`, `Format`, `Validation`, `Resolver`, `Css`, `FSharp`, `TokensStudio`). Reference an individual layer if you want a smaller dependency surface — see [`api-reference.md`](./api-reference.md).
