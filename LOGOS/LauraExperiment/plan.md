@@ -153,15 +153,15 @@ between screens express transitions — what happens when a user clicks a button
 This maps directly to the PATHS concept: states + transitions form the navigable graph of
 the application.
 
-- [ ] Read all prototype connections on all mock pages (Dashboard, Landing, Email, Thumbnail)
-- [ ] Map each connection to a PATHS transition: source state, trigger, target state
-- [ ] Identify what information is present in a Penpot prototype connection vs what a PATHS
+- [x] Read all prototype connections on all mock pages (Dashboard, Landing, Email, Thumbnail)
+- [x] Map each connection to a PATHS transition: source state, trigger, target state
+- [x] Identify what information is present in a Penpot prototype connection vs what a PATHS
       transition needs (trigger type, guard conditions, data carried)
-- [ ] Document what is missing: conditions, data bindings, back-navigation, error states
-- [ ] Assess whether Penpot prototype authoring could be a PATHS input surface or only
+- [x] Document what is missing: conditions, data bindings, back-navigation, error states
+- [x] Assess whether Penpot prototype authoring could be a PATHS input surface or only
       a documentation layer
 
-Findings → `phase7-findings.md`
+Findings → `phase7-findings.md` (completed 2026-05-04)
 
 ---
 
