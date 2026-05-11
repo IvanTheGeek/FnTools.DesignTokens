@@ -1090,12 +1090,22 @@ let validateStrictDtcg (file: TokenFile) : Result<unit, ValidationError list> =
     Validation.validateStrictDtcg file
 
 
-// ─── Extension-aware resolve (ADR-034) ───────────────────────────────────────
+// ─── Extension-aware resolve (ADR-034 + 2026-05-10 addendum) ────────────────
 
-/// Result of <see cref="evaluateMathExtensions"/>: the (possibly updated)
+/// Result of <see cref="evaluateMathExtensions"/> /
+/// <see cref="importWithResolverEvaluatingExtensions"/>: the (possibly updated)
 /// tokens, plus any non-fatal warnings collected during math evaluation.
 type ResolveWithExtensionsResult = {
     Tokens   : (string list * ResolvedToken) list
+    Warnings : ExtensionEvaluationWarning list
+}
+
+/// Result of <see cref="evaluateMathExtensionsInFile"/>: the (possibly updated)
+/// <see cref="TokenFile"/>, plus warnings. The file is pre-flatten — aliases
+/// are intact and will pick up evaluated values when subsequently flattened
+/// (e.g. via <see cref="Primitives.flattenResolved"/>).
+type EvaluateMathInFileResult = {
+    File     : TokenFile
     Warnings : ExtensionEvaluationWarning list
 }
 
@@ -1148,19 +1158,12 @@ let private updateNumericValue (newValue: float) (token: ResolvedToken) : Resolv
     | ResolvedDuration d  -> { token with Value = ResolvedDuration  { d with Value = newValue } }
     | _                   -> token
 
-/// Walk resolved tokens; for any token carrying a <c>tsMathExpression</c>
-/// extension (ADR-031), evaluate the expression against the resolved numeric
-/// context and replace the token's value with the result. Tokens without the
-/// extension pass through unchanged. Evaluation failures are reported as
-/// <see cref="ExtensionEvaluationWarning"/>; the stale <c>$value</c> is kept.
-///
-/// Use after <see cref="resolveAll"/> or <see cref="importWithResolver"/> when
-/// the resolver document combines axes that affect a math expression's
-/// variables — e.g. a Breakpoint set overrides <c>multiplier</c>, and scale
-/// tokens defined as <c>round({base} * pow({multiplier}, N))</c> should
-/// re-evaluate against the new context rather than read the snapshot
-/// <c>$value</c> written at the previous resolve.
-let evaluateMathExtensions
+// Implementation shared by the public deprecated `evaluateMathExtensions` and
+// its `Primitives.evaluateMathExtensions` re-export. Kept private (no Obsolete
+// attribute) so the public wrappers can both call it without triggering
+// FS0044 themselves — the deprecation lives on the public surface, where it
+// belongs.
+let private evaluateMathExtensionsImpl
     (tokens: (string list * ResolvedToken) seq)
     : ResolveWithExtensionsResult =
     let tokenList = List.ofSeq tokens
@@ -1183,18 +1186,153 @@ let evaluateMathExtensions
 
     { Tokens = updated; Warnings = List.ofSeq warnings }
 
-/// Convenience: <see cref="importWithResolver"/> followed by
-/// <see cref="evaluateMathExtensions"/>. Math-expression extensions are
-/// evaluated against the fully-resolved per-axis context, so axis-dependent
-/// formulas (e.g. <c>multiplier</c> overridden by a Breakpoint set) produce
-/// correct values without per-axis pre-computation in the source file.
+/// Walk resolved tokens; for any token carrying a <c>tsMathExpression</c>
+/// extension (ADR-031), evaluate the expression against the resolved numeric
+/// context and replace the token's value with the result. Tokens without the
+/// extension pass through unchanged. Evaluation failures are reported as
+/// <see cref="ExtensionEvaluationWarning"/>; the stale <c>$value</c> is kept.
+[<System.Obsolete("evaluateMathExtensions operates on the post-flatten ResolvedToken seq. \
+Aliases are already baked by that point, so updating a formula token does NOT propagate \
+to tokens that aliased it. Use evaluateMathExtensionsInFile instead — it operates on the \
+pre-flatten TokenFile, and aliases pick up updated values when subsequently flattened. \
+See migration-0.8-to-0.9.md and the ADR-034 addendum (2026-05-10).")>]
+let evaluateMathExtensions
+    (tokens: (string list * ResolvedToken) seq)
+    : ResolveWithExtensionsResult =
+    evaluateMathExtensionsImpl tokens
+
+
+// ─── Pre-flatten evaluation (ADR-034 addendum, 2026-05-10) ──────────────────
+
+/// Build an alias-aware string index from a <see cref="TokenFile"/> for use as
+/// the recursive context in MathEval. Each entry maps a full dot-path to:
+///   - the raw expression string from <c>tsMathExpression</c> (preferred when present);
+///   - the numeric scalar (Number / Dimension / Duration); or
+///   - an alias reference token <c>"{target.path}"</c>.
+/// Other token types are omitted. MathEval recurses through this index.
+let private buildAliasAwareIndex (file: TokenFile) : Map<string, string> =
+    let entries = ResizeArray<string * string>()
+    let inv = System.Globalization.CultureInfo.InvariantCulture
+
+    let rec walk (path: string list) (node: TokenNode) =
+        let p = String.concat "." path
+        match node with
+        | TokenLeaf t ->
+            // Prefer the math expression over the baked $value — the expression
+            // is the source of truth; $value may be stale.
+            match tryReadMathExpressionAnnotation t.Metadata.Extensions, t.Value with
+            | Some expr, _ ->
+                entries.Add (p, expr)
+            | None, TokenValue.Number n ->
+                entries.Add (p, n.ToString("R", inv))
+            | None, TokenValue.Dimension d ->
+                entries.Add (p, d.Value.ToString("R", inv))
+            | None, TokenValue.Duration d ->
+                entries.Add (p, d.Value.ToString("R", inv))
+            | None, TokenValue.Alias (CurlyBrace target) ->
+                entries.Add (p, "{" + String.concat "." target + "}")
+            | None, _ -> ()  // non-numeric types not in the math index
+        | Group g ->
+            (match g.Root with
+             | Some t -> walk path (TokenLeaf t)
+             | None   -> ())
+            for (name, child) in g.Children do
+                walk (path @ [TokenName.value name]) child
+
+    for (name, node) in file.Children do
+        walk [TokenName.value name] node
+
+    Map.ofSeq entries
+
+/// Replace a TokenValue's numeric scalar, preserving type/unit. Used during the
+/// pre-flatten rewrite pass after a token's <c>tsMathExpression</c> evaluates.
+let private updateTokenValueNumeric (newValue: float) (v: TokenValue) : TokenValue =
+    match v with
+    | TokenValue.Number _    -> TokenValue.Number newValue
+    | TokenValue.Dimension d -> TokenValue.Dimension { d with Value = newValue }
+    | TokenValue.Duration d  -> TokenValue.Duration  { d with Value = newValue }
+    | other                  -> other  // non-numeric carrier — skipped (no warning)
+
+/// Walk a <see cref="TokenFile"/>; for any token carrying a <c>tsMathExpression</c>
+/// extension (ADR-031), evaluate the expression against an alias-aware index of
+/// the file and replace the token's <c>$value</c> with the result.
+///
+/// Crucially this happens <b>before</b> <see cref="Primitives.flattenResolved"/>
+/// follows aliases — so dependent tokens that alias a formula token pick up the
+/// evaluated value automatically when subsequently flattened. This is the
+/// correct shape; the post-flatten variant
+/// (<see cref="evaluateMathExtensions"/>) only updates the token carrying the
+/// extension and is deprecated.
+///
+/// Tokens without the extension pass through unchanged. Evaluation failures
+/// are reported as <see cref="ExtensionEvaluationWarning"/>; the stale
+/// <c>$value</c> is kept and flattening will pick that up.
+///
+/// Use between <see cref="Resolver.resolve"/> and
+/// <see cref="Primitives.flattenResolved"/> in the manual pipeline, or use
+/// <see cref="importWithResolverEvaluatingExtensions"/> which composes the
+/// three steps automatically.
+let evaluateMathExtensionsInFile (file: TokenFile) : EvaluateMathInFileResult =
+    let index = buildAliasAwareIndex file
+    let warnings = ResizeArray<ExtensionEvaluationWarning>()
+
+    let evaluateLeaf (path: string list) (t: Token) : Token =
+        match tryReadMathExpressionAnnotation t.Metadata.Extensions with
+        | None -> t
+        | Some expr ->
+            match TokensStudio.tryEvaluateMathExpressionWithIndex index expr with
+            | Some n -> { t with Value = updateTokenValueNumeric n t.Value }
+            | None ->
+                let reason = "evaluation failed (parse error, missing variable, or non-numeric result)"
+                warnings.Add (MathExpressionFailed (String.concat "." path, expr, reason))
+                t
+
+    let rec rewrite (path: string list) (node: TokenNode) : TokenNode =
+        match node with
+        | TokenLeaf t -> TokenLeaf (evaluateLeaf path t)
+        | Group g ->
+            let newRoot = g.Root |> Option.map (evaluateLeaf path)
+            let newChildren =
+                g.Children |> List.map (fun (name, child) ->
+                    name, rewrite (path @ [TokenName.value name]) child)
+            Group { g with Root = newRoot; Children = newChildren }
+
+    let newChildren =
+        file.Children |> List.map (fun (name, node) ->
+            name, rewrite [TokenName.value name] node)
+
+    { File = { file with Children = newChildren }
+      Warnings = List.ofSeq warnings }
+
+/// Convenience: <see cref="importWithResolver"/> plus
+/// <see cref="evaluateMathExtensionsInFile"/> inserted between resolve and
+/// flatten. Math-expression extensions are evaluated against the resolved
+/// alias-aware context, then aliases follow updated values during flatten —
+/// so an axis set that overrides <c>multiplier</c> changes every scale token
+/// AND every token that aliases a scale.
 let importWithResolverEvaluatingExtensions
     (loadFile : string -> Result<string, string>)
     (context  : Map<string, string>)
     (jsonText : string)
     : Result<ResolveWithExtensionsResult, ImportError list> =
-    importWithResolver loadFile context jsonText
-    |> Result.map evaluateMathExtensions
+    match Resolver.parseResolver jsonText with
+    | Error es -> Error [ParseFailed es]
+    | Ok doc ->
+        match Validation.validateResolver doc with
+        | Error es -> Error [ValidationFailed es]
+        | Ok () ->
+            match Resolver.resolve loadFile context doc with
+            | Error es -> Error [ResolveFailed es]
+            | Ok merged ->
+                match Validation.validate merged with
+                | Error es -> Error [ValidationFailed es]
+                | Ok () ->
+                    let evaluated = evaluateMathExtensionsInFile merged
+                    match flattenResolvedFile evaluated.File with
+                    | Error es -> Error [ValidationFailed es]
+                    | Ok seq ->
+                        Ok { Tokens = List.ofSeq seq
+                             Warnings = evaluated.Warnings }
 
 
 // ─── Primitives module ───────────────────────────────────────────────────────
@@ -1209,7 +1347,16 @@ module Primitives =
     let serializePenpot  = Format.serializePenpot
     let validate            = Validation.validate
     let validateStrictDtcg  = Validation.validateStrictDtcg
-    let evaluateMathExtensions                = evaluateMathExtensions
+    // Re-defined (not aliased) so the Obsolete attribute lives on this
+    // function directly; the call to evaluateMathExtensionsImpl is a private
+    // helper and does not trigger FS0044. Consumers of Primitives.* see the
+    // deprecation warning just like consumers of Api.*.
+    [<System.Obsolete("evaluateMathExtensions does not propagate through alias chains. Use evaluateMathExtensionsInFile instead. See migration-0.8-to-0.9.md.")>]
+    let evaluateMathExtensions
+        (tokens: (string list * ResolvedToken) seq)
+        : ResolveWithExtensionsResult =
+        evaluateMathExtensionsImpl tokens
+    let evaluateMathExtensionsInFile          = evaluateMathExtensionsInFile
     let importWithResolverEvaluatingExtensions = importWithResolverEvaluatingExtensions
     let formatExtensionEvaluationWarning      = ExtensionEvaluationWarning.format
     let flatten      = flattenFile

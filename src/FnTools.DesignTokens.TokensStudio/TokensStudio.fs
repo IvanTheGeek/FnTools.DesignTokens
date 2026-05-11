@@ -464,6 +464,22 @@ module TokensStudio =
                 v.ToString("R", System.Globalization.CultureInfo.InvariantCulture))
         MathEval.tryEval asStringIndex Set.empty expression
 
+    /// Lower-level evaluator that takes a string-keyed index. Each value in
+    /// the index can be a plain number ("16"), a math expression
+    /// ("round({base} * pow({mult}, 3))"), or an alias reference
+    /// ("{target.path}"). The evaluator recurses through aliases and nested
+    /// expressions, with cycle detection.
+    ///
+    /// Use this when evaluating expressions against a <see cref="TokenFile"/>
+    /// that still contains aliases (pre-flatten); use
+    /// <see cref="tryEvaluateMathExpression"/> when you already have a flat
+    /// numeric context.
+    let tryEvaluateMathExpressionWithIndex
+        (rawIndex   : Map<string, string>)
+        (expression : string)
+        : float option =
+        MathEval.tryEval rawIndex Set.empty expression
+
 
     // ── HSL pattern and evaluation ────────────────────────────────────────────
 
