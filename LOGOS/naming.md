@@ -1,6 +1,6 @@
 ---
 area: Token Naming
-status: current — 2026-05-02
+status: current — 2026-05-11
 reference: https://medium.com/eightshapes-llc/naming-tokens-in-design-systems-9e86c7444676
 ---
 
@@ -169,21 +169,40 @@ speaking, this is a *mode* attribute, not a *theme* attribute (the article disti
 clearly). Renaming to `data-mode="dark"` would be more precise but is a cosmetic change —
 browsers and CSS don't care about the attribute name.
 
-### Mode
+### Mode (and other modifier axes)
 
-The article treats mode (light/dark) as a first-class modifier level, encoded in token files
-with `on-light`/`on-dark` variants and emitted as separate CSS override blocks.
+The EightShapes article treats mode (light/dark) as a first-class modifier level encoded
+into token names (`on-light`/`on-dark` variants). We treat it differently: **mode is a
+resolution axis, not a name-level modifier.** The token tree carries one set of canonical
+names; per-mode values come from separate token sets resolved against the base.
 
-**Our situation:** Dark mode is handled via a manually maintained `[data-theme="dark"]` CSS
-override block in `tokens.css`. The token files (`cb.tokens.json`, `ll.tokens.json`) have no
-mode awareness — they define light-mode values only.
+**Library support (shipped):**
 
-**Gap:** Dark mode overrides are not round-trippable through the token pipeline. Editing
-`cb.tokens.json` requires manually syncing the dark-mode block in `tokens.css`. This is
-manageable at current scale but breaks down as the token set grows.
+- `CssEmitter.emitThemed base (themes: (string * TokenFile) list) selectorForTheme`
+  emits a `:root` block from `base` plus override blocks per theme. The selector function
+  is caller-supplied — `[data-theme="dark"]`, `.dark`, `@media (prefers-color-scheme: dark)`,
+  or `@layer base { ... }` are all valid choices (ADR-019).
+- `CssEmitter.emitMultiMode` is the two-set convenience variant.
+- `Api.importTokensStudioThemed` resolves each theme independently from a Tokens Studio file
+  for emitter consumption.
+- `Api.importTokensStudioCombined` resolves multiple modifier groups simultaneously when a
+  single concrete context is needed — e.g. `["Light"; "Desktop"; "100%"]` (ADR-025). The
+  math-index filtering (ADR-024) prevents cross-group bleed.
 
-**Future direction:** The emitter should support a second resolver pass that emits a
-`[data-mode="dark"]` block from dark-mode token file(s). No design yet.
+**Multiple axes, not just light/dark.** A real design system composes several independent
+modifier groups: color-mode × breakpoint × zoom × brand × density. Each group lives in its
+own Tokens Studio `themeGroup` and resolves independently. The library composes any
+combination at resolution time; no axis is privileged. Dark mode is one example of one axis.
+
+**Naming consequence.** Token names stay axis-agnostic — `color.surface.elevated`, not
+`color.surface.elevated.on-dark`. The same name resolves to different values under different
+mode/breakpoint/zoom contexts. The EightShapes `on-light`/`on-dark` suffix style applies only
+to tokens whose *meaning* depends on the surface they sit on (`color.text.on-accent`) — that
+is contrast pairing, not mode switching.
+
+**Attribute naming.** When emitting for a `data-theme="dark"` consumer, pass
+`fun n -> sprintf "[data-theme=\"%s\"]" n` to `emitThemed`. The library has no opinion on
+attribute names; conventions are the caller's choice.
 
 ---
 
@@ -195,5 +214,3 @@ The "fix required" items were completed 2026-05-02. Remaining lower-priority ite
   or `color.accent.foreground` (stays in accent group). No urgency until the accent palette grows.
 - `color.feedback.*` missing property level — `--color-feedback-success-default` is used as a
   fill/background but the token name doesn't say so. Revisit when the feedback group expands.
-- Dark mode in token files — currently manual in `tokens.css`. Emitter needs a second pass for
-  multi-mode output before this can be automated.
