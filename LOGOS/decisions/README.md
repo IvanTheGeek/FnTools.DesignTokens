@@ -94,58 +94,64 @@
 
 ## Cross-references at a glance
 
+```mermaid
+flowchart LR
+    A003["ADR-003<br/>I/O via load fn"]
+    A011["ADR-011<br/>$extensions round-trip"]
+    A012["ADR-012<br/>structural enforcement"]
+    A013["ADR-013<br/>DTCG boundary scope"]
+    A018["ADR-018<br/>CssIngest skip non-DTCG"]
+    A022["ADR-022<br/>TS export preserve-aliases"]
+    A023["ADR-023<br/>TS export $extensions carrier"]
+    A026["ADR-026<br/>shim-annotation recovery"]
+    A027["ADR-027<br/>calc-preserving emission"]
+    A028["ADR-028<br/>Em dimension extension"]
+    A031["ADR-031<br/>math expression round-trip"]
+    A033["ADR-033<br/>dimension→number TypeMismatch"]
+    A034["ADR-034<br/>tsMathExpression post-resolve"]
+    A035["ADR-035<br/>ValidateOptions opt-in"]
+    A036["ADR-036<br/>deprecate resolveAll"]
+    A037["ADR-037<br/>validation warnings (deferred)"]:::deferred
+    A038["ADR-038<br/>F# identifier safety"]
+    A039["ADR-039<br/>emitter contract + naming"]
+
+    A011 --> A023 --> A026 --> A031
+    A013 -. "addendum" .-> A003
+    A013 --> A018
+    A013 --> A028
+    A012 --> A028
+    A012 --> A034
+    A022 -- "superseded by" --> A023
+    A027 --> A031
+    A031 --> A034
+    A033 --> A027
+    A033 --> A035
+    A033 -. "alt" .-> A037
+    A036 --> A035
+    A038 --> A013
+    A038 --> A028
+    A038 --> A033
+    A039 --> A003
+    A039 --> A012
+    A039 --> A013
+    A039 -- "renames" --> A038
+
+    classDef deferred fill:#f5f5f5,stroke:#999,stroke-dasharray:4 3,color:#666
 ```
-ADR-011 ($extensions round-trip)
-  └─ enables ADR-023 → ADR-026 → ADR-031 (vendor-namespace recovery patterns)
 
-ADR-013 (DTCG interchange-boundary scope)
-  ├─ addendum closes ADR-003's schema-validator forward reference
-  ├─ cited by ADR-018 addendum (CssNative out of scope)
-  └─ cited by ADR-028 (Em is a deliberate, documented extension)
+**Reading the arrows.** Solid `-->` is *cites / depends on / enables*. Dotted `-. .->` is *addendum* or *alternative*. Labelled edges spell out the relationship (`superseded by`, `renames`). Greyed-out nodes are deferred — documented but not built.
 
-ADR-012 (structural enforcement)
-  ├─ cited by ADR-028 addendum (why validator, not serializer)
-  └─ cited by ADR-034 (Resolver stays strict; opt-in extension semantics)
+Detailed relationships per ADR:
 
-ADR-022 (TS export preserve-aliases)
-  └─ partly superseded by ADR-023 (extensions as primary carrier)
-
-ADR-027 (calc-preserving emission)  ──┐
-                                      ├─ both read `tsMathExpression`
-ADR-031 (math expression round-trip)  │  written by the shim
-                                      ├─ ADR-034 (post-resolve evaluation
-                                      │  becomes a third reader)
-                                      └─ ADR-033 (dimension→number alias
-                                         coercion lets calc fire for
-                                         alias-resolved scale tokens)
-
-ADR-033 (dimension→number TypeMismatch validation)
-  ├─ creates friction for the canonical Tokens Studio scale pattern
-  ├─ ADR-035 (ValidateOptions opt-in laxness) — addresses it via per-call opt-in
-  └─ ADR-037 (warning channel deferred) — option 3 alternative documented but not built
-
-ADR-036 (deprecate resolveAll, expose flattenAliases)
-  ├─ closes the trap that bit request_2026-05-10_04
-  └─ paired with ADR-035: both address the friction chain that forced
-     TS-as-SoT consumers off the convenience wrappers
-
-ADR-038 (F# identifier safety, originally Bindings identifier safety)
-  ├─ cites ADR-013 (interchange-boundary scope) — keeps F# naming rules
-  │  out of Foundation/Validation; each emitter owns its naming concerns
-  ├─ follows ADR-028 addendum shape (opt-in pre-flight check at the
-  │  layer where the check is meaningful)
-  ├─ follows ADR-033 v0.10.2 addendum's DRY pattern (shared `expandedFsPaths`
-  │  helper between build-the-tree and check-the-tree paths)
-  └─ renamed in v0.12.0 alongside ADR-039 (Bindings package → FSharp)
-
-ADR-039 (Emitter contract + target-named packages)
-  ├─ cites ADR-003 (caller-supplied I/O) — emit returns strings, never writes files
-  ├─ cites ADR-012 (structural enforcement) — ResolvedToken is alias-free by type
-  ├─ cites ADR-013 (interchange-boundary scope) — emitters cross outward only
-  ├─ adds rename addenda to ADR-010 and ADR-038 (Bindings → FSharp)
-  └─ generalises ADR-038's per-emitter safety-check pattern to every future
-     target language (Swift, Kotlin, Xaml — same shape, different rules)
-```
+- **ADR-011** ($extensions round-trip) enables the vendor-namespace recovery patterns in ADR-023 → ADR-026 → ADR-031.
+- **ADR-013** (DTCG interchange-boundary scope): addendum closes ADR-003's schema-validator forward reference; cited by ADR-018 addendum (CssNative out of scope) and ADR-028 (Em is a deliberate, documented extension).
+- **ADR-012** (structural enforcement): cited by ADR-028 addendum (why validator, not serializer) and ADR-034 (Resolver stays strict; opt-in extension semantics).
+- **ADR-022** (TS export preserve-aliases): partly superseded by ADR-023 (extensions as primary carrier).
+- **ADR-027** (calc-preserving emission) and **ADR-031** (math expression round-trip): both read `tsMathExpression`; ADR-034 becomes a third reader; ADR-033 coercion lets calc fire for alias-resolved scale tokens.
+- **ADR-033** (dimension→number TypeMismatch): creates friction for the canonical Tokens Studio scale pattern; ADR-035 addresses it via per-call opt-in; ADR-037 documents the alternative warning-channel route (deferred).
+- **ADR-036** (deprecate resolveAll, expose flattenAliases): closes the trap that bit `request_2026-05-10_04`; paired with ADR-035 (both address the friction chain that forced TS-as-SoT consumers off the convenience wrappers).
+- **ADR-038** (F# identifier safety): cites ADR-013 (each emitter owns its naming concerns), follows ADR-028 addendum shape (opt-in pre-flight check), follows ADR-033 v0.10.2 addendum's DRY pattern (shared `expandedFsPaths` helper); renamed in v0.12.0 alongside ADR-039.
+- **ADR-039** (emitter contract + target-named packages): cites ADR-003, ADR-012, ADR-013; adds rename addenda to ADR-010 and ADR-038 (Bindings → FSharp); generalises ADR-038's per-emitter safety-check pattern to every future target language.
 
 ---
 

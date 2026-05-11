@@ -68,13 +68,32 @@ state space, expressed visually.
 
 The flow is:
 
-```
-System Library          Design Mocks              PATHS + Fun.Blazor
-──────────────          ────────────              ─────────────────
-Tokens (values)    →    Screens (states)      →   State graph (nodes + edges)
-Components         →    Component layout      →   Component tree per state
-Themes/Sets        →    Token resolution      →   CSS custom properties
-                        Prototype connections  →   Router / navigation events
+```mermaid
+flowchart LR
+    subgraph lib["System Library"]
+        Tokens["Tokens (values)"]
+        Components["Components"]
+        Themes["Themes / Sets"]
+    end
+
+    subgraph mocks["Design Mocks"]
+        Screens["Screens (states)"]
+        Layout["Component layout"]
+        Resolution["Token resolution"]
+        Prototype["Prototype connections"]
+    end
+
+    subgraph impl["PATHS + Fun.Blazor"]
+        StateGraph["State graph<br/>(nodes + edges)"]
+        ComponentTree["Component tree per state"]
+        CssVars["CSS custom properties"]
+        Router["Router / navigation events"]
+    end
+
+    Tokens --> Screens --> StateGraph
+    Components --> Layout --> ComponentTree
+    Themes --> Resolution --> CssVars
+    Prototype --> Router
 ```
 
 The mocks file bridges the design system and the implementation. It consumes

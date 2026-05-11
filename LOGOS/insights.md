@@ -85,18 +85,23 @@ Technical reports for all versions: `/home/ivan/nexus/VARIOUS/community-group/ww
 
 ## The full layer model — where this library sits
 
-```
-[ 7 ] Prototype / Walker       clickable path simulation
-[ 6 ] Screen / Layout          composing components into screens
-[ 5 ] Variants & States        component variant axes + interaction states
-[ 4 ] Component Builder        define structure, bind tokens, preview, catalog
-[ 3 ] Design System            three-tier token model, named sets, inheritance chain
-[ 2 ] ATLAS token runtime      internal live graph (reactive, richer than DTCG)
-[ 1 ] NEXUS-Tokens             DTCG codec — import/export boundary  ← this library
-[ 0 ] .tokens.json files       Figma, Penpot, Style Dictionary output
+```mermaid
+flowchart TB
+    L7["[7] Prototype / Walker — clickable path simulation"]
+    L6["[6] Screen / Layout — composing components into screens"]
+    L5["[5] Variants & States — component variant axes + interaction states"]
+    L4["[4] Component Builder — structure, bind tokens, preview, catalog"]
+    L3["[3] Design System — three-tier token model, named sets, inheritance"]
+    L2["[2] ATLAS token runtime — internal live graph (reactive, richer than DTCG)"]
+    L1["[1] FnTools.DesignTokens — DTCG codec, import/export boundary"]:::self
+    L0["[0] .tokens.json files — Figma, Penpot, Style Dictionary output"]
+
+    L7 --> L6 --> L5 --> L4 --> L3 --> L2 --> L1 --> L0
+
+    classDef self fill:#e3f2fd,stroke:#1976d2,stroke-width:2px,color:#0d3a66
 ```
 
-NEXUS-Tokens is Layer 1. It is touched only when crossing the interchange boundary — importing from an external tool or exporting back out. Layers 2 and above use their own richer runtime representations. The codec produces a `TokenFile` (or `ResolvedToken seq` via the convenience tier) that the Layer 2 runtime initialises from.
+FnTools.DesignTokens is Layer 1. It is touched only when crossing the interchange boundary — importing from an external tool or exporting back out. Layers 2 and above use their own richer runtime representations. The codec produces a `TokenFile` (or `ResolvedToken seq` via the convenience tier) that the Layer 2 runtime initialises from.
 
 ## Design system inheritance maps directly to the DTCG resolver
 

@@ -33,6 +33,32 @@ The alias was introduced in v0.13.0 (see addendum below); prior to that, every s
 
 Emitter packages may expose additional functions for variants (`emitThemed`, `emitChecked`, `emitWith`, etc.) but they all share the same input type. Resolution happens once upstream; multiple emitters consume the same resolved sequence in parallel.
 
+```mermaid
+flowchart LR
+    Resolver["Resolver stage<br/>parse, validate, merge,<br/>resolve aliases, eval math"]
+    RT(["ResolvedTokens<br/>(string list * ResolvedToken) seq"]):::contract
+
+    Css["Css.emit<br/>+ emitThemed, emitWith, …"]
+    FSharp["FSharp.emit<br/>+ emitChecked"]
+    TS["TokensStudio.emit"]
+    Swift["Swift.emit"]:::future
+    Kotlin["Kotlin.emit"]:::future
+    Xaml["Xaml.emit"]:::future
+
+    Resolver --> RT
+    RT --> Css --> CssOut[/"tokens.css"/]
+    RT --> FSharp --> FsOut[/"Tokens.fs"/]
+    RT --> TS --> TsOut[/"penpot.json"/]
+    RT --> Swift --> SwiftOut[/"Tokens.swift"/]:::future
+    RT --> Kotlin --> KotlinOut[/"Theme.kt"/]:::future
+    RT --> Xaml --> XamlOut[/"Resources.xaml"/]:::future
+
+    classDef contract fill:#e3f2fd,stroke:#1976d2,stroke-width:2px,color:#0d3a66
+    classDef future fill:#f5f5f5,stroke:#999,stroke-dasharray:4 3,color:#666
+```
+
+One resolve, many translations. Every emitter is a leaf that consumes the same contract type.
+
 ### Naming convention
 
 Emitter packages are named by the target they produce, not by the role they play.

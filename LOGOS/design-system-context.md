@@ -158,14 +158,25 @@ is better for standalone publishing and keeps the DTCG library useful outside th
 
 FnHCI extends the token concept beyond visual/DTCG to cover all rendering targets:
 
+```mermaid
+flowchart LR
+    FnHCI["FnHCI.Tokens"]
+    DT["DesignTokens<br/>DTCG 2025.10<br/>web/UI visual"]:::built
+    CT["ConsoleTokens<br/>ANSI escape, 256-color,<br/>bold/italic/underline"]
+    TT["TuiTokens<br/>border chars, box drawing,<br/>character-cell spacing"]
+    TH["ThermalTokens<br/>print density, font codes,<br/>barcode/QR spec"]
+    BT["BrailleTokens<br/>dot patterns,<br/>grade 1/2 encoding"]
+
+    FnHCI --> DT
+    FnHCI --> CT
+    FnHCI --> TT
+    FnHCI --> TH
+    FnHCI --> BT
+
+    classDef built fill:#e3f2fd,stroke:#1976d2,color:#0d3a66
 ```
-FnHCI.Tokens
-├── DesignTokens    (DTCG 2025.10 — web/UI visual)
-├── ConsoleTokens   (ANSI escape, 256-color, bold/italic/underline)
-├── TuiTokens       (border chars, box drawing, character-cell spacing)
-├── ThermalTokens   (print density, font codes, barcode/QR spec)
-└── BrailleTokens   (dot patterns, grade 1/2 encoding hints)
-```
+
+Highlighted = built today; the rest are planned. 
 
 Each target has its own token domain and authoring format. DTCG handles the visual tier. TOML handles the others (they are shallow and config-like; no nested group semantics needed).
 

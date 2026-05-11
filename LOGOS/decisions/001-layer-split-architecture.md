@@ -22,6 +22,31 @@ Split into five focused projects plus a meta-package:
 | `Css` | CSS custom-property emitter | Foundation only |
 | `FnTools.DesignTokens` | Meta-package — re-exports all five | All above |
 
+```mermaid
+flowchart BT
+    Foundation["Foundation<br/>BCL only"]
+    Format["Format<br/>System.Text.Json"]
+    Validation["Validation<br/>FsToolkit.ErrorHandling"]
+    Resolver["Resolver"]
+    Css["Css"]
+    Meta["FnTools.DesignTokens<br/>(meta)"]
+
+    Format --> Foundation
+    Validation --> Foundation
+    Resolver --> Foundation
+    Resolver --> Format
+    Css --> Foundation
+    Meta --> Format
+    Meta --> Validation
+    Meta --> Resolver
+    Meta --> Css
+
+    classDef pkg fill:#ffffff,stroke:#444,color:#222
+    class Foundation,Format,Validation,Resolver,Css,Meta pkg
+```
+
+*Note (post-v0.12.0): the layout has since grown to 8 packages — `FSharp` (renamed from `Bindings`, ADR-039) and `TokensStudio` follow the same Foundation-only translator pattern as `Css`.*
+
 ## Consequences
 
 - A CLI tool that only parses and emits CSS takes `Foundation` + `Format` + `Css` — no validation or resolver overhead.

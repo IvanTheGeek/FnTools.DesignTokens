@@ -27,6 +27,25 @@ Model inheritance as a `.resolver.json` with sources listed in resolution order.
 ]
 ```
 
+```mermaid
+flowchart LR
+    P["cheddar-primitives<br/>raw OKLCH values,<br/>spacing scale, etc."]
+    S["cheddar-semantic<br/>aliases into primitives:<br/>action.default = {green.500}"]
+    CB["cheddar-books-overrides<br/>differences from base Cheddar"]
+    LL["laundrylog-overrides<br/>differences from CheddarBooks"]
+    T["theme modifier<br/>light / dark contexts"]
+    Out["Merged token set"]
+
+    P --> S --> CB --> LL --> T --> Out
+
+    classDef pkg fill:#ffffff,stroke:#444,color:#222
+    classDef out fill:#e3f2fd,stroke:#1976d2,color:#0d3a66
+    class P,S,CB,LL,T pkg
+    class Out out
+```
+
+Each source appends or overrides keys from the previous; the modifier at the end is a runtime context choice (the active theme).
+
 ## Consequences
 
 - The `Resolver` module in this library is the implementation — no additional merge layer is needed at higher layers for the token inheritance use case.

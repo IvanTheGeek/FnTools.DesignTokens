@@ -23,6 +23,22 @@ The library supports all four published versions. Files are auto-detected on par
 
 JSON schemas exist only for 2025.10. Older versions are identified by structural heuristics (see `Format.fs` version detection logic).
 
+```mermaid
+flowchart LR
+    V1["First ED<br/>2021-09-23<br/>type/value (no $)<br/>hex strings<br/>'12px' strings"]
+    V2["Second ED<br/>2022-06-14<br/>$type/$value<br/>+ fontWeight"]
+    V3["Third ED<br/>2025-08-04<br/>color object<br/>dimension object<br/>+ 7 composite types"]
+    V4["2025.10 (stable)<br/>2025-10-28<br/>+ Resolver module<br/>+ shadow inset"]:::stable
+
+    V1 -- "rename type→$type<br/>parse hex/dimension strings" --> V4
+    V2 -- "parse hex/dimension strings" --> V4
+    V3 -- "default inset=None" --> V4
+
+    classDef stable fill:#e3f2fd,stroke:#1976d2,stroke-width:2px,color:#0d3a66
+```
+
+All upgrade paths are lossless. The library auto-detects the source version on parse and upgrades to the 2025.10 domain model.
+
 ### What each version introduced
 
 **First Editors' Draft (2021-09-23)**

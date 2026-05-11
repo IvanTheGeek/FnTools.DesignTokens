@@ -35,7 +35,7 @@ flowchart LR
     R -- "ResolvedTokens" --> T
     T -- "target string" --> Target
 
-    subgraph lib["FnTools.DesignTokens (this library)"]
+    subgraph lib["FnTools.DesignTokens<br/>(this library)"]
         R
         T
     end
@@ -99,33 +99,44 @@ See [ADR-012: Structural enforcement over documentation](../LOGOS/decisions/012-
 
 ## Package layout reflects the pipeline
 
-```
-┌── Translator stage ─────────────────────────────┐
-│                                                  │
-│  Css ──────────► tokens.css                      │
-│  FSharp ───────► Tokens.fs                       │
-│  TokensStudio ─► penpot.json (round-trip)        │
-│  (future: Swift, Kotlin, Xaml … same pattern)    │
-│                                                  │
-└──────────────────▲───────────────────────────────┘
-                   │
-                   │ consumes: ResolvedTokens
-                   │
-┌── Resolver stage ─────────────────────────────┐
-│                                                │
-│  Resolver ────► multi-set merge, alias graph, │
-│                 axis/modifier contexts,        │
-│                 math expression evaluation     │
-│                                                │
-│  Validation ──► strict / permissive checks,   │
-│                 error accumulation             │
-│                                                │
-│  Format ──────► JSON parse / serialize         │
-│                                                │
-│  Foundation ──► domain types (zero non-BCL    │
-│                 dependencies)                  │
-│                                                │
-└────────────────────────────────────────────────┘
+```mermaid
+flowchart BT
+    Foundation["Foundation<br/>domain types<br/>(zero non-BCL deps)"]
+    Format["Format<br/>JSON parse / serialize"]
+    Validation["Validation<br/>strict + permissive checks<br/>error accumulation"]
+    Resolver["Resolver<br/>multi-set merge, alias graph,<br/>axis/modifier contexts,<br/>math expression evaluation"]
+
+    Css["Css → tokens.css"]
+    FSharp["FSharp → Tokens.fs"]
+    TokensStudio["TokensStudio → penpot.json (round-trip)"]
+    Future["Swift, Kotlin, Xaml, …<br/>(future, same pattern)"]:::future
+
+    Foundation --> Format
+    Foundation --> Validation
+    Format --> Resolver
+    Validation --> Resolver
+    Resolver -- "ResolvedTokens" --> Css
+    Resolver -- "ResolvedTokens" --> FSharp
+    Resolver -- "ResolvedTokens" --> TokensStudio
+    Resolver -- "ResolvedTokens" --> Future
+
+    subgraph resolver_stage["Resolver stage"]
+        Foundation
+        Format
+        Validation
+        Resolver
+    end
+
+    subgraph translator_stage["Translator stage"]
+        Css
+        FSharp
+        TokensStudio
+        Future
+    end
+
+    classDef future fill:#f5f5f5,stroke:#999,stroke-dasharray:4 3,color:#666
+    classDef stage fill:#ffffff,stroke:#444,stroke-width:1px,color:#222
+    class Foundation,Format,Validation,Resolver,Css,FSharp,TokensStudio stage
 ```
 
 The eight packages exist for two reasons:
