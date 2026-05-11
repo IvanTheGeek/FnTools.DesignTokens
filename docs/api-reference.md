@@ -8,10 +8,13 @@
 
 The meta-package transitively pulls in seven layered libraries: `Foundation`, `Format`, `Validation`, `Resolver`, `Css`, `Bindings`, `TokensStudio`. Reference an individual layer if you want a smaller dependency surface.
 
-Migration guides:
+Migration guides (newest first):
 - [`migration-0.7-to-0.8.md`](./migration-0.7-to-0.8.md) — current release. Purely additive: `Api.evaluateMathExtensions` and `Api.importWithResolverEvaluatingExtensions` (ADR-034).
-- [`migration-0.6-to-0.7.md`](./migration-0.6-to-0.7.md) — `Api.validateStrictDtcg` opt-in spec-compliance check.
-- [`migration-0.5-to-0.6.md`](./migration-0.5-to-0.6.md) — `TypeMismatch` validation, dimension→number alias emission fix.
+- [`migration-0.6-to-0.7.md`](./migration-0.6-to-0.7.md) — `Api.validateStrictDtcg` opt-in spec-compliance check (ADR-028 addendum).
+- [`migration-0.5-to-0.6.md`](./migration-0.5-to-0.6.md) — `TypeMismatch` validation, dimension→number alias emission fix (ADR-033).
+- [`migration-0.4-to-0.5.md`](./migration-0.4-to-0.5.md) — pure version bump; first NuGet-CI release.
+- [`migration-0.3-to-0.4.md`](./migration-0.3-to-0.4.md) — `Api.importTokensStudioCombinedWith` (ADR-030).
+- [`migration-0.2-to-0.3.md`](./migration-0.2-to-0.3.md) — `Api.importTokensStudioRaw` (ADR-029).
 
 ---
 
@@ -448,9 +451,8 @@ Normal usage does not require `Primitives`. Use it when you need a specific inte
 
 ## See also
 
-- [`migration-0.7-to-0.8.md`](./migration-0.7-to-0.8.md) — current release changes
-- [`migration-0.6-to-0.7.md`](./migration-0.6-to-0.7.md) — previous release changes
-- [`migration-0.5-to-0.6.md`](./migration-0.5-to-0.6.md) — earlier release changes
+- [`getting-started.md`](./getting-started.md) — five-minute walkthrough: import → validate → emit CSS → bind in F#
+- [Migration guides](#) — `migration-0.2-to-0.3.md` through `migration-0.7-to-0.8.md` (see top of page for full list)
 - [`spec-context.md`](./spec-context.md) — DTCG 2025.10 spec references and version history
 - [`LOGOS/decisions/`](../LOGOS/decisions/) — Architecture Decision Records (33 ADRs)
 - [`samples/ivanthegeek.tokens.json`](../samples/ivanthegeek.tokens.json) — real-world sample bootstrapped from a live site
