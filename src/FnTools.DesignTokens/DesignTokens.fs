@@ -1090,6 +1090,113 @@ let validateStrictDtcg (file: TokenFile) : Result<unit, ValidationError list> =
     Validation.validateStrictDtcg file
 
 
+// ─── Extension-aware resolve (ADR-034) ───────────────────────────────────────
+
+/// Result of <see cref="evaluateMathExtensions"/>: the (possibly updated)
+/// tokens, plus any non-fatal warnings collected during math evaluation.
+type ResolveWithExtensionsResult = {
+    Tokens   : (string list * ResolvedToken) list
+    Warnings : ExtensionEvaluationWarning list
+}
+
+// The vendor namespace and field name are duplicated literals across the
+// codebase (TokensStudio.fs and CssEmitter.fs each define their own private
+// copies). Kept private here too rather than promoted to Foundation — the
+// constants belong to the extension contract, not the domain.
+let private extensionEvaluationVendorKey   = "com.fntools.designtokens"
+let private extensionEvaluationMathExprKey = "tsMathExpression"
+
+/// Read the <c>tsMathExpression</c> string from a token's vendor extensions.
+let private tryReadMathExpressionAnnotation
+    (extensions: Extensions)
+    : string option =
+    extensions
+    |> List.tryPick (fun (k, node) ->
+        if k <> extensionEvaluationVendorKey then None
+        else
+            match node with
+            | :? System.Text.Json.Nodes.JsonObject as vendor
+              when vendor.ContainsKey extensionEvaluationMathExprKey ->
+                vendor.[extensionEvaluationMathExprKey]
+                |> Option.ofObj
+                |> Option.bind (fun v ->
+                    try Some (v.GetValue<string>())
+                    with _ -> None)
+            | _ -> None)
+
+/// Build a Map<string, float> of resolved numeric values keyed by full dot-path.
+/// Only numeric token types (Number, Dimension, Duration) are included.
+let private buildResolvedNumberIndex
+    (tokens: (string list * ResolvedToken) list)
+    : Map<string, float> =
+    tokens
+    |> List.choose (fun (path, token) ->
+        match token.Value with
+        | ResolvedNumber n    -> Some (String.concat "." path, n)
+        | ResolvedDimension d -> Some (String.concat "." path, d.Value)
+        | ResolvedDuration d  -> Some (String.concat "." path, d.Value)
+        | _                   -> None)
+    |> Map.ofList
+
+/// Replace a numeric resolved value's payload with a new number, preserving
+/// the token type (Number / Dimension / Duration). Non-numeric tokens are
+/// returned unchanged — math evaluation should not be applied to them.
+let private updateNumericValue (newValue: float) (token: ResolvedToken) : ResolvedToken =
+    match token.Value with
+    | ResolvedNumber _    -> { token with Value = ResolvedNumber    newValue }
+    | ResolvedDimension d -> { token with Value = ResolvedDimension { d with Value = newValue } }
+    | ResolvedDuration d  -> { token with Value = ResolvedDuration  { d with Value = newValue } }
+    | _                   -> token
+
+/// Walk resolved tokens; for any token carrying a <c>tsMathExpression</c>
+/// extension (ADR-031), evaluate the expression against the resolved numeric
+/// context and replace the token's value with the result. Tokens without the
+/// extension pass through unchanged. Evaluation failures are reported as
+/// <see cref="ExtensionEvaluationWarning"/>; the stale <c>$value</c> is kept.
+///
+/// Use after <see cref="resolveAll"/> or <see cref="importWithResolver"/> when
+/// the resolver document combines axes that affect a math expression's
+/// variables — e.g. a Breakpoint set overrides <c>multiplier</c>, and scale
+/// tokens defined as <c>round({base} * pow({multiplier}, N))</c> should
+/// re-evaluate against the new context rather than read the snapshot
+/// <c>$value</c> written at the previous resolve.
+let evaluateMathExtensions
+    (tokens: (string list * ResolvedToken) seq)
+    : ResolveWithExtensionsResult =
+    let tokenList = List.ofSeq tokens
+    let index     = buildResolvedNumberIndex tokenList
+    let warnings  = ResizeArray<ExtensionEvaluationWarning>()
+
+    let updated =
+        tokenList |> List.map (fun (path, token) ->
+            match tryReadMathExpressionAnnotation token.Metadata.Extensions with
+            | None -> path, token
+            | Some expr ->
+                match TokensStudio.tryEvaluateMathExpression index expr with
+                | Some n ->
+                    path, updateNumericValue n token
+                | None ->
+                    let reason =
+                        "evaluation failed (parse error, missing variable, or non-numeric result)"
+                    warnings.Add (MathExpressionFailed (String.concat "." path, expr, reason))
+                    path, token)
+
+    { Tokens = updated; Warnings = List.ofSeq warnings }
+
+/// Convenience: <see cref="importWithResolver"/> followed by
+/// <see cref="evaluateMathExtensions"/>. Math-expression extensions are
+/// evaluated against the fully-resolved per-axis context, so axis-dependent
+/// formulas (e.g. <c>multiplier</c> overridden by a Breakpoint set) produce
+/// correct values without per-axis pre-computation in the source file.
+let importWithResolverEvaluatingExtensions
+    (loadFile : string -> Result<string, string>)
+    (context  : Map<string, string>)
+    (jsonText : string)
+    : Result<ResolveWithExtensionsResult, ImportError list> =
+    importWithResolver loadFile context jsonText
+    |> Result.map evaluateMathExtensions
+
+
 // ─── Primitives module ───────────────────────────────────────────────────────
 
 module Primitives =
@@ -1102,6 +1209,9 @@ module Primitives =
     let serializePenpot  = Format.serializePenpot
     let validate            = Validation.validate
     let validateStrictDtcg  = Validation.validateStrictDtcg
+    let evaluateMathExtensions                = evaluateMathExtensions
+    let importWithResolverEvaluatingExtensions = importWithResolverEvaluatingExtensions
+    let formatExtensionEvaluationWarning      = ExtensionEvaluationWarning.format
     let flatten      = flattenFile
     let tryFind      = tryFindIn
     let tryResolveAlias = tryResolveAliasIn

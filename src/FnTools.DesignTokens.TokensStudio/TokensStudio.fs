@@ -439,6 +439,32 @@ module TokensStudio =
 
             evalExpr ()
 
+
+    // ── Public wrapper over MathEval (ADR-034) ──────────────────────────────
+
+    /// Evaluate a math expression string against a resolved numeric context.
+    /// Variables in the expression syntax <c>{path}</c> are looked up in
+    /// <paramref name="resolvedValues"/> by full dot-path.
+    ///
+    /// Supports the same operator/function set as the import-time evaluator:
+    /// <c>+ - * / ^ %</c> operators, parentheses, unary minus/plus, and the
+    /// functions <c>round / floor / ceil / abs / sqrt / pow / min / max / sin /
+    /// cos / tan / asin / acos / atan / atan2 / log / log2 / log10 / exp</c>.
+    ///
+    /// Returns <c>None</c> on any failure (parse error, missing variable,
+    /// non-numeric result). Callers should pair the <c>None</c> with the
+    /// expression and path to produce an <see cref="ExtensionEvaluationWarning"/>.
+    let tryEvaluateMathExpression
+        (resolvedValues: Map<string, float>)
+        (expression   : string)
+        : float option =
+        let asStringIndex =
+            resolvedValues
+            |> Map.map (fun _ v ->
+                v.ToString("R", System.Globalization.CultureInfo.InvariantCulture))
+        MathEval.tryEval asStringIndex Set.empty expression
+
+
     // ── HSL pattern and evaluation ────────────────────────────────────────────
 
     // Matches: hsla({alias},{alias},{alias},N) or hsla(N,N,N,N)

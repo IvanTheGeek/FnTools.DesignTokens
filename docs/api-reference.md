@@ -3,14 +3,15 @@
 `FnTools.DesignTokens` — DTCG 2025.10 codec, validator, resolver, and emitters (CSS, F# bindings, Tokens Studio). The entry point is `FnTools.DesignTokens.Api`. One package reference is all you need:
 
 ```xml
-<PackageReference Include="FnTools.DesignTokens" Version="0.7.0" />
+<PackageReference Include="FnTools.DesignTokens" Version="0.8.0" />
 ```
 
 The meta-package transitively pulls in seven layered libraries: `Foundation`, `Format`, `Validation`, `Resolver`, `Css`, `Bindings`, `TokensStudio`. Reference an individual layer if you want a smaller dependency surface.
 
 Migration guides:
-- [`migration-0.6-to-0.7.md`](./migration-0.6-to-0.7.md) — current release. Purely additive: new `Api.validateStrictDtcg` opt-in spec-compliance check.
-- [`migration-0.5-to-0.6.md`](./migration-0.5-to-0.6.md) — new `TypeMismatch` validation, dimension→number alias emission fix.
+- [`migration-0.7-to-0.8.md`](./migration-0.7-to-0.8.md) — current release. Purely additive: `Api.evaluateMathExtensions` and `Api.importWithResolverEvaluatingExtensions` (ADR-034).
+- [`migration-0.6-to-0.7.md`](./migration-0.6-to-0.7.md) — `Api.validateStrictDtcg` opt-in spec-compliance check.
+- [`migration-0.5-to-0.6.md`](./migration-0.5-to-0.6.md) — `TypeMismatch` validation, dimension→number alias emission fix.
 
 ---
 
@@ -184,6 +185,59 @@ Api.serializeResolver (doc: ResolverDocument) : string
 ```
 
 Serialize a `ResolverDocument` to JSON. Output round-trips through `parseResolver` (and therefore `importWithResolver`) to a structurally equivalent document. `$ref` pointers are never emitted — all sources are written as concrete `inline` or `path` objects.
+
+---
+
+## Extension-aware resolve
+
+### `Api.evaluateMathExtensions`
+
+```fsharp
+Api.evaluateMathExtensions
+    (tokens: (string list * ResolvedToken) seq)
+    : ResolveWithExtensionsResult
+
+type ResolveWithExtensionsResult = {
+    Tokens   : (string list * ResolvedToken) list
+    Warnings : ExtensionEvaluationWarning list
+}
+
+type ExtensionEvaluationWarning =
+    | MathExpressionFailed of path: string * expression: string * reason: string
+```
+
+Post-resolve pass that walks the token sequence; for any token carrying a `tsMathExpression` extension (`$extensions["com.fntools.designtokens"]["tsMathExpression"]`, ADR-031), evaluates the expression against the resolved numeric context and replaces the token's value with the result. The numeric context is built from the same sequence: every `ResolvedNumber`, `ResolvedDimension`, and `ResolvedDuration` contributes its scalar value keyed by full dot-path.
+
+For `ResolvedDimension` and `ResolvedDuration` hosts, only the scalar is updated — the unit is preserved. `ResolvedNumber` is replaced wholesale. Non-numeric hosts (Color, FontFamily, etc.) carrying the extension pass through unchanged with no warning (the extension is structurally non-applicable).
+
+Failures (missing variable, parse error, NaN/Infinity result) emit `MathExpressionFailed (path, expression, reason)` warnings and **keep the stale `$value`** — the resolution succeeds, the author sees the warning and fixes the formula.
+
+Supports the same operators and functions as the import-time evaluator: `+ - * / ^ %`, parentheses, unary minus/plus, and `round / floor / ceil / abs / sqrt / pow / min / max / sin / cos / tan / asin / acos / atan / atan2 / log / log2 / log10 / exp`.
+
+### `Api.importWithResolverEvaluatingExtensions`
+
+```fsharp
+Api.importWithResolverEvaluatingExtensions
+    (loadFile : string -> Result<string, string>)
+    (context  : Map<string, string>)
+    (jsonText : string)
+    : Result<ResolveWithExtensionsResult, ImportError list>
+```
+
+Convenience: `importWithResolver` + `evaluateMathExtensions` in one call. Use when your `.resolver.json` composes axis sets whose values feed math expressions on dependent tokens — for example, a Breakpoint set overrides `multiplier` and you want every `round(base * pow({multiplier}, N))` token to re-evaluate against the active axis combination instead of returning a stale snapshot `$value`.
+
+`Resolver.resolveAll` (and its wrapper `importWithResolver`) **does not** do this on its own — it stays strict-DTCG-compliant by reading `$value` directly. Extension-aware behaviour is opt-in by function name. See ADR-034 for the rationale.
+
+### `TokensStudio.tryEvaluateMathExpression`
+
+```fsharp
+TokensStudio.tryEvaluateMathExpression
+    (resolvedValues : Map<string, float>)
+    (expression     : string)
+    : float option
+```
+
+Public wrapper over the internal evaluator. Variables in the expression syntax `{path}` are looked up in `resolvedValues` by full dot-path. Returns `None` on parse failure, missing variable, or non-numeric result. Useful when you want to evaluate a single expression outside the meta-package's full-tree pass.
 
 ---
 
@@ -378,6 +432,7 @@ Human-readable description of any `ImportError`. Useful for logging or surfacing
 | `serialize` / `serializeAs` / `serializePenpot` | `Format.serialize*` — `serializeAs` requires an `IAcceptDataLoss` parameter at the call site (ADR-028, marks a lossy spec downgrade) |
 | `validate` | `Validation.validate` — includes the cross-type alias check from ADR-033 |
 | `validateStrictDtcg` | `Validation.validateStrictDtcg` — opt-in spec-extension check (ADR-028 addendum) |
+| `evaluateMathExtensions` / `importWithResolverEvaluatingExtensions` / `formatExtensionEvaluationWarning` | post-resolve evaluation of `tsMathExpression` extensions (ADR-034) |
 | `flatten` / `tryFind` / `tryResolveAlias` | token tree traversal |
 | `parseResolver` / `serializeResolver` / `resolve` / `resolveAll` | `Resolver.*` |
 | `flattenResolved` | full resolution pipeline |
@@ -393,8 +448,9 @@ Normal usage does not require `Primitives`. Use it when you need a specific inte
 
 ## See also
 
-- [`migration-0.6-to-0.7.md`](./migration-0.6-to-0.7.md) — current release changes
-- [`migration-0.5-to-0.6.md`](./migration-0.5-to-0.6.md) — previous release changes
+- [`migration-0.7-to-0.8.md`](./migration-0.7-to-0.8.md) — current release changes
+- [`migration-0.6-to-0.7.md`](./migration-0.6-to-0.7.md) — previous release changes
+- [`migration-0.5-to-0.6.md`](./migration-0.5-to-0.6.md) — earlier release changes
 - [`spec-context.md`](./spec-context.md) — DTCG 2025.10 spec references and version history
 - [`LOGOS/decisions/`](../LOGOS/decisions/) — Architecture Decision Records (33 ADRs)
 - [`samples/ivanthegeek.tokens.json`](../samples/ivanthegeek.tokens.json) — real-world sample bootstrapped from a live site

@@ -1,3 +1,33 @@
+## Extension-aware resolve (ADR-034, completed 2026-05-10)
+
+Reported by downstream consumer (`LOGOS/requests/request_2026-05-10_02.md`).
+
+The DTCG-as-SoT workflow with axis sets lost the per-axis math evaluation that
+the TS-import family already does correctly. `Resolver.resolveAll` reads
+`$value` directly and ignores `tsMathExpression` — so scale tokens defined as
+`round({base} * pow({multiplier}, 3))` returned the stale snapshot value
+written at the last save, not the freshly-evaluated value under the active
+axis combination.
+
+- [x] `Api.evaluateMathExtensions : seq -> ResolveWithExtensionsResult` — post-resolve
+  pass that walks tokens, evaluates `tsMathExpression` against the current
+  resolved numeric context, replaces the value (preserving unit for Dimension/Duration),
+  collects failures as `ExtensionEvaluationWarning.MathExpressionFailed`.
+- [x] `Api.importWithResolverEvaluatingExtensions` — one-call convenience that
+  composes `importWithResolver` + `evaluateMathExtensions`.
+- [x] `TokensStudio.tryEvaluateMathExpression : Map<string, float> -> string -> float option` —
+  public wrapper over the internal `MathEval` evaluator so the meta-package
+  can drive it without re-exporting the recursive module shape.
+- [x] `ExtensionEvaluationWarning` DU + formatter in Foundation.
+- [x] `Resolver.resolveAll` unchanged — strict DTCG compliance preserved.
+- [x] 12 new tests in new `ExtensionEvaluationTests.fs` covering: pass-through,
+  literal expression, {variable} resolution from Number / Dimension context,
+  missing variable warning, parse error warning, multi-failure collection,
+  unit preservation for Dimension, non-numeric host pass-through, interleaved
+  tokens, formatter, Primitives parity.
+- [x] ADR-034 written.
+- [x] 303/303 tests pass.
+
 ## Strict DTCG 2025.10 compliance validator (ADR-028 addendum, completed 2026-05-10)
 
 Closes ADR-028's "future strict-mode serialiser" forward reference. Built as a
