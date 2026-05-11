@@ -446,8 +446,121 @@ let inFileTests =
     ]
 
 
+// ─── Resolver-document workflow (request_2026-05-10_04) ─────────────────────
+//
+// The single-file `Format.parse → evaluate → flatten` path is covered by
+// inFileTests above. The resolver-document path (`parseResolver → resolve →
+// evaluate → flattenResolved`) is the second supported workflow. The trap:
+// `Resolver.resolveAll` is `resolve >>= flattenAliases`, which consumes the
+// alias graph before `evaluateMathExtensionsInFile` can run — silently
+// producing stale values for tokens that aliased a formula. These tests pin
+// both the correct path and the trap behavior so future refactors can't
+// accidentally regress.
+
+/// Resolver document with a single inline set: scale.x1 has tsMathExpression;
+/// spacing.x1 aliases scale.x1; base and multiplier feed the formula.
+let private resolverDocJson = """
+{
+  "version": "2025.10",
+  "name": "ext-eval-resolver-fixture",
+  "sets": {
+    "tokens": {
+      "sources": [
+        { "inline": {
+            "base":       { "$type": "number", "$value": 16 },
+            "multiplier": { "$type": "number", "$value": 1.25 },
+            "scale": { "x1": {
+                "$type": "number",
+                "$value": 16,
+                "$extensions": { "com.fntools.designtokens": {
+                    "tsMathExpression": "round({base} * pow({multiplier}, 1))" } } } },
+            "spacing": { "x1": {
+                "$type": "dimension",
+                "$value": "{scale.x1}" } }
+          }
+        }
+      ]
+    }
+  },
+  "resolutionOrder": [
+    { "set": "tokens" }
+  ]
+}
+"""
+
+let private noLoad (_: string) : Result<string, string> = Error "no external sources in this fixture"
+
+let resolverDocumentTests =
+    testList "evaluateMathExtensionsInFile — resolver-document workflow" [
+
+        testCase "PROPAGATION via Primitives.resolve + evaluateMathExtensionsInFile + flattenResolved" <| fun () ->
+            // The canonical workflow for resolver-document SoTs that contain
+            // tsMathExpression formula tokens with alias dependents.
+            let doc = Api.Primitives.parseResolver resolverDocJson |> Result.defaultWith (fun e -> failwithf "%A" e)
+            match Api.Primitives.resolve noLoad Map.empty doc with
+            | Error es -> failtestf "resolve failed: %A" es
+            | Ok merged ->
+                let r = Api.evaluateMathExtensionsInFile merged
+                Expect.equal r.Warnings [] "no warnings during evaluation"
+                match Api.Primitives.flattenResolved r.File with
+                | Error es -> failtestf "flattenResolved failed: %A" es
+                | Ok tokens ->
+                    let t = List.ofSeq tokens
+                    Expect.equal (getResolvedNum t ["scale"; "x1"])    20.0 "scale.x1 evaluated"
+                    Expect.equal (getResolvedNum t ["spacing"; "x1"])  20.0 "spacing.x1 PROPAGATED — alias picked up evaluated scale.x1"
+
+        testCase "TRAP: Primitives.resolveAll consumes the alias graph; subsequent evaluation cannot propagate" <| fun () ->
+            // Documents the bug from request_2026-05-10_04. Future refactors
+            // that change this behavior (e.g. teaching resolveAll to evaluate
+            // before flattening — ADR-013 violation) would need to update or
+            // remove this test. The point is to make the trap visible in the
+            // test suite so the discoverability gap is acknowledged.
+            let doc = Api.Primitives.parseResolver resolverDocJson |> Result.defaultWith (fun e -> failwithf "%A" e)
+            match Api.Primitives.resolveAll noLoad Map.empty doc with
+            | Error es -> failtestf "resolveAll failed: %A" es
+            | Ok aliasFlattened ->
+                let r = Api.evaluateMathExtensionsInFile aliasFlattened
+                match Api.Primitives.flattenResolved r.File with
+                | Error es -> failtestf "flattenResolved failed: %A" es
+                | Ok tokens ->
+                    let t = List.ofSeq tokens
+                    Expect.equal (getResolvedNum t ["scale"; "x1"])    20.0 "scale.x1 still evaluates"
+                    Expect.equal (getResolvedNum t ["spacing"; "x1"])  16.0 "spacing.x1 STALE — resolveAll baked the alias before evaluation could run"
+
+        testCase "FRICTION: convenience wrapper hard-fails for dimension→number aliases (ADR-033 / punted)" <| fun () ->
+            // Documents the validation friction that forces consumers with the
+            // canonical Tokens Studio scale pattern (dimension tokens aliasing
+            // number tokens) off the convenience wrapper and onto the manual
+            // Primitives path. The wrapper internally composes correctly for
+            // propagation, but Validation.validate (ADR-033) flags this alias
+            // as TypeMismatch before evaluation can run.
+            //
+            // When the punt is addressed (option 2 ValidateOptions per the
+            // outside-conversations_2026-05-10_01.md discussion), update this
+            // test to assert the wrapper now propagates instead of fails.
+            // Until then, this test pins the friction so it stays visible.
+            match Api.importWithResolverEvaluatingExtensions noLoad Map.empty resolverDocJson with
+            | Ok _ ->
+                failtest "expected ValidationFailed [TypeMismatch ...] — ADR-033 friction. \
+                          If this test now passes with Ok, the validation friction has been \
+                          addressed (option 2 ValidateOptions or equivalent). Update this test \
+                          to assert correct propagation through the convenience wrapper."
+            | Error errs ->
+                let hasExpectedTypeMismatch =
+                    errs |> List.exists (function
+                        | ValidationFailed validationErrs ->
+                            validationErrs |> List.exists (function
+                                | TypeMismatch (path, "dimension", "number") when path = "spacing.x1" -> true
+                                | _ -> false)
+                        | _ -> false)
+                Expect.isTrue hasExpectedTypeMismatch
+                    (sprintf "expected ValidationFailed [TypeMismatch (\"spacing.x1\", \"dimension\", \"number\")]; got: %A" errs)
+    ]
+
+
 let allTests =
     testList "Extension evaluation (ADR-034 + 2026-05-10 addendum)" [
         deprecatedFunctionTests
         inFileTests
+        resolverDocumentTests
     ]
