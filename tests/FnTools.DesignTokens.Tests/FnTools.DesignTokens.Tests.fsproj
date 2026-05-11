@@ -23,6 +23,7 @@
     <Compile Include="CssIngestTests.fs" />
     <Compile Include="CssAuditTests.fs" />
     <Compile Include="TokensStudioTests.fs" />
+    <Compile Include="ExtensionEvaluationTests.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
   <ItemGroup>

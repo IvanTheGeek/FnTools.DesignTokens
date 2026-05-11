@@ -67,6 +67,13 @@ type SerializeError =
     | UnsupportedInTargetVersion of path: string * tokenType: string * version: SpecVersion
     | UnsupportedColorSpace      of path: string * colorSpace: string * version: SpecVersion
 
+/// Non-fatal warnings produced by post-resolve extension-evaluation passes
+/// (see <c>Api.evaluateMathExtensions</c> — ADR-034). The associated token
+/// keeps its stale <c>$value</c> when evaluation fails; the warning records
+/// what happened so the author can fix the expression.
+type ExtensionEvaluationWarning =
+    | MathExpressionFailed of path: string * expression: string * reason: string
+
 
 // ─── Formatters ──────────────────────────────────────────────────────────────
 // One line per error: "path: message". Callers add prefix, indent, color.
@@ -155,3 +162,11 @@ module SerializeError =
         | UnsupportedColorSpace (path, colorSpace, version) ->
             sprintf "%s: color space '%s' is not supported in %s"
                 path colorSpace (SpecVersion.display version)
+
+module ExtensionEvaluationWarning =
+
+    let format (w: ExtensionEvaluationWarning) : string =
+        match w with
+        | MathExpressionFailed (path, expr, reason) ->
+            sprintf "%s: math expression '%s' failed — %s (kept stale $value)"
+                path expr reason

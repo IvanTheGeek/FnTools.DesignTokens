@@ -20,5 +20,6 @@ let main args =
             CssIngestTests.allTests
             CssAuditTests.allTests
             TokensStudioTests.allTests
+            ExtensionEvaluationTests.allTests
         ]
     runTestsWithCLIArgs [] args all
