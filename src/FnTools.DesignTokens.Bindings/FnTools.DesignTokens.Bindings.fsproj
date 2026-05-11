@@ -5,7 +5,7 @@
     <RootNamespace>FnTools.DesignTokens</RootNamespace>
     <AssemblyName>FnTools.DesignTokens.Bindings</AssemblyName>
     <PackageId>FnTools.DesignTokens.Bindings</PackageId>
-    <Version>0.10.0</Version>
+    <Version>0.10.1</Version>
     <Authors>FnTools</Authors>
     <Description>DTCG 2025.10 F# bindings emitter — resolved tokens to typed var() module</Description>
     <PackageLicenseExpression>AGPL-3.0-or-later</PackageLicenseExpression>

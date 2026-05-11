@@ -3,6 +3,7 @@ module FnTools.DesignTokens.Tests.ExtensionEvaluationTests
 open System.Text.Json.Nodes
 open Expecto
 open FnTools.DesignTokens
+open FnTools.DesignTokens.Css
 open FnTools.DesignTokens.Tests.Fixtures
 
 
@@ -561,13 +562,53 @@ let resolverDocumentTests =
             // With ValidateOptions.permissive, the dimension→number alias is accepted,
             // evaluation runs, and propagation works end-to-end through the convenience wrapper.
             // No need to drop down to the Primitives path.
+            //
+            // 0.10.1 strengthening: assert TYPE preservation too (regression from
+            // outside-conversations_2026-05-10_03 — flattenResolvedFile was dropping
+            // the aliasing token's DimensionType in favor of the target's NumberType,
+            // which made the CSS emitter produce unitless `--spacing-x1: 20` instead
+            // of `--spacing-x1: 20px`).
             match Api.importWithResolverEvaluatingExtensionsWith
                       ValidateOptions.permissive noLoad Map.empty resolverDocJson with
             | Error es -> failtestf "permissive import failed: %A" es
             | Ok result ->
                 Expect.equal result.Warnings [] "no math-evaluation warnings"
                 Expect.equal (getResolvedNum result.Tokens ["scale"; "x1"])    20.0 "scale.x1 evaluated"
-                Expect.equal (getResolvedNum result.Tokens ["spacing"; "x1"])  20.0 "spacing.x1 PROPAGATED via permissive convenience wrapper"
+                Expect.equal (getResolvedNum result.Tokens ["spacing"; "x1"])  20.0 "spacing.x1 value PROPAGATED via permissive convenience wrapper"
+
+                // ── 0.10.1 regression assertions: type AND value shape ──
+                let spacingX1 = result.Tokens |> List.find (fun (p, _) -> p = ["spacing"; "x1"])
+                let scaleX1   = result.Tokens |> List.find (fun (p, _) -> p = ["scale"; "x1"])
+
+                Expect.equal (snd scaleX1).Type   NumberType    "scale.x1 retains declared NumberType"
+                Expect.equal (snd spacingX1).Type DimensionType "spacing.x1 retains declared DimensionType (regression — was being clobbered by target's NumberType)"
+                match (snd spacingX1).Value with
+                | ResolvedDimension d ->
+                    Expect.equal d.Value 20.0 "spacing.x1 value coerced to Dimension { 20, Px }"
+                    Expect.equal d.Unit  Px   "spacing.x1 unit defaults to Px"
+                | other -> failtestf "spacing.x1 should be ResolvedDimension after coercion, got %A" other
+
+        testCase "PERMISSIVE → CSS emit: dimension token aliasing number produces units, not bare numbers (0.10.1 regression test)" <| fun () ->
+            // End-to-end test of the requester's actual scenario: import via the
+            // convenience wrapper, then emit CSS, and assert the output contains
+            // `--spacing-x1: 20px;` (with identity policy) or `--spacing-x1: 1.25rem;`
+            // (with a Rem policy). The bug from outside-conversations_2026-05-10_03
+            // produced `--spacing-x1: 20` (unitless, browser-rejected).
+            match Api.importWithResolverEvaluatingExtensionsWith
+                      ValidateOptions.permissive noLoad Map.empty resolverDocJson with
+            | Error es -> failtestf "permissive import failed: %A" es
+            | Ok result ->
+                // Identity policy: every dimension stays in its declared/coerced unit (Px).
+                let cssPx = CssEmitter.emit result.Tokens
+                Expect.stringContains cssPx "--spacing-x1: 20px;" "spacing.x1 emits with px unit (not bare 20)"
+                Expect.isFalse (cssPx.Contains "--spacing-x1: 20;") "no unitless emission"
+                Expect.stringContains cssPx "--scale-x1: 20;" "scale.x1 remains a number — it IS a number-typed token"
+
+                // Rem policy: spacing.x1 (px) converts to rem; scale.x1 (number) stays a number.
+                let remPolicy : DimensionUnitPolicy = fun _ _ -> Rem
+                let cssRem = CssEmitter.emitWith remPolicy result.Tokens
+                Expect.stringContains cssRem "--spacing-x1: 1.25rem;" "spacing.x1 → 1.25rem (20px / 16)"
+                Expect.stringContains cssRem "--scale-x1: 20;" "scale.x1 stays unitless — it's a Number token, not a Dimension"
     ]
 
 

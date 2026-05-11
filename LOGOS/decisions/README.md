@@ -45,7 +45,7 @@
 |---|---|---|---|
 | [016](016-hex-fallback-in-color-tokens.md) | Include hex fallback in color token values for tooling compatibility | 2026-05-04 | |
 | [028](028-em-dimension-unit-extension.md) | `Em` dimension unit as deliberate spec extension | 2026-05-04 | **Addendum 2026-05-10**: strict-mode validator built as `Api.validateStrictDtcg` (v0.7.0) |
-| [033](033-dimension-number-alias-handling.md) | Dimension token aliasing a number — validate as TypeMismatch, emit as Npx | 2026-05-10 | Dual-layer fix: validation surfaces, emitter coerces. Shipped v0.6.0 |
+| [033](033-dimension-number-alias-handling.md) | Dimension token aliasing a number — validate as TypeMismatch, emit as Npx | 2026-05-10 | Dual-layer fix: validation surfaces, emitter coerces. Shipped v0.6.0. **Addendum v0.10.1**: `flattenResolvedFile` was clobbering the aliasing token's declared type, preventing the emitter coercion from firing through the DTCG-import paths. Fix mirrors `partialFlattenResolvedFile`. |
 | [035](035-validate-options-opt-in-laxness.md) | `ValidateOptions` for opt-in laxness on known-safe authoring patterns | 2026-05-10 | Closes ADR-033 friction for the Tokens Studio scale pattern. Shipped v0.10.0 |
 | [037](037-validation-warning-channel-deferred.md) | Validation warning channel — deferred; documented as future possible route | 2026-05-10 | **Status: deferred** — not built; reserved for advisory issues that aren't footguns |
 
@@ -166,7 +166,7 @@ ADR-036 (deprecate resolveAll, expose flattenAliases)
 | 030 | 2026-05-06 | `importTokensStudioCombinedWith` | accepted |
 | 031 | 2026-05-08 | Math expression round-trip | accepted |
 | 032 | 2026-05-08 | `serializeResolver` | accepted |
-| 033 | 2026-05-10 | Dimension→number alias handling | accepted |
+| 033 | 2026-05-10 | Dimension→number alias handling | accepted + 2026-05-10 v0.10.1 addendum (flattenResolvedFile bug) |
 | 034 | 2026-05-10 | `tsMathExpression` post-resolve evaluation | accepted + 2026-05-10 v0.9.0 addendum (pre-flatten fix) |
 | 035 | 2026-05-10 | `ValidateOptions` opt-in laxness | accepted (v0.10.0) |
 | 036 | 2026-05-10 | Deprecate `resolveAll`, expose `flattenAliases` | accepted (v0.10.0) |

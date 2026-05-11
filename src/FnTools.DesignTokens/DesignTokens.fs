@@ -352,12 +352,18 @@ let private flattenResolvedFile
         raw
         |> Seq.map (fun (path, t) ->
             let pathStr = String.concat "." path
-            // Follow Alias chain first if needed
+            // Follow Alias chain first if needed.
+            // Alias token's own $type takes precedence over the target's type (ADR-033 +
+            // the 0.10.1 fix). This preserves intended semantics when an alias token has
+            // an explicit $type annotation that differs from its target — e.g. a spacing.x1
+            // (dimension) that aliases scale.x1 (number). Without this, the dimension
+            // annotation is silently discarded and ADR-033's emitter coercion cannot fire.
+            // Mirrors the long-standing fix in partialFlattenResolvedFile (2026-05-04).
             let finalToken =
                 match t.Value with
                 | TokenValue.Alias r ->
                     match tryResolveAliasIn r file with
-                    | Some target -> Ok { target with Type = target.Type |> Option.orElse t.Type }
+                    | Some target -> Ok { target with Type = t.Type |> Option.orElse target.Type }
                     | None ->
                         let refStr =
                             match r with
@@ -374,7 +380,20 @@ let private flattenResolvedFile
                 | None ->
                     Error [ConstraintViolation (pathStr, "cannot determine $type")]
                 | Some tt ->
-                    toResolvedValue pathStr file ft.Value
+                    // Coerce bare numbers to the annotated type when the annotation and value
+                    // type differ. Same coercion partialFlattenResolvedFile has had since
+                    // 2026-05-04; mirrored here in 0.10.1 so the DTCG-import paths
+                    // (Api.import, Api.importWithResolver, Api.importWithResolverEvaluatingExtensions)
+                    // produce ResolvedDimension/ResolvedDuration with the declared type's
+                    // default unit instead of bare ResolvedNumber.
+                    let coercedValue =
+                        match tt, ft.Value with
+                        | DimensionType, TokenValue.Number n ->
+                            TokenValue.Dimension { Value = n; Unit = Px }
+                        | DurationType, TokenValue.Number n ->
+                            TokenValue.Duration { Value = n; Unit = Milliseconds }
+                        | _ -> ft.Value
+                    toResolvedValue pathStr file coercedValue
                     |> Result.map (fun rv ->
                         path, { Value = rv; Type = tt; Metadata = ft.Metadata }))
         |> List.ofSeq
