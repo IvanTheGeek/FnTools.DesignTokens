@@ -15,13 +15,16 @@ F# library implementing the **DTCG 2025.10** spec (Design Tokens W3C Community G
 
 ## Architecture
 
-Five layered packages, all under the `FnTools.DesignTokens` namespace:
+Seven layered packages plus a meta-package, all under the `FnTools.DesignTokens` namespace:
 
 - `FnTools.DesignTokens.Foundation` — pure types, smart constructors, zero non-BCL deps.
 - `FnTools.DesignTokens.Format` — JSON parse/serialize (`System.Text.Json`).
 - `FnTools.DesignTokens.Validation` — invariants (alpha range, fontWeight, alias cycles, hex/component consistency).
 - `FnTools.DesignTokens.Resolver` — multi-set / modifier resolver document semantics.
-- `FnTools.DesignTokens` — meta-package; depends on all four above.
+- `FnTools.DesignTokens.Css` — CSS custom-property emitter + `CssIngest` / `CssAudit` for ingesting existing stylesheets.
+- `FnTools.DesignTokens.Bindings` — typed F# bindings emitter (resolved tokens → `Tokens.*` module).
+- `FnTools.DesignTokens.TokensStudio` — Tokens Studio import/export with alias-preserving round-trip.
+- `FnTools.DesignTokens` — meta-package; depends on all seven above.
 
 ## Git Workflow Notes
 
