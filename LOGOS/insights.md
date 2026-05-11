@@ -410,6 +410,19 @@ other (`flattenResolved` vs `resolveFlattened`), prefer deprecating the
 problematic name over coining a new one. Forcing consumers to choose
 explicitly is better than offering two near-identical options.
 
+## Language-specific safety checks belong in language-specific emitter layers
+
+A target-language emitter has knowledge no other layer should — `BindingsEmitter`
+knows that F# normalises `Color.Dark` and `Color.dark` to the same identifier
+(ADR-038); a future TypeScript emitter would know JS case rules instead. Pushing
+those rules into a generic `Validation` would force every consumer to inherit
+every potential emitter's naming opinions, regardless of which emitter they
+actually use — and would violate ADR-013's "library scope ends at the DTCG
+interchange boundary." The right shape is per-emitter `checkIdentifierSafety`
++ `emitChecked` pairs: each emitter package owns its own naming safety; the
+domain layer stays language-agnostic. Same opt-in-at-the-right-layer pattern
+as `Api.validateStrictDtcg` (ADR-028 addendum).
+
 ## LaundryLog existing components use hard-coded CSS class names
 
 The Fun.Blazor components in `/home/ivan/nexus/LaundryLog/src/LaundryLog.UI/Components/` reference CSS class names from the old `--ll-*`/`--cb-*` design system (e.g., `ll-machine-chip`, `ll-machine-group`). These class names will need to be updated when the CSS emitter + typed bindings are available. The components are a concrete test case for the migration path — they represent real UI using the old system.

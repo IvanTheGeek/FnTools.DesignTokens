@@ -3,13 +3,14 @@
 `FnTools.DesignTokens` — DTCG 2025.10 codec, validator, resolver, and emitters (CSS, F# bindings, Tokens Studio). The entry point is `FnTools.DesignTokens.Api`. One package reference is all you need:
 
 ```xml
-<PackageReference Include="FnTools.DesignTokens" Version="0.10.2" />
+<PackageReference Include="FnTools.DesignTokens" Version="0.11.0" />
 ```
 
 The meta-package transitively pulls in seven layered libraries: `Foundation`, `Format`, `Validation`, `Resolver`, `Css`, `Bindings`, `TokensStudio`. Reference an individual layer if you want a smaller dependency surface.
 
 Migration guides (newest first):
-- [`migration-0.10.1-to-0.10.2.md`](./migration-0.10.1-to-0.10.2.md) — current release. Internal refactor: `flattenResolvedFile` + `partialFlattenResolvedFile` unified via shared helper. Tiny cleanup of `TokenUnresolved` warning format. No public API changes (ADR-033 v0.10.2 addendum).
+- [`migration-0.10.2-to-0.11.0.md`](./migration-0.10.2-to-0.11.0.md) — current release. New `BindingsEmitter.checkIdentifierSafety` + `emitChecked` catch silent data loss from F# identifier collisions and leaf/branch conflicts in generated bindings (ADR-038).
+- [`migration-0.10.1-to-0.10.2.md`](./migration-0.10.1-to-0.10.2.md) — internal refactor: `flattenResolvedFile` + `partialFlattenResolvedFile` unified via shared helper. Tiny cleanup of `TokenUnresolved` warning format (ADR-033 v0.10.2 addendum).
 - [`migration-0.10.0-to-0.10.1.md`](./migration-0.10.0-to-0.10.1.md) — bug fix: `flattenResolvedFile` was clobbering the aliasing token's declared type, producing unitless CSS for dimension→number aliases (ADR-033 v0.10.1 addendum).
 - [`migration-0.9-to-0.10.md`](./migration-0.9-to-0.10.md) — `ValidateOptions` opt-in laxness (ADR-035); `Resolver.resolveAll` deprecated, `Resolver.flattenAliases` now public (ADR-036).
 - [`migration-0.8-to-0.9.md`](./migration-0.8-to-0.9.md) — `evaluateMathExtensions` deprecated; new `evaluateMathExtensionsInFile` fixes alias propagation (ADR-034 addendum).
@@ -491,13 +492,15 @@ Scan CSS rules (not just `:root`) for hardcoded values. Groups by inferred type 
 
 ## F# bindings
 
-### `BindingsEmitter.emit`
+From `FnTools.DesignTokens.Bindings`. After `open FnTools.DesignTokens.Bindings`, all functions are callable unqualified (the module declares `module FnTools.DesignTokens.Bindings` directly).
+
+### `emit`
 
 ```fsharp
-BindingsEmitter.emit (tokens: (string list * ResolvedToken) seq) : string
+emit (moduleName: string) (tokens: (string list * ResolvedToken) seq) : string
 ```
 
-Resolved tokens → a generated F# source file with a `Tokens` module of `string` constants:
+Resolved tokens → a generated F# source file with a top-level module of `string` constants:
 
 ```fsharp
 module Tokens =
@@ -507,6 +510,39 @@ module Tokens =
 ```
 
 Numeric path segments are prefixed with `N` (e.g. `scale.400` → `Scale.N400`). Typography tokens expand to five sub-constants (`FontFamily`, `FontSize`, `FontWeight`, `LetterSpacing`, `LineHeight`). No runtime dependencies — values work directly in [Fun.Css](https://github.com/slaveOftime/Fun.Css) property builders.
+
+**Silent data loss warning** (since v0.11.0, ADR-038): when two DTCG tokens transform to the same F# identifier path (e.g. `color.dark` and `color.Dark` both → `Color.Dark`), the emitter's underlying `Map.add` silently keeps the last-encountered one and drops the rest. Same applies to leaf/branch conflicts (one token at `font`, another at `font.size.sm`). Call `checkIdentifierSafety` first, or use `emitChecked` to compose check + emit.
+
+### `checkIdentifierSafety`
+
+```fsharp
+checkIdentifierSafety
+    (tokens: (string list * ResolvedToken) seq)
+    : BindingsIdentifierIssue list
+
+type BindingsIdentifierIssue =
+    | IdentifierCollision of fsharpPath: string list * tokenPaths: string list list
+    | LeafBranchConflict
+        of leafFsharpPath: string list
+         * leafTokenPath: string list
+         * extendingTokenPaths: string list list
+
+module BindingsIdentifierIssue =
+    val format : BindingsIdentifierIssue -> string
+```
+
+Pre-flight check. Returns `[]` if `emit` would produce one binding per token. Otherwise returns the list of `IdentifierCollision` (same F# path from multiple DTCG paths) and `LeafBranchConflict` (one F# path is a strict prefix of another, with the shorter being a Leaf) issues.
+
+### `emitChecked`
+
+```fsharp
+emitChecked
+    (moduleName: string)
+    (tokens: (string list * ResolvedToken) seq)
+    : Result<string, BindingsIdentifierIssue list>
+```
+
+`emit` + `checkIdentifierSafety` in one call. Returns `Ok source` if the check is clean; otherwise `Error issues` and does not emit. Use when you want pipeline build failures to fire at emission time rather than at downstream F# compilation (or worse — silently produce a file missing tokens the consumer expects to reference).
 
 ---
 

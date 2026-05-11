@@ -1,9 +1,9 @@
 # Architecture Decision Records
 
-37 ADRs covering the library's architecture, scope, dependencies, and feature-level technical decisions. Each ADR is one numbered Markdown file in this directory. Several have addenda — call-outs flagged below.
+38 ADRs covering the library's architecture, scope, dependencies, and feature-level technical decisions. Each ADR is one numbered Markdown file in this directory. Several have addenda — call-outs flagged below.
 
-**Latest ADR:** 037 (2026-05-10, deferred — validation warning channel).
-**Most-amended ADRs:** 003, 013, 018, 028, 034 (all closed forward references or had design corrections in 2026-05-10).
+**Latest ADR:** 038 (2026-05-11 — Bindings identifier safety).
+**Most-amended ADRs:** 003, 013, 018, 028, 033, 034 (all closed forward references or had design corrections in 2026-05-10).
 **Superseded:** ADR-022 superseded in part by ADR-023.
 **Deferred (documented future direction, not built):** 037.
 
@@ -72,6 +72,7 @@
 |---|---|---|---|
 | [010](010-n-prefix-numeric-scales.md) | N-prefix for numeric token names in generated F# bindings | 2026-05-02 | `scale.400` → `Scale.N400` |
 | [017](017-component-token-tier-lives-in-code.md) | Component tokens live in F# code, not in `.tokens.json` files | 2026-05-03 | Two-tier file model (primitive + semantic only); cited by ADR-018 addendum |
+| [038](038-bindings-identifier-safety.md) | Bindings identifier safety lives in the Bindings layer, not in Validation | 2026-05-11 | `checkIdentifierSafety` + `emitChecked` catch silent data loss from F# identifier collisions and leaf/branch conflicts. Pattern for future emitter packages. Shipped v0.11.0 |
 
 ### Tokens Studio integration
 
@@ -171,6 +172,7 @@ ADR-036 (deprecate resolveAll, expose flattenAliases)
 | 035 | 2026-05-10 | `ValidateOptions` opt-in laxness | accepted (v0.10.0) |
 | 036 | 2026-05-10 | Deprecate `resolveAll`, expose `flattenAliases` | accepted (v0.10.0) |
 | 037 | 2026-05-10 | Validation warning channel (future possible route) | **deferred** |
+| 038 | 2026-05-11 | Bindings identifier safety (Bindings layer, not Validation) | accepted (v0.11.0) |
 
 ---
 
