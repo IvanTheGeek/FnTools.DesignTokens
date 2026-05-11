@@ -74,6 +74,42 @@ type SerializeError =
 type ExtensionEvaluationWarning =
     | MathExpressionFailed of path: string * expression: string * reason: string
 
+/// Opt-in laxness for known-safe authoring patterns that would otherwise
+/// trip a structural validation rule. Added per ADR-035 (2026-05-10) to
+/// unblock the Tokens Studio scale pattern through the convenience wrappers
+/// without weakening the default safety net for accidental mismatches.
+///
+/// Use the predefined values in <see cref="ValidateOptions"/> module
+/// (<c>strict</c>, <c>permissive</c>) rather than constructing the record
+/// inline so future fields don't break call sites.
+type ValidateOptions = {
+    /// When <c>true</c>, a <c>dimension</c> token aliasing a <c>number</c>
+    /// token passes validation without producing a <c>TypeMismatch</c>
+    /// (ADR-033). The emitter still coerces the bare number to <c>Npx</c>
+    /// for valid CSS output. Set <c>true</c> when authoring against the
+    /// canonical Tokens Studio scale pattern (scale tokens as numbers,
+    /// dimension tokens layered on top via aliases).
+    /// Default: <c>false</c> (strict; ADR-033 behavior unchanged).
+    AllowDimensionAliasingNumber : bool
+}
+
+module ValidateOptions =
+    /// All structural checks active. The default for <c>Validation.validate</c>,
+    /// <c>Api.import</c>, <c>Api.importWithResolver</c>, and
+    /// <c>Api.importWithResolverEvaluatingExtensions</c>.
+    let strict : ValidateOptions =
+        { AllowDimensionAliasingNumber = false }
+
+    /// Permits the dimension→number alias pattern (ADR-033 + ADR-035).
+    /// Use through the <c>*With</c> variants
+    /// (<c>Validation.validateWith</c>, <c>Api.importWith</c>,
+    /// <c>Api.importWithResolverWith</c>,
+    /// <c>Api.importWithResolverEvaluatingExtensionsWith</c>) when the
+    /// SoT contains <c>dimension</c> tokens that alias <c>number</c> tokens
+    /// deliberately — the canonical Tokens Studio scale pattern.
+    let permissive : ValidateOptions =
+        { AllowDimensionAliasingNumber = true }
+
 
 // ─── Formatters ──────────────────────────────────────────────────────────────
 // One line per error: "path: message". Callers add prefix, indent, color.

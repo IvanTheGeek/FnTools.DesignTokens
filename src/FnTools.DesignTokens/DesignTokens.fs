@@ -384,20 +384,41 @@ let private flattenResolvedFile
 
 // ─── Public API ──────────────────────────────────────────────────────────────
 
-let import (jsonText: string) : Result<(string list * ResolvedToken) seq, ImportError list> =
+/// Import a DTCG <c>.tokens.json</c> file with caller-supplied
+/// <see cref="ValidateOptions"/> (ADR-035, 2026-05-10).
+///
+/// Use this when the source file contains the Tokens Studio scale pattern
+/// (a <c>dimension</c> token aliasing a <c>number</c> token) and you want
+/// the convenience pipeline rather than the manual Primitives composition.
+/// Pass <see cref="ValidateOptions.permissive"/>; everything else behaves
+/// identically to <see cref="import"/>.
+let importWith
+    (opts: ValidateOptions)
+    (jsonText: string)
+    : Result<(string list * ResolvedToken) seq, ImportError list> =
     match Format.parse jsonText with
     | Error es -> Error [ParseFailed es]
     | Ok file ->
-        match Validation.validate file with
+        match Validation.validateWith opts file with
         | Error es -> Error [ValidationFailed es]
         | Ok () ->
             match flattenResolvedFile file with
             | Error es -> Error [ValidationFailed es]
             | Ok seq -> Ok seq
 
-let importWithResolver
+/// Import a DTCG <c>.tokens.json</c> file with strict validation
+/// (default — equivalent to <c>importWith ValidateOptions.strict</c>).
+let import (jsonText: string) : Result<(string list * ResolvedToken) seq, ImportError list> =
+    importWith ValidateOptions.strict jsonText
+
+/// Resolver-document import with caller-supplied <see cref="ValidateOptions"/>.
+/// Use this when the merged file would contain a Tokens Studio scale pattern
+/// (a <c>dimension</c> token aliasing a <c>number</c> token) and you want
+/// the convenience pipeline. Pass <see cref="ValidateOptions.permissive"/>.
+let importWithResolverWith
+    (opts    : ValidateOptions)
     (loadFile: string -> Result<string, string>)
-    (context: Map<string, string>)
+    (context : Map<string, string>)
     (jsonText: string)
     : Result<(string list * ResolvedToken) seq, ImportError list> =
     match Resolver.parseResolver jsonText with
@@ -409,12 +430,21 @@ let importWithResolver
             match Resolver.resolve loadFile context doc with
             | Error es -> Error [ResolveFailed es]
             | Ok merged ->
-                match Validation.validate merged with
+                match Validation.validateWith opts merged with
                 | Error es -> Error [ValidationFailed es]
                 | Ok () ->
                     match flattenResolvedFile merged with
                     | Error es -> Error [ValidationFailed es]
                     | Ok seq -> Ok seq
+
+/// Resolver-document import with strict validation (default — equivalent to
+/// <c>importWithResolverWith ValidateOptions.strict</c>).
+let importWithResolver
+    (loadFile: string -> Result<string, string>)
+    (context: Map<string, string>)
+    (jsonText: string)
+    : Result<(string list * ResolvedToken) seq, ImportError list> =
+    importWithResolverWith ValidateOptions.strict loadFile context jsonText
 
 /// Like flattenResolvedFile but partial-success: returns resolved tokens alongside any
 /// unresolved-alias or type-inference errors rather than failing the whole batch.
@@ -1304,13 +1334,12 @@ let evaluateMathExtensionsInFile (file: TokenFile) : EvaluateMathInFileResult =
     { File = { file with Children = newChildren }
       Warnings = List.ofSeq warnings }
 
-/// Convenience: <see cref="importWithResolver"/> plus
-/// <see cref="evaluateMathExtensionsInFile"/> inserted between resolve and
-/// flatten. Math-expression extensions are evaluated against the resolved
-/// alias-aware context, then aliases follow updated values during flatten —
-/// so an axis set that overrides <c>multiplier</c> changes every scale token
-/// AND every token that aliases a scale.
-let importWithResolverEvaluatingExtensions
+/// Resolver-document import + math-expression evaluation with caller-supplied
+/// <see cref="ValidateOptions"/>. Use this for Tokens Studio scale-pattern
+/// files: pass <see cref="ValidateOptions.permissive"/> and the convenience
+/// pipeline handles the dimension→number aliases that would otherwise hard-fail.
+let importWithResolverEvaluatingExtensionsWith
+    (opts     : ValidateOptions)
     (loadFile : string -> Result<string, string>)
     (context  : Map<string, string>)
     (jsonText : string)
@@ -1324,7 +1353,7 @@ let importWithResolverEvaluatingExtensions
             match Resolver.resolve loadFile context doc with
             | Error es -> Error [ResolveFailed es]
             | Ok merged ->
-                match Validation.validate merged with
+                match Validation.validateWith opts merged with
                 | Error es -> Error [ValidationFailed es]
                 | Ok () ->
                     let evaluated = evaluateMathExtensionsInFile merged
@@ -1333,6 +1362,20 @@ let importWithResolverEvaluatingExtensions
                     | Ok seq ->
                         Ok { Tokens = List.ofSeq seq
                              Warnings = evaluated.Warnings }
+
+/// Convenience: <see cref="importWithResolver"/> plus
+/// <see cref="evaluateMathExtensionsInFile"/> inserted between resolve and
+/// flatten. Math-expression extensions are evaluated against the resolved
+/// alias-aware context, then aliases follow updated values during flatten —
+/// so an axis set that overrides <c>multiplier</c> changes every scale token
+/// AND every token that aliases a scale. Strict validation default —
+/// equivalent to <c>importWithResolverEvaluatingExtensionsWith ValidateOptions.strict</c>.
+let importWithResolverEvaluatingExtensions
+    (loadFile : string -> Result<string, string>)
+    (context  : Map<string, string>)
+    (jsonText : string)
+    : Result<ResolveWithExtensionsResult, ImportError list> =
+    importWithResolverEvaluatingExtensionsWith ValidateOptions.strict loadFile context jsonText
 
 
 // ─── Primitives module ───────────────────────────────────────────────────────
@@ -1346,6 +1389,7 @@ module Primitives =
     let serializeAs      = Format.serializeAs
     let serializePenpot  = Format.serializePenpot
     let validate            = Validation.validate
+    let validateWith        = Validation.validateWith        // ADR-035
     let validateStrictDtcg  = Validation.validateStrictDtcg
     // Re-defined (not aliased) so the Obsolete attribute lives on this
     // function directly; the call to evaluateMathExtensionsImpl is a private
@@ -1358,6 +1402,9 @@ module Primitives =
         evaluateMathExtensionsImpl tokens
     let evaluateMathExtensionsInFile          = evaluateMathExtensionsInFile
     let importWithResolverEvaluatingExtensions = importWithResolverEvaluatingExtensions
+    let importWithResolverEvaluatingExtensionsWith = importWithResolverEvaluatingExtensionsWith  // ADR-035
+    let importWith                            = importWith                                       // ADR-035
+    let importWithResolverWith                = importWithResolverWith                           // ADR-035
     let formatExtensionEvaluationWarning      = ExtensionEvaluationWarning.format
     let flatten      = flattenFile
     let tryFind      = tryFindIn
@@ -1365,7 +1412,20 @@ module Primitives =
     let parseResolver    = Resolver.parseResolver
     let serializeResolver = Resolver.serializeResolver
     let resolve          = Resolver.resolve
-    let resolveAll       = Resolver.resolveAll
+    let flattenAliases   = Resolver.flattenAliases   // ADR-036: newly public in 0.10.0
+    // Re-defined (not aliased) so the Obsolete attribute lives on this function
+    // directly; the underlying impl call does not trigger FS0044. Consumers of
+    // Primitives see the same deprecation warning as consumers of Resolver.
+    [<System.Obsolete("resolveAll consumes the alias graph. Use Resolver.resolve + flattenResolved (common) or Resolver.resolve + Resolver.flattenAliases (narrow). See migration-0.9-to-0.10.md and ADR-036.")>]
+    let resolveAll
+        (loadFile : string -> Result<string, string>)
+        (input    : ResolverInput)
+        (doc      : ResolverDocument)
+        : Result<TokenFile, ResolveError list> =
+        // Recompose explicitly here — same composition as the deprecated
+        // Resolver.resolveAll body — so we don't reference the obsolete one.
+        Resolver.resolve loadFile input doc
+        |> Result.bind Resolver.flattenAliases
     let flattenResolved = flattenResolvedFile
 
     let shimTokensStudio            = TokensStudio.shim

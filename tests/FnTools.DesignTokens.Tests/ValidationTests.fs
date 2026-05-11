@@ -400,4 +400,101 @@ let allTests =
                         | ConstraintViolation (p, _) -> p = "font.heading.h1.letterSpacing"
                         | _ -> false))
                     "deep path is reported correctly"
+
+        // ─── ValidateOptions (ADR-035) ────────────────────────────────────────
+
+        testCase "validateWith strict: dimension→number alias still flagged (default behavior unchanged)" <| fun () ->
+            let file = fileWith [
+                tn "scale", Group {
+                    Type = None; Metadata = emptyMeta; Root = None; Extends = None
+                    Children = [
+                        tn "x1", mkLeaf (TokenValue.Number 16.0) NumberType
+                    ]
+                }
+                tn "spacing", Group {
+                    Type = None; Metadata = emptyMeta; Root = None; Extends = None
+                    Children = [
+                        tn "x1", mkLeaf (TokenValue.Alias (CurlyBrace ["scale"; "x1"])) DimensionType
+                    ]
+                }
+            ]
+            match Validation.validateWith ValidateOptions.strict file with
+            | Ok () -> failtest "expected TypeMismatch under strict"
+            | Error es ->
+                Expect.isTrue
+                    (es |> List.exists (function
+                        | TypeMismatch ("spacing.x1", "dimension", "number") -> true
+                        | _ -> false))
+                    "TypeMismatch flagged"
+
+        testCase "validateWith permissive: dimension→number alias accepted" <| fun () ->
+            let file = fileWith [
+                tn "scale", Group {
+                    Type = None; Metadata = emptyMeta; Root = None; Extends = None
+                    Children = [
+                        tn "x1", mkLeaf (TokenValue.Number 16.0) NumberType
+                    ]
+                }
+                tn "spacing", Group {
+                    Type = None; Metadata = emptyMeta; Root = None; Extends = None
+                    Children = [
+                        tn "x1", mkLeaf (TokenValue.Alias (CurlyBrace ["scale"; "x1"])) DimensionType
+                    ]
+                }
+            ]
+            match Validation.validateWith ValidateOptions.permissive file with
+            | Ok () -> ()
+            | Error es -> failtestf "permissive should accept dimension→number alias; got %A" es
+
+        testCase "validateWith permissive: dimension→color alias still flagged (only dim→number is opted out)" <| fun () ->
+            // Permissive whitelists ONLY dimension→number. Other cross-type
+            // alias mismatches remain errors — the laxness is narrow.
+            let badColor : ColorValue =
+                { ColorSpace = SRGB
+                  Components = (Channel 1.0, Channel 0.0, Channel 0.0)
+                  Alpha = None; Hex = None }
+            let file = fileWith [
+                tn "brand",   mkLeaf (TokenValue.Color badColor) ColorType
+                tn "spacing", mkLeaf (TokenValue.Alias (CurlyBrace ["brand"])) DimensionType
+            ]
+            match Validation.validateWith ValidateOptions.permissive file with
+            | Ok () -> failtest "dimension→color should still fail even under permissive"
+            | Error es ->
+                Expect.isTrue
+                    (es |> List.exists (function
+                        | TypeMismatch ("spacing", "dimension", "color") -> true
+                        | _ -> false))
+                    "dimension→color still flagged"
+
+        testCase "validate (no args): equivalent to validateWith ValidateOptions.strict" <| fun () ->
+            // Backward compatibility — the legacy validate function must produce
+            // identical results to validateWith strict.
+            let file = fileWith [
+                tn "scale",   mkLeaf (TokenValue.Number 16.0) NumberType
+                tn "spacing", mkLeaf (TokenValue.Alias (CurlyBrace ["scale"])) DimensionType
+            ]
+            let viaLegacy =
+                match Validation.validate file with
+                | Ok () -> Ok ()
+                | Error es -> Error es
+            let viaWith =
+                match Validation.validateWith ValidateOptions.strict file with
+                | Ok () -> Ok ()
+                | Error es -> Error es
+            Expect.equal viaLegacy viaWith "results match"
+
+        testCase "Primitives.validateWith matches Validation.validateWith" <| fun () ->
+            let file = fileWith [
+                tn "scale",   mkLeaf (TokenValue.Number 16.0) NumberType
+                tn "spacing", mkLeaf (TokenValue.Alias (CurlyBrace ["scale"])) DimensionType
+            ]
+            let viaPrim =
+                match Api.Primitives.validateWith ValidateOptions.permissive file with
+                | Ok () -> Ok ()
+                | Error es -> Error es
+            let viaDirect =
+                match Validation.validateWith ValidateOptions.permissive file with
+                | Ok () -> Ok ()
+                | Error es -> Error es
+            Expect.equal viaPrim viaDirect "Primitives alias matches"
     ]

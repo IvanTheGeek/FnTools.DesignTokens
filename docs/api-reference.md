@@ -3,13 +3,14 @@
 `FnTools.DesignTokens` — DTCG 2025.10 codec, validator, resolver, and emitters (CSS, F# bindings, Tokens Studio). The entry point is `FnTools.DesignTokens.Api`. One package reference is all you need:
 
 ```xml
-<PackageReference Include="FnTools.DesignTokens" Version="0.9.0" />
+<PackageReference Include="FnTools.DesignTokens" Version="0.10.0" />
 ```
 
 The meta-package transitively pulls in seven layered libraries: `Foundation`, `Format`, `Validation`, `Resolver`, `Css`, `Bindings`, `TokensStudio`. Reference an individual layer if you want a smaller dependency surface.
 
 Migration guides (newest first):
-- [`migration-0.8-to-0.9.md`](./migration-0.8-to-0.9.md) — current release. `evaluateMathExtensions` deprecated; new `evaluateMathExtensionsInFile` fixes alias propagation (ADR-034 addendum).
+- [`migration-0.9-to-0.10.md`](./migration-0.9-to-0.10.md) — current release. `ValidateOptions` opt-in laxness (ADR-035); `Resolver.resolveAll` deprecated, `Resolver.flattenAliases` now public (ADR-036).
+- [`migration-0.8-to-0.9.md`](./migration-0.8-to-0.9.md) — `evaluateMathExtensions` deprecated; new `evaluateMathExtensionsInFile` fixes alias propagation (ADR-034 addendum).
 - [`migration-0.7-to-0.8.md`](./migration-0.7-to-0.8.md) — `Api.evaluateMathExtensions` and `Api.importWithResolverEvaluatingExtensions` (ADR-034 original).
 - [`migration-0.6-to-0.7.md`](./migration-0.6-to-0.7.md) — `Api.validateStrictDtcg` opt-in spec-compliance check (ADR-028 addendum).
 - [`migration-0.5-to-0.6.md`](./migration-0.5-to-0.6.md) — `TypeMismatch` validation, dimension→number alias emission fix (ADR-033).
@@ -21,18 +22,23 @@ Migration guides (newest first):
 
 ## Import from DTCG JSON
 
-### `Api.import`
+### `Api.import` / `Api.importWith`
 
 ```fsharp
-Api.import (jsonText: string)
+Api.import     (jsonText: string)
+    : Result<(string list * ResolvedToken) seq, ImportError list>
+
+Api.importWith (opts: ValidateOptions) (jsonText: string)
     : Result<(string list * ResolvedToken) seq, ImportError list>
 ```
 
 Parse, validate, and resolve a single DTCG `.tokens.json` file. Returns a flat sequence of `(path segments, resolved token)` pairs — `["color"; "text"; "main"]` for a token at `color.text.main`.
 
-Validation includes (since 0.6.0) a cross-type alias check: a `dimension` token aliasing a `number` token returns `ImportError.ValidationFailed [TypeMismatch (path, "dimension", "number")]`. See the migration guide for how to handle.
+`import` is `importWith ValidateOptions.strict` — strict validation, which since 0.6.0 includes a cross-type alias check (a `dimension` token aliasing a `number` token returns `ImportError.ValidationFailed [TypeMismatch (path, "dimension", "number")]`, per ADR-033).
 
-### `Api.importWithResolver`
+Use `importWith ValidateOptions.permissive` when your source contains the canonical Tokens Studio scale pattern (dimension tokens aliasing number tokens). The flag is a narrow whitelist for that one mismatch; other cross-type aliases still produce errors. See ADR-035.
+
+### `Api.importWithResolver` / `Api.importWithResolverWith`
 
 ```fsharp
 Api.importWithResolver
@@ -40,9 +46,18 @@ Api.importWithResolver
     (context  : Map<string, string>)
     (jsonText : string)
     : Result<(string list * ResolvedToken) seq, ImportError list>
+
+Api.importWithResolverWith
+    (opts     : ValidateOptions)
+    (loadFile : string -> Result<string, string>)
+    (context  : Map<string, string>)
+    (jsonText : string)
+    : Result<(string list * ResolvedToken) seq, ImportError list>
 ```
 
 Parse a `.resolver.json` document, load referenced token files via `loadFile`, apply context variables, merge sets in resolution order, then resolve. File I/O stays with the caller — `loadFile` receives a path string and returns the file content or an error message.
+
+`importWithResolver` is `importWithResolverWith ValidateOptions.strict`. Use the `*With` variant with `ValidateOptions.permissive` for Tokens Studio-style sources that contain dimension→number aliases.
 
 ---
 
@@ -246,10 +261,17 @@ The original 0.8.0 post-flatten variant. **Does not propagate updates through al
 
 Use `evaluateMathExtensionsInFile` instead. The deprecated function is retained for compatibility with 0.8.0 consumers; the only known consumer is the request author who reported the propagation bug. Removal target: v1.0.0.
 
-### `Api.importWithResolverEvaluatingExtensions`
+### `Api.importWithResolverEvaluatingExtensions` / `*With` variant
 
 ```fsharp
 Api.importWithResolverEvaluatingExtensions
+    (loadFile : string -> Result<string, string>)
+    (context  : Map<string, string>)
+    (jsonText : string)
+    : Result<ResolveWithExtensionsResult, ImportError list>
+
+Api.importWithResolverEvaluatingExtensionsWith
+    (opts     : ValidateOptions)
     (loadFile : string -> Result<string, string>)
     (context  : Map<string, string>)
     (jsonText : string)
@@ -261,11 +283,13 @@ type ResolveWithExtensionsResult = {
 }
 ```
 
-Convenience: `parseResolver → validate → resolve → evaluateMathExtensionsInFile → validate → flattenResolvedFile` in one call. Use when your `.resolver.json` composes axis sets whose values feed math expressions on dependent tokens — for example, a Breakpoint set overrides `multiplier` and you want every `round({base} * pow({multiplier}, N))` token AND every token that aliases such a scale to re-evaluate against the active axis combination.
+Convenience: `parseResolver → validate → resolve → evaluateMathExtensionsInFile → flattenResolvedFile` in one call. Use when your `.resolver.json` composes axis sets whose values feed math expressions on dependent tokens — for example, a Breakpoint set overrides `multiplier` and you want every `round({base} * pow({multiplier}, N))` token AND every token that aliases such a scale to re-evaluate against the active axis combination.
 
-As of 0.9.0, this function uses the pre-flatten evaluation path (ADR-034 addendum). Updates propagate through alias chains correctly.
+The plain function uses strict validation. **For Tokens Studio scale-pattern files** (dimension tokens aliasing number tokens — the canonical TS pattern), use `importWithResolverEvaluatingExtensionsWith ValidateOptions.permissive ...`. This is the one-call replacement for the manual Primitives composition that 0.9.0 consumers had to use; see migration-0.9-to-0.10 (ADR-035).
 
-`Resolver.resolveAll` (and its wrapper `importWithResolver`) **does not** do this on its own — it stays strict-DTCG-compliant by reading `$value` directly. Extension-aware behaviour is opt-in by function name. See ADR-034 for the rationale.
+As of 0.9.0, this family uses the pre-flatten evaluation path (ADR-034 addendum). Updates propagate through alias chains correctly.
+
+`Resolver.resolveAll` (deprecated in 0.10.0 per ADR-036) is **not** used by this function — internally it composes `Resolver.resolve` + `evaluateMathExtensionsInFile` + `flattenResolvedFile`, which is the correct order for propagation.
 
 ### `TokensStudio.tryEvaluateMathExpression`
 
@@ -277,6 +301,39 @@ TokensStudio.tryEvaluateMathExpression
 ```
 
 Public wrapper over the internal evaluator. Variables in the expression syntax `{path}` are looked up in `resolvedValues` by full dot-path. Returns `None` on parse failure, missing variable, or non-numeric result. Useful when you want to evaluate a single expression outside the meta-package's full-tree pass.
+
+---
+
+## Opt-in validation laxness (ADR-035, 0.10.0)
+
+### `ValidateOptions`
+
+```fsharp
+type ValidateOptions = {
+    /// When true, dimension→number aliases pass validation. Other cross-type
+    /// alias mismatches still produce TypeMismatch errors. The flag is a
+    /// narrow whitelist for the canonical Tokens Studio scale pattern.
+    AllowDimensionAliasingNumber : bool
+}
+
+module ValidateOptions =
+    val strict     : ValidateOptions   // default — all checks active
+    val permissive : ValidateOptions   // dimension→number alias allowed
+```
+
+Passed to `Validation.validateWith` and the `*With` variants of every import function. Strict default protects accidental mismatches; permissive opts in to the TS scale pattern at the call site.
+
+### `Validation.validateWith`
+
+```fsharp
+Validation.validate     (file: TokenFile)
+    : Result<unit, ValidationError list>
+
+Validation.validateWith (opts: ValidateOptions) (file: TokenFile)
+    : Result<unit, ValidationError list>
+```
+
+`validate` is `validateWith ValidateOptions.strict` (backward-compatible). Use `validateWith ValidateOptions.permissive` to suppress the ADR-033 cross-type alias check for `dimension → number` while keeping every other structural rule active.
 
 ---
 
@@ -469,10 +526,12 @@ Human-readable description of any `ImportError`. Useful for logging or surfacing
 |---|---|
 | `parse` / `parseAs` / `parseAuto` | `Format.parse*` |
 | `serialize` / `serializeAs` / `serializePenpot` | `Format.serialize*` — `serializeAs` requires an `IAcceptDataLoss` parameter at the call site (ADR-028, marks a lossy spec downgrade) |
-| `validate` | `Validation.validate` — includes the cross-type alias check from ADR-033 |
+| `validate` / `validateWith` | `Validation.validate` (strict) / `validateWith` (caller-supplied `ValidateOptions`, ADR-035) — includes the cross-type alias check from ADR-033 |
 | `validateStrictDtcg` | `Validation.validateStrictDtcg` — opt-in spec-extension check (ADR-028 addendum) |
-| `evaluateMathExtensionsInFile` / `importWithResolverEvaluatingExtensions` / `formatExtensionEvaluationWarning` | pre-flatten evaluation of `tsMathExpression` extensions with alias propagation (ADR-034 addendum) |
+| `evaluateMathExtensionsInFile` / `importWithResolverEvaluatingExtensions` / `importWithResolverEvaluatingExtensionsWith` / `importWith` / `importWithResolverWith` / `formatExtensionEvaluationWarning` | pre-flatten evaluation of `tsMathExpression` extensions with alias propagation (ADR-034 addendum); `*With` variants accept `ValidateOptions` (ADR-035) |
 | `evaluateMathExtensions` ⚠️ deprecated | post-flatten variant; does not propagate through alias chains. Use `evaluateMathExtensionsInFile` |
+| `flattenAliases` | `Resolver.flattenAliases` — newly public in 0.10.0 (ADR-036). Walks a `TokenFile` and replaces every `TokenValue.Alias` with the literal value it points to. Most consumers don't need this — `flattenResolved` and the emitters follow aliases themselves. |
+| `resolveAll` ⚠️ deprecated | `Resolver.resolveAll` — consumes the alias graph, blocking post-resolve passes like `evaluateMathExtensionsInFile`. Replace with `resolve` + downstream (common pipeline) or `resolve` + `flattenAliases` (narrow case). See ADR-036. |
 | `flatten` / `tryFind` / `tryResolveAlias` | token tree traversal |
 | `parseResolver` / `serializeResolver` / `resolve` / `resolveAll` | `Resolver.*` |
 | `flattenResolved` | full resolution pipeline |
@@ -489,7 +548,7 @@ Normal usage does not require `Primitives`. Use it when you need a specific inte
 ## See also
 
 - [`getting-started.md`](./getting-started.md) — five-minute walkthrough: import → validate → emit CSS → bind in F#
-- [Migration guides](#) — `migration-0.2-to-0.3.md` through `migration-0.7-to-0.8.md` (see top of page for full list)
+- [Migration guides](#) — `migration-0.2-to-0.3.md` through `migration-0.9-to-0.10.md` (see top of page for full list)
 - [`spec-context.md`](./spec-context.md) — DTCG 2025.10 spec references and version history
-- [`LOGOS/decisions/`](../LOGOS/decisions/) — Architecture Decision Records (33 ADRs)
+- [`LOGOS/decisions/`](../LOGOS/decisions/) — Architecture Decision Records (37 ADRs, 1 deferred — `decisions/README.md` indexes them)
 - [`samples/ivanthegeek.tokens.json`](../samples/ivanthegeek.tokens.json) — real-world sample bootstrapped from a live site

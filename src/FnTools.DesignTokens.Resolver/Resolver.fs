@@ -438,9 +438,25 @@ let resolve
 
 // ─── Alias resolution (TokenFile → fully-flat literal-only TokenFile) ───────
 
-/// Walk the file, replacing every TokenValue.Alias with the value it points to.
-/// Cycles → CircularReference. Unresolved targets → UnresolvedReference.
-let private flattenAliases (file: TokenFile) : Result<TokenFile, ResolveError list> =
+/// Walk a <see cref="TokenFile"/>, replacing every <see cref="TokenValue.Alias"/>
+/// with the literal value it points to. Cycles produce
+/// <see cref="ResolveError.ValidationError"/> wrapping
+/// <see cref="CircularReference"/>; unresolved targets produce
+/// <see cref="UnresolvedReference"/>.
+///
+/// Made public in 0.10.0 (ADR-036). The narrow use case: you want a nested
+/// <see cref="TokenFile"/> with all alias values inlined as literals (e.g.
+/// for serialization that does not preserve the alias graph, or for
+/// further processing that requires concrete values without going to a
+/// flat <c>ResolvedToken</c> seq).
+///
+/// In the common pipeline you do <b>not</b> need to call this — both
+/// <see cref="FnTools.DesignTokens.Api.evaluateMathExtensionsInFile"/>'s
+/// downstream <c>flattenResolved</c> step and the typed-emitter family
+/// already follow aliases as part of their work. Calling
+/// <c>flattenAliases</c> + then <c>flattenResolved</c> would do the
+/// alias-following work twice (harmless but redundant).
+let flattenAliases (file: TokenFile) : Result<TokenFile, ResolveError list> =
     // Build a lookup: full dot-path → Token
     let lookup = System.Collections.Generic.Dictionary<string, Token * string>()
 
@@ -501,12 +517,41 @@ let private flattenAliases (file: TokenFile) : Result<TokenFile, ResolveError li
             |> Result.map (fun mn -> name, mn))
     collect rootResults |> Result.map (fun ch -> { file with Children = ch })
 
-let resolveAll
+// Shared private implementation so the public `[<Obsolete>]` `resolveAll`
+// and the Primitives re-export both call this without triggering FS0044.
+let private resolveAllImpl
     (loadFile: string -> Result<string, string>)
     (input: ResolverInput)
     (doc: ResolverDocument)
     : Result<TokenFile, ResolveError list> =
     resolve loadFile input doc >>= flattenAliases
+
+/// <summary>
+/// <b>Deprecated in 0.10.0 (ADR-036).</b> <c>resolveAll</c> is
+/// <c>resolve >>= flattenAliases</c> — it follows alias references and bakes
+/// concrete values into the TokenFile before returning. This eliminates the
+/// alias graph that <see cref="FnTools.DesignTokens.Api.evaluateMathExtensionsInFile"/>
+/// (ADR-034 addendum) needs to propagate updates, and it duplicates work
+/// done by downstream <c>flattenResolved</c> / typed-emitter steps.
+/// </summary>
+/// <remarks>
+/// <para>For the common pipeline (parse resolver → evaluate math → emit),
+/// use <see cref="resolve"/> + the downstream emitter directly — the emitter
+/// follows aliases as part of its work.</para>
+/// <para>For the narrow case (a TokenFile with literal values, no flat
+/// seq), use <see cref="resolve"/> + <see cref="flattenAliases"/> explicitly.</para>
+/// </remarks>
+[<System.Obsolete("resolveAll = resolve >>= flattenAliases consumes the alias graph; \
+this prevents post-resolve passes like evaluateMathExtensionsInFile from propagating \
+updates. Replace with: resolve + flattenResolved (common pipeline) OR \
+resolve + flattenAliases (narrow case, nested TokenFile with literal values). \
+See migration-0.9-to-0.10.md and ADR-036.")>]
+let resolveAll
+    (loadFile: string -> Result<string, string>)
+    (input: ResolverInput)
+    (doc: ResolverDocument)
+    : Result<TokenFile, ResolveError list> =
+    resolveAllImpl loadFile input doc
 
 
 // ─── serializeResolver ───────────────────────────────────────────────────────

@@ -358,6 +358,58 @@ about:
 
 Reference: <https://learn.microsoft.com/en-us/dotnet/fsharp/whats-new/fsharp-10#scoped-warning-suppression>, RFC FS-1146 at <https://github.com/fsharp/fslang-design/blob/main/FSharp-10.0/FS-1146-scoped-nowarn.md>.
 
+## Per-call opt-in beats global laxness for footgun-prevention
+
+When a validation rule catches a real footgun (silent CSS corruption, broken
+references, etc.) but also fires on a known-safe authoring pattern, the
+temptation is to demote the rule globally — "it's a warning now," or "we
+skip this check by default." Both lose the protection for *accidental*
+misuse in exchange for ergonomics for *intentional* misuse.
+
+The pattern we landed on (ADR-035): keep the strict default, add a
+`ValidateOptions` record with a narrow opt-out flag, and surface `*With`
+variants of the public import functions. Strict-by-default protects
+accidents; the explicit opt-in at the call site documents intentional uses.
+
+Same shape as `IAcceptDataLoss` (ADR-028, lossy export ack), `DtcgSetRole`
+(ADR-030, mixed-format role marker), and `ExportLossAcknowledged` more
+broadly: when a deliberate decision is being made, encode it as a record
+or DU passed at the call site rather than burying it in a config file or
+silent behavior. The call site reads "I deliberately do X with consequence
+Y" — code review can see it, AI generators are forced to think about it,
+and the strict default still protects the next caller who didn't know
+about the opt-out.
+
+**Rule of thumb**: when tempted to "make the rule less strict," ask
+whether a per-call opt-in record would let you keep the rule strict for
+everyone who doesn't ask for the exception. Almost always yes.
+
+## Deprecation as a discoverability fix when renaming would replace one trap with another
+
+`Resolver.resolveAll` was a name trap (ADR-036): the `All` suffix reads as
+"the canonical full version" but actually means "merge and follow all
+aliases" — eating the alias graph that downstream extension-evaluation
+passes need. The natural instinct is to rename: `resolveAll` →
+`resolveWithInlinedAliases` or `resolveFlattened`.
+
+But: we already had `flattenResolved` in the meta-package (TokenFile →
+ResolvedToken seq), and `resolveFlattened` next to `flattenResolved` would
+be a *worse* trap than the current one — two adjacent functions with
+"flatten" in their names that do different things.
+
+The cleaner fix: deprecate the trap entirely. `resolveAll` was redundant
+in the common pipeline anyway (`flattenResolved` and the emitters all
+follow aliases themselves), so removing it doesn't lose capability — it
+just forces consumers to consciously pick which post-resolve step they
+want. The deprecation message names both paths explicitly:
+common (`resolve` + `flattenResolved`) vs narrow (`resolve` +
+`flattenAliases`). Compile-time guidance for both humans and AI.
+
+**Rule of thumb**: when renaming would put two similar names next to each
+other (`flattenResolved` vs `resolveFlattened`), prefer deprecating the
+problematic name over coining a new one. Forcing consumers to choose
+explicitly is better than offering two near-identical options.
+
 ## LaundryLog existing components use hard-coded CSS class names
 
 The Fun.Blazor components in `/home/ivan/nexus/LaundryLog/src/LaundryLog.UI/Components/` reference CSS class names from the old `--ll-*`/`--cb-*` design system (e.g., `ll-machine-chip`, `ll-machine-group`). These class names will need to be updated when the CSS emitter + typed bindings are available. The components are a concrete test case for the migration path — they represent real UI using the old system.

@@ -1,10 +1,11 @@
 # Architecture Decision Records
 
-34 ADRs covering the library's architecture, scope, dependencies, and feature-level technical decisions. Each ADR is one numbered Markdown file in this directory. Several have addenda — call-outs flagged below.
+37 ADRs covering the library's architecture, scope, dependencies, and feature-level technical decisions. Each ADR is one numbered Markdown file in this directory. Several have addenda — call-outs flagged below.
 
-**Latest ADR:** 034 (2026-05-10).
-**Most-amended ADRs:** 003, 013, 018, 028 (all closed forward references in 2026-05-10).
+**Latest ADR:** 037 (2026-05-10, deferred — validation warning channel).
+**Most-amended ADRs:** 003, 013, 018, 028, 034 (all closed forward references or had design corrections in 2026-05-10).
 **Superseded:** ADR-022 superseded in part by ADR-023.
+**Deferred (documented future direction, not built):** 037.
 
 ---
 
@@ -45,6 +46,8 @@
 | [016](016-hex-fallback-in-color-tokens.md) | Include hex fallback in color token values for tooling compatibility | 2026-05-04 | |
 | [028](028-em-dimension-unit-extension.md) | `Em` dimension unit as deliberate spec extension | 2026-05-04 | **Addendum 2026-05-10**: strict-mode validator built as `Api.validateStrictDtcg` (v0.7.0) |
 | [033](033-dimension-number-alias-handling.md) | Dimension token aliasing a number — validate as TypeMismatch, emit as Npx | 2026-05-10 | Dual-layer fix: validation surfaces, emitter coerces. Shipped v0.6.0 |
+| [035](035-validate-options-opt-in-laxness.md) | `ValidateOptions` for opt-in laxness on known-safe authoring patterns | 2026-05-10 | Closes ADR-033 friction for the Tokens Studio scale pattern. Shipped v0.10.0 |
+| [037](037-validation-warning-channel-deferred.md) | Validation warning channel — deferred; documented as future possible route | 2026-05-10 | **Status: deferred** — not built; reserved for advisory issues that aren't footguns |
 
 ### Resolver semantics
 
@@ -53,6 +56,7 @@
 | [015](015-dtcg-resolver-for-design-system-inheritance.md) | Design system inheritance is modelled as a DTCG resolver document | 2026-05-03 | Cheddar → CheddarBooks → LaundryLog chain |
 | [032](032-serialize-resolver-document.md) | `serializeResolver` — `ResolverDocument` serialization | 2026-05-08 | Closes the parse/validate/resolve/serialize lifecycle |
 | [034](034-evaluate-math-extensions-post-resolve.md) | `tsMathExpression` evaluation is a post-resolve pass at the `Api` layer, not a Resolver change | 2026-05-10 | **Addendum 2026-05-10 (v0.9.0)**: post-flatten pass had alias-propagation hole; superseded by `evaluateMathExtensionsInFile` (pre-flatten). Closes request_2026-05-10_02 + _03. |
+| [036](036-deprecate-resolveall-expose-flattenaliases.md) | Deprecate `Resolver.resolveAll`; expose `Resolver.flattenAliases` publicly | 2026-05-10 | The `All` suffix was a trap; `resolveAll` is redundant in the common pipeline. Closes request_2026-05-10_04 root cause. Shipped v0.10.0 |
 
 ### CSS emission & ingestion
 
@@ -112,6 +116,16 @@ ADR-031 (math expression round-trip)  │  written by the shim
                                       └─ ADR-033 (dimension→number alias
                                          coercion lets calc fire for
                                          alias-resolved scale tokens)
+
+ADR-033 (dimension→number TypeMismatch validation)
+  ├─ creates friction for the canonical Tokens Studio scale pattern
+  ├─ ADR-035 (ValidateOptions opt-in laxness) — addresses it via per-call opt-in
+  └─ ADR-037 (warning channel deferred) — option 3 alternative documented but not built
+
+ADR-036 (deprecate resolveAll, expose flattenAliases)
+  ├─ closes the trap that bit request_2026-05-10_04
+  └─ paired with ADR-035: both address the friction chain that forced
+     TS-as-SoT consumers off the convenience wrappers
 ```
 
 ---
@@ -154,6 +168,9 @@ ADR-031 (math expression round-trip)  │  written by the shim
 | 032 | 2026-05-08 | `serializeResolver` | accepted |
 | 033 | 2026-05-10 | Dimension→number alias handling | accepted |
 | 034 | 2026-05-10 | `tsMathExpression` post-resolve evaluation | accepted + 2026-05-10 v0.9.0 addendum (pre-flatten fix) |
+| 035 | 2026-05-10 | `ValidateOptions` opt-in laxness | accepted (v0.10.0) |
+| 036 | 2026-05-10 | Deprecate `resolveAll`, expose `flattenAliases` | accepted (v0.10.0) |
+| 037 | 2026-05-10 | Validation warning channel (future possible route) | **deferred** |
 
 ---
 
