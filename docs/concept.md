@@ -22,6 +22,30 @@ The DTCG Community Group describes the design-token toolchain as four stages:
    CSS …
 ```
 
+The same pipeline as a Mermaid diagram, with the library's slice highlighted and the wire-level contracts labelled (renders inline in Forgejo and most Markdown viewers):
+
+```mermaid
+flowchart LR
+    Source["DTCG source<br/>.tokens.json<br/>Tokens Studio JSON<br/>Penpot JSON<br/>existing CSS"]
+    R["Resolver<br/>parse, validate, merge,<br/>resolve aliases, eval math"]
+    T["Translator<br/>turn resolved values<br/>into target artifacts"]
+    Target["Target<br/>tokens.css<br/>Tokens.fs<br/>Swift, Kotlin, XAML, docs"]
+
+    Source -- "raw string" --> R
+    R -- "ResolvedTokens" --> T
+    T -- "target string" --> Target
+
+    subgraph lib["FnTools.DesignTokens (this library)"]
+        R
+        T
+    end
+
+    classDef stage fill:#ffffff,stroke:#444444,stroke-width:1px,color:#222222
+    classDef libstage fill:#e3f2fd,stroke:#1976d2,stroke-width:2px,color:#0d3a66
+    class Source,Target stage
+    class R,T libstage
+```
+
 **This library fills the Resolver and Translator stages.** It does not author tokens (the design tool does that) and it does not run a UI (your application does that). It accepts strings as input and returns strings as output — see [ADR-003: I/O belongs to the caller](../LOGOS/decisions/003-io-belongs-to-caller.md).
 
 The boundary is sharp on purpose: see [ADR-013: Library scope ends at the DTCG interchange boundary](../LOGOS/decisions/013-library-scope-dtcg-interchange-boundary.md).
