@@ -1,14 +1,5 @@
 module FnTools.DesignTokens.Tests.ExtensionEvaluationTests
 
-// Intentional exception to the AGENTS.md "no warning suppression" policy:
-// this file's deprecatedFunctionTests testList exists to verify that the
-// 0.8.0 `evaluateMathExtensions` API (deprecated in 0.9.0 because it cannot
-// propagate updates through alias chains — see ADR-034 addendum) continues
-// to work for callers who haven't migrated yet. Calling a deprecated function
-// emits FS0044; the warning is correct for consumers but undesirable in
-// tests whose job is to keep the deprecated function alive until removal.
-#nowarn "44"
-
 open System.Text.Json.Nodes
 open Expecto
 open FnTools.DesignTokens
@@ -37,6 +28,13 @@ let private dimTok (v: float) (u: DimensionUnit) (md: Metadata) : ResolvedToken 
 
 
 // ─── Tests for deprecated post-flatten evaluateMathExtensions (0.8.0 API) ──
+//
+// The block below intentionally calls the deprecated function. F# 10 scoped
+// warning suppression (RFC FS-1146) lets us narrow the FS0044 suppression
+// to exactly these tests, with #warnon restoring normal behavior immediately
+// after — strictly preferable to a file-wide #nowarn. The tests exist for
+// regression coverage of the deprecated function until v1.0.0 removal.
+#nowarn 44
 
 let deprecatedFunctionTests =
     testList "evaluateMathExtensions (deprecated 0.9.0 — post-flatten, no alias propagation)" [
@@ -209,6 +207,10 @@ let deprecatedFunctionTests =
             Expect.equal (getNum ["scale"; "x1"])    20.0 "scale.x1 evaluated"
             Expect.equal (getNum ["spacing"; "x1"])  16.0 "spacing.x1 stays stale — alias info gone post-flatten"
     ]
+
+// Re-enable FS0044 so any accidental call to a deprecated function below
+// (or in code added later in this file) is caught.
+#warnon 44
 
 
 // ─── Tests for evaluateMathExtensionsInFile (canonical 0.9.0 API) ───────────
