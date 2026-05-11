@@ -1,3 +1,38 @@
+## Extension-aware resolve — alias propagation fix (ADR-034 addendum, v0.9.0, 2026-05-10)
+
+Closes `request_2026-05-10_03`. The 0.8.0 `Api.evaluateMathExtensions`
+(post-flatten, ResolvedToken seq) had a structural hole: updating a
+formula token's value did not propagate to tokens that aliased it, because
+`flattenResolved` bakes alias values into concrete numbers before the
+function ever runs. By the time the seq exists, the alias→target
+relationship is gone from the data.
+
+- [x] `Api.evaluateMathExtensionsInFile : TokenFile -> EvaluateMathInFileResult` —
+  pre-flatten evaluation. Walks the TokenFile (where aliases are still
+  `TokenValue.Alias` literals), builds an alias-aware string index, evaluates
+  each `tsMathExpression`-bearing token against it, replaces `$value`.
+  Subsequent `flattenResolved` follows aliases and picks up the new values
+  automatically — propagation correct by construction.
+- [x] `TokensStudio.tryEvaluateMathExpressionWithIndex : Map<string,string> -> string -> float option` —
+  public wrapper exposing MathEval's raw string-index mode for use with the
+  alias-aware index.
+- [x] `Api.importWithResolverEvaluatingExtensions` rewired internally to use
+  `evaluateMathExtensionsInFile` between `resolve` and `flattenResolvedFile`.
+  Public signature unchanged; propagation works on upgrade.
+- [x] `Api.evaluateMathExtensions` marked `[<System.Obsolete(...)>]` pointing
+  at the new function. Still works for the single-formula-token case (no
+  aliases). Removal target: v1.0.0.
+- [x] 12 new tests in `ExtensionEvaluationTests.fs` `inFileTests`, including
+  three explicit propagation tests (single-hop, multi-hop chain,
+  formula-references-formula). Old tests preserved under `#nowarn "44"`
+  in `deprecatedFunctionTests` for regression coverage. 315/315 pass.
+- [x] ADR-034 addendum (2026-05-10, v0.9.0) — full diagnosis + the lesson:
+  "post-flatten + alias-following are incompatible by design; do the work
+  in the representation that still has the structure."
+- [x] `docs/migration-0.8-to-0.9.md` written.
+- [x] `docs/api-reference.md` updated: new function documented, deprecated
+  function explicitly marked, Primitives table updated.
+
 ## Extension-aware resolve (ADR-034, completed 2026-05-10)
 
 Reported by downstream consumer (`LOGOS/requests/request_2026-05-10_02.md`).

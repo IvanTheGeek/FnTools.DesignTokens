@@ -3,13 +3,14 @@
 `FnTools.DesignTokens` — DTCG 2025.10 codec, validator, resolver, and emitters (CSS, F# bindings, Tokens Studio). The entry point is `FnTools.DesignTokens.Api`. One package reference is all you need:
 
 ```xml
-<PackageReference Include="FnTools.DesignTokens" Version="0.8.0" />
+<PackageReference Include="FnTools.DesignTokens" Version="0.9.0" />
 ```
 
 The meta-package transitively pulls in seven layered libraries: `Foundation`, `Format`, `Validation`, `Resolver`, `Css`, `Bindings`, `TokensStudio`. Reference an individual layer if you want a smaller dependency surface.
 
 Migration guides (newest first):
-- [`migration-0.7-to-0.8.md`](./migration-0.7-to-0.8.md) — current release. Purely additive: `Api.evaluateMathExtensions` and `Api.importWithResolverEvaluatingExtensions` (ADR-034).
+- [`migration-0.8-to-0.9.md`](./migration-0.8-to-0.9.md) — current release. `evaluateMathExtensions` deprecated; new `evaluateMathExtensionsInFile` fixes alias propagation (ADR-034 addendum).
+- [`migration-0.7-to-0.8.md`](./migration-0.7-to-0.8.md) — `Api.evaluateMathExtensions` and `Api.importWithResolverEvaluatingExtensions` (ADR-034 original).
 - [`migration-0.6-to-0.7.md`](./migration-0.6-to-0.7.md) — `Api.validateStrictDtcg` opt-in spec-compliance check (ADR-028 addendum).
 - [`migration-0.5-to-0.6.md`](./migration-0.5-to-0.6.md) — `TypeMismatch` validation, dimension→number alias emission fix (ADR-033).
 - [`migration-0.4-to-0.5.md`](./migration-0.4-to-0.5.md) — pure version bump; first NuGet-CI release.
@@ -193,15 +194,13 @@ Serialize a `ResolverDocument` to JSON. Output round-trips through `parseResolve
 
 ## Extension-aware resolve
 
-### `Api.evaluateMathExtensions`
+### `Api.evaluateMathExtensionsInFile`
 
 ```fsharp
-Api.evaluateMathExtensions
-    (tokens: (string list * ResolvedToken) seq)
-    : ResolveWithExtensionsResult
+Api.evaluateMathExtensionsInFile (file: TokenFile) : EvaluateMathInFileResult
 
-type ResolveWithExtensionsResult = {
-    Tokens   : (string list * ResolvedToken) list
+type EvaluateMathInFileResult = {
+    File     : TokenFile
     Warnings : ExtensionEvaluationWarning list
 }
 
@@ -209,13 +208,43 @@ type ExtensionEvaluationWarning =
     | MathExpressionFailed of path: string * expression: string * reason: string
 ```
 
-Post-resolve pass that walks the token sequence; for any token carrying a `tsMathExpression` extension (`$extensions["com.fntools.designtokens"]["tsMathExpression"]`, ADR-031), evaluates the expression against the resolved numeric context and replaces the token's value with the result. The numeric context is built from the same sequence: every `ResolvedNumber`, `ResolvedDimension`, and `ResolvedDuration` contributes its scalar value keyed by full dot-path.
+Pre-flatten pass over a `TokenFile`. For any token carrying a `tsMathExpression` extension (`$extensions["com.fntools.designtokens"]["tsMathExpression"]`, ADR-031), evaluates the expression against an alias-aware index of the file and replaces the token's `$value` with the result. **Crucially, this happens before `flattenResolved` follows aliases** — so dependent tokens that alias a formula token pick up the evaluated value automatically when subsequently flattened. This is the correct shape for axis-aware math.
 
-For `ResolvedDimension` and `ResolvedDuration` hosts, only the scalar is updated — the unit is preserved. `ResolvedNumber` is replaced wholesale. Non-numeric hosts (Color, FontFamily, etc.) carrying the extension pass through unchanged with no warning (the extension is structurally non-applicable).
+For `Dimension` and `Duration` hosts, only the scalar is updated — the unit is preserved. `Number` is replaced wholesale. Non-numeric hosts (Color, FontFamily, etc.) carrying the extension pass through unchanged with no warning (the extension is structurally non-applicable).
 
-Failures (missing variable, parse error, NaN/Infinity result) emit `MathExpressionFailed (path, expression, reason)` warnings and **keep the stale `$value`** — the resolution succeeds, the author sees the warning and fixes the formula.
+Failures (missing variable, parse error, non-numeric result) emit `MathExpressionFailed (path, expression, reason)` warnings and **keep the stale `$value`** — the resolution proceeds, the author sees the warning and fixes the formula.
 
 Supports the same operators and functions as the import-time evaluator: `+ - * / ^ %`, parentheses, unary minus/plus, and `round / floor / ceil / abs / sqrt / pow / min / max / sin / cos / tan / asin / acos / atan / atan2 / log / log2 / log10 / exp`.
+
+Use between `Resolver.resolve` and `Primitives.flattenResolved` in the manual pipeline:
+
+```fsharp
+match Resolver.resolve loadFile context doc with
+| Error es -> handle es
+| Ok merged ->
+    let { File = updatedFile; Warnings = warnings } = Api.evaluateMathExtensionsInFile merged
+    match Api.Primitives.flattenResolved updatedFile with
+    | Error es -> handle es
+    | Ok tokens ->
+        // tokens carry the evaluated values; aliases that pointed at formula
+        // tokens have automatically propagated the new values
+        ...
+```
+
+Or use `Api.importWithResolverEvaluatingExtensions` (below) which does this composition automatically.
+
+### `Api.evaluateMathExtensions` (deprecated 0.9.0)
+
+```fsharp
+[<System.Obsolete>]
+Api.evaluateMathExtensions
+    (tokens: (string list * ResolvedToken) seq)
+    : ResolveWithExtensionsResult
+```
+
+The original 0.8.0 post-flatten variant. **Does not propagate updates through alias chains** — by the time the flat `ResolvedToken seq` exists, alias-target relationships have been baked into concrete values and the function has no way to recover them. Updating `scale.x1` does not update `spacing.x1` that originally aliased it. See ADR-034 addendum (2026-05-10) for the full diagnosis.
+
+Use `evaluateMathExtensionsInFile` instead. The deprecated function is retained for compatibility with 0.8.0 consumers; the only known consumer is the request author who reported the propagation bug. Removal target: v1.0.0.
 
 ### `Api.importWithResolverEvaluatingExtensions`
 
@@ -225,9 +254,16 @@ Api.importWithResolverEvaluatingExtensions
     (context  : Map<string, string>)
     (jsonText : string)
     : Result<ResolveWithExtensionsResult, ImportError list>
+
+type ResolveWithExtensionsResult = {
+    Tokens   : (string list * ResolvedToken) list
+    Warnings : ExtensionEvaluationWarning list
+}
 ```
 
-Convenience: `importWithResolver` + `evaluateMathExtensions` in one call. Use when your `.resolver.json` composes axis sets whose values feed math expressions on dependent tokens — for example, a Breakpoint set overrides `multiplier` and you want every `round(base * pow({multiplier}, N))` token to re-evaluate against the active axis combination instead of returning a stale snapshot `$value`.
+Convenience: `parseResolver → validate → resolve → evaluateMathExtensionsInFile → validate → flattenResolvedFile` in one call. Use when your `.resolver.json` composes axis sets whose values feed math expressions on dependent tokens — for example, a Breakpoint set overrides `multiplier` and you want every `round({base} * pow({multiplier}, N))` token AND every token that aliases such a scale to re-evaluate against the active axis combination.
+
+As of 0.9.0, this function uses the pre-flatten evaluation path (ADR-034 addendum). Updates propagate through alias chains correctly.
 
 `Resolver.resolveAll` (and its wrapper `importWithResolver`) **does not** do this on its own — it stays strict-DTCG-compliant by reading `$value` directly. Extension-aware behaviour is opt-in by function name. See ADR-034 for the rationale.
 
@@ -435,7 +471,8 @@ Human-readable description of any `ImportError`. Useful for logging or surfacing
 | `serialize` / `serializeAs` / `serializePenpot` | `Format.serialize*` — `serializeAs` requires an `IAcceptDataLoss` parameter at the call site (ADR-028, marks a lossy spec downgrade) |
 | `validate` | `Validation.validate` — includes the cross-type alias check from ADR-033 |
 | `validateStrictDtcg` | `Validation.validateStrictDtcg` — opt-in spec-extension check (ADR-028 addendum) |
-| `evaluateMathExtensions` / `importWithResolverEvaluatingExtensions` / `formatExtensionEvaluationWarning` | post-resolve evaluation of `tsMathExpression` extensions (ADR-034) |
+| `evaluateMathExtensionsInFile` / `importWithResolverEvaluatingExtensions` / `formatExtensionEvaluationWarning` | pre-flatten evaluation of `tsMathExpression` extensions with alias propagation (ADR-034 addendum) |
+| `evaluateMathExtensions` ⚠️ deprecated | post-flatten variant; does not propagate through alias chains. Use `evaluateMathExtensionsInFile` |
 | `flatten` / `tryFind` / `tryResolveAlias` | token tree traversal |
 | `parseResolver` / `serializeResolver` / `resolve` / `resolveAll` | `Resolver.*` |
 | `flattenResolved` | full resolution pipeline |

@@ -52,7 +52,7 @@
 |---|---|---|---|
 | [015](015-dtcg-resolver-for-design-system-inheritance.md) | Design system inheritance is modelled as a DTCG resolver document | 2026-05-03 | Cheddar → CheddarBooks → LaundryLog chain |
 | [032](032-serialize-resolver-document.md) | `serializeResolver` — `ResolverDocument` serialization | 2026-05-08 | Closes the parse/validate/resolve/serialize lifecycle |
-| [034](034-evaluate-math-extensions-post-resolve.md) | `tsMathExpression` evaluation is a post-resolve pass at the `Api` layer, not a Resolver change | 2026-05-10 | Closes request_2026-05-10_02. Shipped v0.8.0 |
+| [034](034-evaluate-math-extensions-post-resolve.md) | `tsMathExpression` evaluation is a post-resolve pass at the `Api` layer, not a Resolver change | 2026-05-10 | **Addendum 2026-05-10 (v0.9.0)**: post-flatten pass had alias-propagation hole; superseded by `evaluateMathExtensionsInFile` (pre-flatten). Closes request_2026-05-10_02 + _03. |
 
 ### CSS emission & ingestion
 
@@ -153,7 +153,7 @@ ADR-031 (math expression round-trip)  │  written by the shim
 | 031 | 2026-05-08 | Math expression round-trip | accepted |
 | 032 | 2026-05-08 | `serializeResolver` | accepted |
 | 033 | 2026-05-10 | Dimension→number alias handling | accepted |
-| 034 | 2026-05-10 | `tsMathExpression` post-resolve evaluation | accepted |
+| 034 | 2026-05-10 | `tsMathExpression` post-resolve evaluation | accepted + 2026-05-10 v0.9.0 addendum (pre-flatten fix) |
 
 ---
 
