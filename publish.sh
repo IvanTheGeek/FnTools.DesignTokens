@@ -1,8 +1,20 @@
 #!/usr/bin/env bash
 # Pack all layers and push to the Forgejo NuGet feed.
 #
+# PREFERRED PATH FOR STABLE RELEASES: push a 'v0.X.Y' git tag instead of
+# running this script. The Forgejo build runner produces deterministic
+# builds via .forgejo/workflows/publish-stable.yml (checkout the tag SHA,
+# build, test, pack with -p:Version="${TAG#v}", push with --skip-duplicate).
+# Same artifact every time for the same tag; tag is the canonical record
+# of what was published.
+#
+# This script remains useful for:
+#   - --dev pre-release iterations (versioned with dev.<shortsha> suffix)
+#   - Local sanity-check pack before tagging
+#   - Emergency manual publish if the CI runner is unavailable
+#
 # Usage:
-#   ./publish.sh              # stable — version from .fsproj
+#   ./publish.sh              # stable — version from .fsproj (prefer tag instead)
 #   ./publish.sh --dev        # pre-release — version suffix: dev.<shortsha>
 #   FORGEJO_TOKEN=xxx ./publish.sh [--dev]
 
@@ -26,6 +38,15 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
+
+if [ "$DEV" = false ]; then
+    echo "" >&2
+    echo "note: stable releases normally use tag-triggered CI." >&2
+    echo "      Push a 'v0.X.Y' tag; the Forgejo runner produces deterministic builds" >&2
+    echo "      via .forgejo/workflows/publish-stable.yml. Continuing with local build —" >&2
+    echo "      use --dev for pre-release versioning if that was your intent." >&2
+    echo "" >&2
+fi
 
 echo "--- building solution ---"
 dotnet build FnTools.DesignTokens.slnx -c Release --nologo -v quiet
