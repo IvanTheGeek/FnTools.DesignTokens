@@ -122,3 +122,39 @@ tests assert all three.
 Removal of this addendum would require either reverting the fix (no — it
 breaks real consumer output) or unifying the two flatten functions
 (separate refactor, not patch-release scope).
+
+## Addendum — flatten functions unified (v0.10.2, 2026-05-11)
+
+The parallel-functions cleanup flagged in the v0.10.1 addendum was
+completed in v0.10.2. `flattenResolvedFile` and `partialFlattenResolvedFile`
+now share `flattenOneToken : TokenFile -> string list -> Token -> Result<ResolvedToken, ValidationError list>`,
+which encapsulates the alias-following + Number→Dimension/Duration
+coercion logic in one place. The two outer functions are now thin
+wrappers that differ only in error-collection strategy:
+
+- `flattenResolvedFile` collects errors with `collect` (fail-fast `Result`)
+- `partialFlattenResolvedFile` accumulates errors alongside successes via
+  ResizeArray + a new `toPartialError` helper that degrades each
+  `ValidationError` to the `(path, message)` tuple shape
+
+This removes the "fix one, forget the parallel" failure mode that gave us
+the v0.10.1 bug. Any future change to alias handling now lands in one
+place and both code paths benefit automatically.
+
+**Tiny behavior change in partial-success error output**: the previous
+`partialFlattenResolvedFile` had an inconsistent degradation — for some
+error types the path was doubled in the message (`"path: path: msg"`)
+because the code applied `ValidationError.format` (which prepends the
+embedded path) on top of the outer path tuple. The new `toPartialError`
+uses the embedded path and raw message for `UnresolvedReference`,
+`ConstraintViolation`, and `TypeMismatch`, and uses the outer path with
+the joined-cycle message for `CircularReference`. This is a slight
+cleanup of `TokenUnresolved` warning messages produced by the
+`Api.importTokensStudio*` family — no functional change, just less
+verbose. No test changes needed (329/329 still pass).
+
+`flattenAliases` (in `Resolver.fs`) is unchanged — it's a different
+operation (TokenFile → TokenFile, replaces aliases in the file
+representation) and doesn't share logic with the resolved-token-producing
+flatten variants. ADR-036 promoted it to public; this refactor doesn't
+touch it.

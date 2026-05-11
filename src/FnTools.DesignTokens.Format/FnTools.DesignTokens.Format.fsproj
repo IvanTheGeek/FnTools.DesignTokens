@@ -5,7 +5,7 @@
     <RootNamespace>FnTools.DesignTokens</RootNamespace>
     <AssemblyName>FnTools.DesignTokens.Format</AssemblyName>
     <PackageId>FnTools.DesignTokens.Format</PackageId>
-    <Version>0.10.1</Version>
+    <Version>0.10.2</Version>
     <Authors>FnTools</Authors>
     <Description>DTCG 2025.10 JSON parse and serialize (System.Text.Json)</Description>
     <PackageLicenseExpression>AGPL-3.0-or-later</PackageLicenseExpression>

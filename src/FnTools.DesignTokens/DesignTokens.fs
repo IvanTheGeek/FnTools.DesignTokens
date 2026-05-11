@@ -344,61 +344,78 @@ let private toResolvedValue
     | TokenValue.Alias _       ->
         Error [ConstraintViolation (path, "alias not resolved before flattening")]
 
+// ─── Shared private helper for the two flatten variants (ADR-033 cleanup, 0.10.2) ──────
+//
+// Until 0.10.2, flattenResolvedFile and partialFlattenResolvedFile each had
+// their own copy of the same alias-following + Number→Dimension/Duration
+// coercion logic. They drifted: partialFlattenResolvedFile got the correct
+// precedence + coercion 2026-05-04, but flattenResolvedFile didn't get the
+// same fix until 0.10.1 — meaning every DTCG-import path produced unitless
+// CSS for dimension→number aliases for over a month. (See ADR-033 addendum.)
+//
+// This extraction removes the duplication so any future change to alias
+// handling lands in one place and both code paths benefit. The two flatten
+// variants differ only in their error-collection strategy:
+//   - flattenResolvedFile uses Result short-circuit (fail-fast)
+//   - partialFlattenResolvedFile accumulates errors alongside successes
+
+/// Process a single (path, token) pair: follow alias if any (preserving the
+/// aliasing token's declared $type per ADR-033), determine the final type,
+/// coerce Number→Dimension/Duration where the declared type demands it, then
+/// produce the ResolvedToken. Returns a ValidationError list on failure.
+let private flattenOneToken
+    (file: TokenFile)
+    (path: string list)
+    (t: Token)
+    : Result<ResolvedToken, ValidationError list> =
+    let pathStr = String.concat "." path
+
+    // Follow alias if present. Aliasing token's $type wins over target's
+    // (ADR-033 / 0.10.1 fix) — e.g. spacing.x1 (DimensionType) aliasing
+    // scale.x1 (NumberType) keeps DimensionType so the emitter coerces.
+    let finalToken =
+        match t.Value with
+        | TokenValue.Alias r ->
+            match tryResolveAliasIn r file with
+            | Some target -> Ok { target with Type = t.Type |> Option.orElse target.Type }
+            | None ->
+                let refStr =
+                    match r with
+                    | CurlyBrace p -> "{" + String.concat "." p + "}"
+                    | JsonPointer p -> p
+                Error [UnresolvedReference (pathStr, refStr)]
+        | _ -> Ok t
+
+    match finalToken with
+    | Error es -> Error es
+    | Ok ft ->
+        let inferred = inferType ft.Value
+        match ft.Type |> Option.orElse inferred with
+        | None ->
+            Error [ConstraintViolation (pathStr, "cannot determine $type")]
+        | Some tt ->
+            // Coerce bare numbers when the declared type demands a dimensioned form.
+            let coercedValue =
+                match tt, ft.Value with
+                | DimensionType, TokenValue.Number n ->
+                    TokenValue.Dimension { Value = n; Unit = Px }
+                | DurationType, TokenValue.Number n ->
+                    TokenValue.Duration { Value = n; Unit = Milliseconds }
+                | _ -> ft.Value
+            toResolvedValue pathStr file coercedValue
+            |> Result.map (fun rv ->
+                { Value = rv; Type = tt; Metadata = ft.Metadata })
+
 let private flattenResolvedFile
     (file: TokenFile)
     : Result<(string list * ResolvedToken) seq, ValidationError list> =
-    let raw = flattenFile file
-    let resolved =
-        raw
-        |> Seq.map (fun (path, t) ->
-            let pathStr = String.concat "." path
-            // Follow Alias chain first if needed.
-            // Alias token's own $type takes precedence over the target's type (ADR-033 +
-            // the 0.10.1 fix). This preserves intended semantics when an alias token has
-            // an explicit $type annotation that differs from its target — e.g. a spacing.x1
-            // (dimension) that aliases scale.x1 (number). Without this, the dimension
-            // annotation is silently discarded and ADR-033's emitter coercion cannot fire.
-            // Mirrors the long-standing fix in partialFlattenResolvedFile (2026-05-04).
-            let finalToken =
-                match t.Value with
-                | TokenValue.Alias r ->
-                    match tryResolveAliasIn r file with
-                    | Some target -> Ok { target with Type = t.Type |> Option.orElse target.Type }
-                    | None ->
-                        let refStr =
-                            match r with
-                            | CurlyBrace p -> "{" + String.concat "." p + "}"
-                            | JsonPointer p -> p
-                        Error [UnresolvedReference (pathStr, refStr)]
-                | _ -> Ok t
-
-            match finalToken with
-            | Error es -> Error es
-            | Ok ft ->
-                let inferred = inferType ft.Value
-                match ft.Type |> Option.orElse inferred with
-                | None ->
-                    Error [ConstraintViolation (pathStr, "cannot determine $type")]
-                | Some tt ->
-                    // Coerce bare numbers to the annotated type when the annotation and value
-                    // type differ. Same coercion partialFlattenResolvedFile has had since
-                    // 2026-05-04; mirrored here in 0.10.1 so the DTCG-import paths
-                    // (Api.import, Api.importWithResolver, Api.importWithResolverEvaluatingExtensions)
-                    // produce ResolvedDimension/ResolvedDuration with the declared type's
-                    // default unit instead of bare ResolvedNumber.
-                    let coercedValue =
-                        match tt, ft.Value with
-                        | DimensionType, TokenValue.Number n ->
-                            TokenValue.Dimension { Value = n; Unit = Px }
-                        | DurationType, TokenValue.Number n ->
-                            TokenValue.Duration { Value = n; Unit = Milliseconds }
-                        | _ -> ft.Value
-                    toResolvedValue pathStr file coercedValue
-                    |> Result.map (fun rv ->
-                        path, { Value = rv; Type = tt; Metadata = ft.Metadata }))
-        |> List.ofSeq
-
-    collect resolved |> Result.map (fun xs -> upcast xs)
+    flattenFile file
+    |> Seq.map (fun (path, t) ->
+        flattenOneToken file path t
+        |> Result.map (fun rt -> path, rt))
+    |> List.ofSeq
+    |> collect
+    |> Result.map (fun xs -> upcast xs)
 
 
 // ─── Public API ──────────────────────────────────────────────────────────────
@@ -465,8 +482,24 @@ let importWithResolver
     : Result<(string list * ResolvedToken) seq, ImportError list> =
     importWithResolverWith ValidateOptions.strict loadFile context jsonText
 
-/// Like flattenResolvedFile but partial-success: returns resolved tokens alongside any
-/// unresolved-alias or type-inference errors rather than failing the whole batch.
+/// Convert a ValidationError to the partial-success <c>(path, message)</c>
+/// tuple shape. Uses the error's most specific embedded path and the raw
+/// message — does not prepend the outer path via <c>ValidateError.format</c>
+/// (which historically led to <c>"path: path: msg"</c> doubling for some
+/// error variants — cleaned up in 0.10.2).
+let private toPartialError (outerPathStr: string) (e: ValidationError) : string * string =
+    match e with
+    | UnresolvedReference (p, r)              -> (p, r)
+    | ConstraintViolation (p, msg)            -> (p, msg)
+    | TypeMismatch (p, expected, actual)      ->
+        (p, sprintf "type mismatch — expected %s, got %s" expected actual)
+    | CircularReference cycle                 ->
+        (outerPathStr, sprintf "circular reference: %s" (String.concat " -> " cycle))
+
+/// Like flattenResolvedFile but partial-success: returns resolved tokens
+/// alongside any unresolved-alias or type-inference errors rather than failing
+/// the whole batch. Both functions share <see cref="flattenOneToken"/>;
+/// they differ only in error-collection strategy.
 let private partialFlattenResolvedFile
     (file: TokenFile)
     : (string list * ResolvedToken) list * (string * string) list =
@@ -474,49 +507,11 @@ let private partialFlattenResolvedFile
     let errs = ResizeArray<string * string>()
     flattenFile file
     |> Seq.iter (fun (path, t) ->
-        let pathStr = String.concat "." path
-        let finalToken =
-            match t.Value with
-            | TokenValue.Alias r ->
-                match tryResolveAliasIn r file with
-                | Some target ->
-                    // Alias token's own $type takes precedence over the target's type.
-                    // This preserves intended semantics when an alias token has an explicit
-                    // $type annotation that differs from its target — e.g. a spacing.sm
-                    // (dimension) that aliases to scale.sm (number). Without this, the
-                    // dimension annotation is silently discarded and the unit is lost.
-                    Ok { target with Type = t.Type |> Option.orElse target.Type }
-                | None ->
-                    let refStr =
-                        match r with
-                        | CurlyBrace p -> "{" + String.concat "." p + "}"
-                        | JsonPointer p -> p
-                    Error (pathStr, refStr)
-            | _ -> Ok t
-        match finalToken with
-        | Error e -> errs.Add e
-        | Ok ft ->
-            let inferred = inferType ft.Value
-            match ft.Type |> Option.orElse inferred with
-            | None -> errs.Add (pathStr, "cannot determine $type")
-            | Some tt ->
-                // Coerce bare numbers to the annotated type when the annotation and value
-                // type differ. Handles spacing/radius alias chains where the resolved
-                // value is a number but the token carries an explicit dimension annotation.
-                let coercedValue =
-                    match tt, ft.Value with
-                    | DimensionType, TokenValue.Number n ->
-                        TokenValue.Dimension { Value = n; Unit = Px }
-                    | DurationType, TokenValue.Number n ->
-                        TokenValue.Duration { Value = n; Unit = Milliseconds }
-                    | _ -> ft.Value
-                match toResolvedValue pathStr file coercedValue with
-                | Error es ->
-                    for e in es do
-                        match e with
-                        | UnresolvedReference (p, r) -> errs.Add (p, r)
-                        | other -> errs.Add (pathStr, ValidationError.format other)
-                | Ok rv -> oks.Add (path, { Value = rv; Type = tt; Metadata = ft.Metadata }))
+        match flattenOneToken file path t with
+        | Ok rt -> oks.Add (path, rt)
+        | Error es ->
+            let pathStr = String.concat "." path
+            for e in es do errs.Add (toPartialError pathStr e))
     List.ofSeq oks, List.ofSeq errs
 
 

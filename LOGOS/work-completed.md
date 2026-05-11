@@ -1,3 +1,32 @@
+## Flatten functions unified (ADR-033 v0.10.2 addendum, 2026-05-11)
+
+Completed the cleanup direction flagged in the v0.10.1 addendum: extracted
+the shared alias-following + Number→Dimension/Duration coercion logic from
+`flattenResolvedFile` and `partialFlattenResolvedFile` into a private
+`flattenOneToken : TokenFile -> string list -> Token -> Result<ResolvedToken, ValidationError list>`
+helper. The two outer functions are now thin wrappers that differ only in
+error-collection strategy:
+
+- `flattenResolvedFile` — `Seq.map flattenOneToken |> collect` (fail-fast `Result`)
+- `partialFlattenResolvedFile` — `Seq.iter` with a `ResizeArray` accumulator
+  + new `toPartialError` helper that uniformly degrades each `ValidationError`
+  to the `(path, message)` tuple shape
+
+- [x] Removes the "fix one, forget the parallel" failure mode that gave us
+  the v0.10.1 bug. Any future change to alias handling lands in one place.
+- [x] Tiny cleanup of `TokenUnresolved` warning messages produced by the
+  TS-import family — `partialFlattenResolvedFile` no longer occasionally
+  doubles the path in the `ref` field (the old code applied
+  `ValidationError.format` on top of the outer-path tuple, which prepended
+  the embedded path; the new `toPartialError` uses embedded path + raw msg).
+- [x] 329/329 tests still pass. No test relied on the doubled-path format.
+- [x] ADR-033 second addendum written.
+- [x] `docs/migration-0.10.1-to-0.10.2.md` written.
+- [x] `docs/api-reference.md` updated: version + migration list bumped.
+- [x] `LOGOS/decisions/README.md` ADR-033 row + chronological list updated.
+
+Pure internal refactor. No public API changes. Patch release v0.10.2.
+
 ## Type-preservation bug fix in flattenResolvedFile (ADR-033 addendum, v0.10.1, 2026-05-10)
 
 Latent bug discovered via `outside-conversations_2026-05-10_03.md` follow-up to
