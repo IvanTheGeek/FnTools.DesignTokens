@@ -1,3 +1,48 @@
+## Bindings identifier safety (ADR-038, v0.11.0, 2026-05-11)
+
+Closes the §C gap from the 2026-05-10 LOGOS audit. `BindingsEmitter.emit` had
+two silent-data-loss patterns when DTCG token paths collided in F# identifier
+space:
+
+1. **Identifier collision** — same F# path from different DTCG paths
+   (`color.dark` + `color.Dark` → `Color.Dark`; `font.line-height` +
+   `font.lineHeight` → `Font.LineHeight`; etc.). `Map.add` silently
+   overwrites; some tokens are missing from the generated bindings.
+2. **Leaf/branch conflict** — one F# path is a strict prefix of another
+   (`font` Leaf + `font.size.sm` extending Branch). The Leaf is silently
+   replaced when `insertAt` falls through to `_ -> Map.empty`.
+
+- [x] **`BindingsIdentifierIssue` DU** in `Bindings` package: `IdentifierCollision`
+  + `LeafBranchConflict` cases + `format` helper.
+- [x] **`checkIdentifierSafety`** — pre-flight check returning issue list (empty = safe).
+- [x] **`emitChecked`** — `Result<string, BindingsIdentifierIssue list>` convenience
+  composing the check + emit in one call.
+- [x] **Shared `expandedFsPaths` helper** — DRY'd from `buildTree` so both the
+  build-the-tree path and the check-the-tree path walk the same fsPath
+  expansion logic, including typography's 5-subprop expansion. Mirrors the
+  ADR-033 v0.10.2 unification pattern — no "fix one, forget the parallel"
+  failure mode possible.
+- [x] **`emit` unchanged** — infallible, same signature, same output. Doc
+  amended with the silent-data-loss warning pointing at the new check.
+- [x] **10 new tests** in `BindingsEmitterTests.safetyTests`: clean baseline,
+  case collision, hyphen-vs-camel collision, numeric N-prefix collision,
+  typography expansion collision, leaf/branch conflict, `emitChecked` happy
+  path, `emitChecked` failure path, formatter output, real-world sample
+  (`samples/ivanthegeek.tokens.json`) clean baseline. 339/339 pass.
+- [x] **ADR-038 written** documenting the layer-placement decision
+  (Bindings, not Validation), the scope decisions (collisions + leaf/branch
+  yes, non-ASCII + nesting depth deferred), and the pattern for future
+  emitter packages.
+- [x] **2-line insights entry** added: "Language-specific safety checks
+  belong in language-specific emitter layers."
+- [x] **api-reference fixes**: stale `BindingsEmitter.emit` signature
+  (missing `moduleName`) corrected; new functions documented; module-access
+  pattern clarified (`open FnTools.DesignTokens.Bindings` gives unqualified
+  access, not `BindingsEmitter.foo`).
+- [x] **`docs/migration-0.10.2-to-0.11.0.md`** written — 4 upgrade scenarios.
+
+Closes original audit §C. Semver minor (additive public API).
+
 ## Flatten functions unified (ADR-033 v0.10.2 addendum, 2026-05-11)
 
 Completed the cleanup direction flagged in the v0.10.1 addendum: extracted

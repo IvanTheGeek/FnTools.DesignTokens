@@ -214,6 +214,129 @@ let integrationTests =
     ]
 
 
+// ─── Identifier-safety check (ADR-038, 0.11.0) ──────────────────────────────
+
+let safetyTests = testList "checkIdentifierSafety + emitChecked" [
+
+    testCase "clean file: no issues reported" <| fun () ->
+        let tokens : (string list * ResolvedToken) list = [
+            ["color"; "text"; "primary"], colorToken
+            ["spacing"; "sm"],              dimToken 8.0 Px
+            ["scale"; "base"],              numToken 16.0
+        ]
+        let issues = checkIdentifierSafety tokens
+        Expect.equal issues [] "no collisions or conflicts"
+
+    testCase "case collision: color.dark vs color.Dark both map to Color.Dark" <| fun () ->
+        let tokens = [
+            ["color"; "dark"], colorToken
+            ["color"; "Dark"], colorToken
+        ]
+        let issues = checkIdentifierSafety tokens
+        match issues with
+        | [IdentifierCollision (fs, sources)] ->
+            Expect.equal fs ["Color"; "Dark"] "fsPath = Color.Dark"
+            Expect.equal sources.Length 2 "both DTCG paths reported"
+        | other -> failtestf "expected single IdentifierCollision, got %A" other
+
+    testCase "hyphen-vs-camel collision: font.line-height vs font.lineHeight" <| fun () ->
+        let tokens = [
+            ["font"; "line-height"], dimToken 1.5 Px
+            ["font"; "lineHeight"],  dimToken 1.5 Px
+        ]
+        let issues = checkIdentifierSafety tokens
+        match issues with
+        | [IdentifierCollision (fs, _)] ->
+            Expect.equal fs ["Font"; "LineHeight"] "both transform to Font.LineHeight"
+        | other -> failtestf "expected IdentifierCollision, got %A" other
+
+    testCase "numeric N-prefix collision: scale.400 vs scale.N400" <| fun () ->
+        let tokens = [
+            ["scale"; "400"],  numToken 400.0
+            ["scale"; "N400"], numToken 400.0
+        ]
+        let issues = checkIdentifierSafety tokens
+        match issues with
+        | [IdentifierCollision (fs, _)] ->
+            Expect.equal fs ["Scale"; "N400"] "both transform to Scale.N400"
+        | other -> failtestf "expected IdentifierCollision, got %A" other
+
+    testCase "typography expansion collision: heading typography vs explicit heading.FontSize" <| fun () ->
+        // Typography token at ["font"; "heading"] expands to 5 sub-paths
+        // including ["Font"; "Heading"; "FontSize"]. An explicit dimension
+        // token at ["font"; "heading"; "font-size"] would also produce
+        // ["Font"; "Heading"; "FontSize"]. Both collide.
+        let tokens = [
+            ["font"; "heading"],              typoToken
+            ["font"; "heading"; "font-size"], dimToken 24.0 Px
+        ]
+        let issues = checkIdentifierSafety tokens
+        let hasFontSizeCollision =
+            issues |> List.exists (function
+                | IdentifierCollision (fs, _) -> fs = ["Font"; "Heading"; "FontSize"]
+                | _ -> false)
+        Expect.isTrue hasFontSizeCollision "FontSize sub-path collides between typography expansion and explicit dimension token"
+
+    testCase "leaf/branch conflict: font (leaf) vs font.size.sm (extends as branch)" <| fun () ->
+        let tokens = [
+            ["font"],               dimToken 16.0 Px
+            ["font"; "size"; "sm"], dimToken 12.0 Px
+        ]
+        let issues = checkIdentifierSafety tokens
+        let hasConflict =
+            issues |> List.exists (function
+                | LeafBranchConflict (leafFs, leafPath, _) ->
+                    leafFs = ["Font"] && leafPath = ["font"]
+                | _ -> false)
+        Expect.isTrue hasConflict "Font leaf conflicts with extending Font.Size.Sm branch"
+
+    testCase "emitChecked: clean tokens return Ok with emitted source" <| fun () ->
+        let tokens = [
+            ["color"; "text"; "primary"], colorToken
+        ]
+        match emitChecked "Tokens" tokens with
+        | Ok src ->
+            Expect.stringContains src "module Tokens"          "module header"
+            Expect.stringContains src "Color"                  "Color module"
+            Expect.stringContains src "Primary"                "Primary leaf"
+        | Error issues -> failtestf "expected Ok, got Error %A" issues
+
+    testCase "emitChecked: collision returns Error without emitting" <| fun () ->
+        let tokens = [
+            ["color"; "dark"], colorToken
+            ["color"; "Dark"], colorToken
+        ]
+        match emitChecked "Tokens" tokens with
+        | Ok _ -> failtest "expected Error from emitChecked on collision"
+        | Error issues ->
+            Expect.equal issues.Length 1 "one collision reported"
+            match issues.[0] with
+            | IdentifierCollision (fs, _) ->
+                Expect.equal fs ["Color"; "Dark"] "collision at Color.Dark"
+            | other -> failtestf "expected IdentifierCollision, got %A" other
+
+    testCase "BindingsIdentifierIssue.format produces readable line" <| fun () ->
+        let issue = IdentifierCollision (["Color"; "Dark"], [["color"; "dark"]; ["color"; "Dark"]])
+        let s = BindingsIdentifierIssue.format issue
+        Expect.stringContains s "Color.Dark"   "fsPath mentioned"
+        Expect.stringContains s "color.dark"   "first source mentioned"
+        Expect.stringContains s "color.Dark"   "second source mentioned"
+
+    testCase "ivanthegeek.tokens.json sample emits cleanly (real-world baseline)" <| fun () ->
+        // Regression check against a real sample — the bundled sample file
+        // should never accidentally introduce a collision.
+        let samplePath = System.IO.Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "samples", "ivanthegeek.tokens.json")
+        if System.IO.File.Exists samplePath then
+            let json = System.IO.File.ReadAllText samplePath
+            match Api.import json with
+            | Error es -> failtestf "sample parse failed: %A" es
+            | Ok tokens ->
+                let issues = checkIdentifierSafety tokens
+                Expect.equal issues [] "real-world sample has no collisions"
+        // else: sample file not present in this build context — skip silently
+]
+
+
 // ─── All tests ────────────────────────────────────────────────────────────────
 
 let allTests =
@@ -221,4 +344,5 @@ let allTests =
         identTests
         emitTests
         integrationTests
+        safetyTests
     ]
