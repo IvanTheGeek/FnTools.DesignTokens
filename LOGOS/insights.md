@@ -311,6 +311,53 @@ them). The principle: when scope (ADR-013) means the library cannot solve a
 problem itself, make sure it neither corrupts data on the way through nor
 hides the problem from the caller.
 
+## F# 10 scoped `#nowarn` / `#warnon` — narrow suppression with restoration
+
+F# 10 (RFC FS-1146, shipped with .NET 10) added `#warnon` paired with
+`#nowarn`. The pair lets you suppress a warning for an exact span and
+restore normal behavior immediately after, rather than the old file-wide
+`#nowarn` that ran from the directive to end-of-file.
+
+Canonical example (from Microsoft Learn):
+
+```fsharp
+#nowarn 25
+let f (Some x) =    // FS0025 suppressed
+#warnon 25
+    // FS0025 enabled again — accidental new code below isn't silently shielded
+```
+
+The right shape for AGENTS.md's "no warning suppression" policy: the
+policy is fundamentally about not hiding warnings the compiler is right to
+emit. File-wide `#nowarn` violates that — code added later in the file
+inherits the suppression invisibly. Scoped `#nowarn` + `#warnon` keeps the
+intent local, auditable, and restorable. **Treat `#nowarn` without a
+matching `#warnon` as the equivalent of `<NoWarn>` in fsproj**: nearly
+always wrong. **Treat scoped `#nowarn` + `#warnon` around a known-good
+block as analogous to inline `// eslint-disable-next-line` in JS** —
+acceptable when the block is genuinely the exception and the suppression
+ends at the block boundary.
+
+Our use case: testing a deprecated function for regression coverage.
+`Api.evaluateMathExtensions` is marked `[<Obsolete>]` (ADR-034 addendum,
+v0.9.0); the test file's `deprecatedFunctionTests` testList intentionally
+calls it. Wrapping the testList with `#nowarn 44` / `#warnon 44` documents
+the exception precisely without shielding anything else in the file. If
+someone later adds a test outside that block that accidentally uses the
+deprecated function, FS0044 fires as it should.
+
+Breaking changes from the F# 10 directive cleanup that are worth knowing
+about:
+- No whitespace between `#` and `nowarn` (i.e. `# nowarn` is rejected).
+- No multiline or empty warn directives.
+- Warning numbers cannot be triple-quoted, interpolated, or verbatim
+  strings. Bare numbers (`#nowarn 44`) or regular quotes (`#nowarn "44"`)
+  both work; the new docs use the bare form.
+- In scripts, `#nowarn` now scopes to the end of the file (or next
+  matching `#warnon`), not to the whole compilation as before.
+
+Reference: <https://learn.microsoft.com/en-us/dotnet/fsharp/whats-new/fsharp-10#scoped-warning-suppression>, RFC FS-1146 at <https://github.com/fsharp/fslang-design/blob/main/FSharp-10.0/FS-1146-scoped-nowarn.md>.
+
 ## LaundryLog existing components use hard-coded CSS class names
 
 The Fun.Blazor components in `/home/ivan/nexus/LaundryLog/src/LaundryLog.UI/Components/` reference CSS class names from the old `--ll-*`/`--cb-*` design system (e.g., `ll-machine-chip`, `ll-machine-group`). These class names will need to be updated when the CSS emitter + typed bindings are available. The components are a concrete test case for the migration path — they represent real UI using the old system.
