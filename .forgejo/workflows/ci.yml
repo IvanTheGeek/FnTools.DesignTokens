@@ -8,7 +8,7 @@ on:
 
 jobs:
   build-test:
-    runs-on: ubuntu-latest
+    runs-on: ms-ubuntu-net10sdk
     steps:
       - name: Checkout
         run: |
@@ -16,6 +16,12 @@ jobs:
           git remote add origin ${{ github.server_url }}/${{ github.repository }}.git
           git fetch --depth=1 origin ${{ github.sha }}
           git checkout FETCH_HEAD
+
+      - name: Toolchain versions
+        run: |
+          echo "Image: $(cat /etc/os-release | grep PRETTY_NAME)"
+          dotnet --version
+          dotnet --list-sdks
 
       - name: Build
         run: dotnet build FnTools.DesignTokens.slnx -c Release --nologo
